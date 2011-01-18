@@ -1,0 +1,148 @@
+#!/bin/bash
+#
+# "$Id$"
+#
+#  Startup/shutdown script for the Passive Network Appliance (PNA).
+#
+#  chkconfig: 2345 90 10
+#  description: Startup/shutdown script for the Passive Network \
+#               Appliacte (PNA).
+
+# Source function library
+. /etc/init.d/functions
+
+SERVICE=pna
+
+# PNA configuration
+PNAIF="eth6"            # Interface for PNA
+PNA_AFFINITY="02"       # PNA interface irqs linked to cpu 6
+
+# ONL configuration
+PNAIP="192.168.3.30"    # IP address of PNA
+NETWORK="192.168.1.0"   # Network to monitor
+NETMASK="255.255.255.0" # Netmask of network to monitor
+GATEWAY="192.168.1.46"  # Gateway connecting to control plane
+
+PNAPATH="/home/mjschultz/monitor/module"
+MODULE="nf_ses_watch"
+
+# Programs
+IFCONFIG="/sbin/ifconfig"
+ROUTE="/sbin/route"
+
+start () {
+    echo -n $"Starting $SERVICE: "
+
+    # (ONL) configure PNAIF
+    ${IFCONFIG} ${PNAIF} ${PNAIP}
+    ${ROUTE} add -host ${GATEWAY} ${PNAIF}
+    ${ROUTE} add -net ${NETWORK} netmask ${NETMASK} gw ${GATEWAY} ${PNAIF}
+
+	# (Live) configure PNAIF
+	${IFCONFIG} ${PNAIF} up
+	${IFCONFIG} ${PNAIF} promisc
+
+    # setup irq affinities
+    AFF_OTHERS=$(printf "%2x\n" $((255-16#$PNA_AFFINITY)))
+
+    # set them all to ignore PNA_AFFINITY
+    for e in `find /proc/irq -name "eth*"`; do
+        IRQPATH=$(dirname $e)
+		if [ -f ${IRQPATH}/smp_affinity ] ; then
+	        echo ${AFF_OTHERS} > ${IRQPATH}/smp_affinity
+		fi
+    done
+
+    # set PNA_AFFINITY
+    for e in `find /proc/irq -name "${PNAIF}*"`; do
+		IRQPATH=$(dirname $e)
+		if [ -f ${IRQPATH}/smp_affinity ] ; then
+			echo ${PNA_AFFINITY} > ${IRQPATH}/smp_affinity
+		fi
+	done
+
+    # load the module
+    insmod ${PNAPATH}/kmod/${MODULE}.ko
+    RETVAL=$?
+
+    # start the logging monitor(s)
+    for i in /proc/$MODULE/*; do
+		i=`basename $i`
+		if [ "$i" == "config" ] ; then
+			continue
+		fi
+		if [ -f /proc/$MODULE/$i ] ; then
+			( cd ${PNAPATH}/user ; ./${MODULE}-user $i & )
+			RETVAL=$(($RETVAL+$?))
+		fi
+    done
+
+    # in theory I should add entry to cron...
+    
+    # finish up with script-y stuff
+    [ $RETVAL = 0 ] && touch /var/lock/subsys/${SERVICE}
+    [ $RETVAL = 0 ] && success || failure
+    echo
+
+    return $RETVAL
+}
+
+stop () {
+    echo -n $"Stopping $SERVICE: "
+
+    # in theory I should remove entry from cron...
+
+    # kill all the logging monitors
+    for pid in `ps auxw | grep ${MODULE} | grep -v grep | awk '{ print $2 }'`
+    do
+        kill $pid
+    done
+
+    # unload the module
+    rmmod ${MODULE}
+    RETVAL=$?
+
+    # unset CPU affinities
+    for e in `find /proc/irq -name "eth*"`; do
+        IRQPATH=$(dirname $e)
+			if [ -f ${IRQPATH}/smp_affinity ] ; then
+				echo 'ff' > ${IRQPATH}/smp_affinity
+			fi
+    done
+
+    # restart PNAIF (destroys the routes)
+    ${IFCONFIG} ${PNAIF} down
+
+    # End with script-y stuff
+    [ $RETVAL = 0 ] && rm -f /var/lock/subsys/${SERVICE}
+    [ $RETVAL = 0 ] && success || failure
+    echo
+
+    return $RETVAL
+}
+
+restart () {
+    stop
+    start
+}
+
+case $1 in
+    start)
+        start
+    ;;
+    stop)
+        stop
+    ;;
+    restart)
+        restart
+    ;;
+    status)
+        ${LSMOD} | grep ${MODULE} > /dev/null
+        RETVAL=$?
+    ;;
+    *)
+        echo $"Usage: $SERVICE {start|stop|restart|status}"
+        exit 3
+esac
+
+exit $RETVAL
