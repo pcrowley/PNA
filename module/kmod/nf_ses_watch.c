@@ -55,8 +55,8 @@ static unsigned int debug = 0;
 #define NTABS     2
 #define NSRC_ENTS 16384 /* Number of entries in connection table */
 #define NSRC_BITS 14    /* bits needed to represent NSRC_ENTS */
-#define NDST_ENTS 16384 /* Number of entries in each session table */
-#define NDST_BITS 14    /* bits needed to represent NDST_ENTS */
+#define NDST_ENTS 32768 /* Number of entries in each session table */
+#define NDST_BITS 15    /* bits needed to represent NDST_ENTS */
 #define NPRT_ENTS 65536  /* Number of entries for src/dst ports*/
 #define NPRT_BITS 16    /* bits needed to represent NPRT_ENTS */
 
@@ -73,11 +73,11 @@ static unsigned int debug = 0;
         __u64 t_jiffies; /* 8 */
         struct timeval currtime; /* 8 */
         struct timeval prevtime; /* 8 */
-        __u32 p_interval; /* 4 */
-        __u32 B_interval; /* 4 */
-        char pad[64-16-2*sizeof(struct timeval)];
+        __u32 p_interval[NDIRECTIONS]; /* 8 */
+        __u32 B_interval[NDIRECTIONS]; /* 8 */
+        char pad[64-24-2*sizeof(struct timeval)];
     }; /* should total 64 bytes */
-    struct perf_struct pstab[NCPUS];
+    struct perf_struct pstab[NTABS];
 #    define MIN_PKT_BITS 512  /* 64 bytes * 8 bits per byte */
     /* taken from linux/jiffies.h in kernel v2.6.21 */
 #    define time_after_eq64(a,b)    \
@@ -181,16 +181,15 @@ u32 net_mask;
 /* XXX: only used in initialization */
 static struct proc_dir_entry *proc_parent;
 
-typedef struct tab_info
+typedef struct smp_info
 {
-    short write_id;
-    short read_id;
+    int id;
     int local_idx;
     int remote_idx;
     int proto_idx;
     int port_idx;
-} tab_info_t;
-tab_info_t tab_info[NTABS];
+} smp_info_t;
+smp_info_t smp_info[NTABS];
 
 atomic_t nlip[NTABS], nrip[NTABS], nprt[NTABS];
 atomic_t excess_lip[NTABS], excess_rip[NTABS], excess_prt[NTABS];
@@ -202,9 +201,7 @@ atomic_t excess_lip[NTABS], excess_rip[NTABS], excess_prt[NTABS];
 
 int table_map(int processor)
 {
-    /* the processor maps to the same tab_info struct */
-    /* that points to the correct table write_id */
-    return tab_info[processor % NTABS].write_id;
+	return ((processor * NTABS) / NCPUS) % NTABS;
 }
 
 /*
@@ -220,6 +217,7 @@ struct nf_lip_entry *do_lip_entry(u32 local_ip, u32 direction)
 	int lip_idx = table_map(smp_processor_id());
 
     /* loop through table until we find right entry */
+//    for ( i = 0; i < NSRC_ENTS; i++ )
     for ( i = 0; i < SRC_LIMIT; i++ )
     {
         lip_entry = &lip_tab[lip_idx][hash];
@@ -241,7 +239,11 @@ struct nf_lip_entry *do_lip_entry(u32 local_ip, u32 direction)
 
         hash = (hash + 1) % NSRC_ENTS;
     }
-    
+   
+	if (atomic_read(&excess_lip[lip_idx]) % 10000 == 0)
+	{
+		printk("miss: {0x%08x}\n", local_ip);
+	}
 	atomic_inc(&excess_lip[lip_idx]);
     return (struct nf_lip_entry *)NULL;
 }
@@ -253,10 +255,12 @@ struct nf_rip_entry *do_rip_entry(struct nf_lip_entry *lip_entry,
     struct nf_rip_entry *rip_entry;
 	nf_bitmap rip_bits;
     unsigned int i;
-    unsigned int hash = hash_long(remote_ip, NDST_BITS);
+    unsigned int hash = lip_entry->local_ip ^ remote_ip;
 	int rip_idx = table_map(smp_processor_id());
+	hash = hash_long(hash, NDST_BITS);
 
     /* loop through table until we find right entry */
+//    for ( i = 0; i < NDST_ENTS; i++ )
     for ( i = 0; i < DST_LIMIT; i++ )
     {
         rip_entry = &rip_tab[rip_idx][hash];
@@ -295,6 +299,11 @@ struct nf_rip_entry *do_rip_entry(struct nf_lip_entry *lip_entry,
         hash = (hash + 1) % NDST_ENTS;
     }
 
+	//if (trace)
+	//{
+	//	printk("miss: {0x%08x, 0x%08x}",
+	//			lip_entry->local_ip, remote_ip);
+	//}
 	atomic_inc(&excess_rip[rip_idx]);
     return (struct nf_rip_entry *)NULL;
 }
@@ -312,11 +321,12 @@ struct nf_prt_entry *do_prt_entry(struct nf_lip_entry *lip_entry,
     u32 ports;
 	int prt_idx = table_map(smp_processor_id());
 
-    /* hash on <remote_ip ^ (remote_port << 16)|local_port> */
-    ports = (rip_entry->remote_ip ^ ((remote_port << 16) | local_port));
+    /* hash on <(local_port << 16)|remote_port> */
+    ports = rip_entry->remote_ip ^ ((remote_port << 16) | local_port);
     hash = hash_long(ports, NPRT_BITS);
 
     /* loop through table until we find right entry */
+//    for ( i = 0; i < NPRT_ENTS; i++ )
     for ( i = 0; i < PRT_LIMIT; i++ )
     {
         prt_entry = &prt_tab[prt_idx][proto][hash];
@@ -373,6 +383,12 @@ struct nf_prt_entry *do_prt_entry(struct nf_lip_entry *lip_entry,
         hash = (hash + 1) % NPRT_ENTS;
     }
 
+	//if (trace)
+	//{
+	//	printk("miss: {0x%08x, 0x%08x, 0x%04x:0x%04x}",
+	//			lip_entry->local_ip, rip_entry->remote_ip, local_port,
+	//			remote_port);
+	//}
 	atomic_inc(&excess_prt[prt_idx]);
     return (struct nf_prt_entry *)NULL;
 }
@@ -405,7 +421,7 @@ unsigned int nf_ses_watch_hook(unsigned int hooknum,
     u16 local_port, remote_port, proto, pkt_len;
 	int tab_id = table_map(smp_processor_id());
 #if PERF_MEASURE == 1
-    struct perf_struct *ps = &(pstab[smp_processor_id()]);
+    struct perf_struct *ps = &(pstab[tab_id]);
 #endif /* PERF_MEASURE */
 
     /* We have one function, snoop and log packets, Linux can ignore them */
@@ -438,49 +454,6 @@ unsigned int nf_ses_watch_hook(unsigned int hooknum,
 	#error "Untested kernel version"
 #endif
 
-#if PERF_MEASURE == 1
-    /**********************************
-     *   PERFORMANCE EVALUTION CODE   *
-     **********************************/
-    /* time_after_eq64(a,b) returns true if time a >= time b. */
-    if ( time_after_eq64(get_jiffies_64(), ps->t_jiffies) )
-    {
-        __u32 t_interval;
-        __u32 kpps, Mbps;
-        /* get sampling interval time */
-        do_gettimeofday(&ps->currtime);
-        t_interval = ps->currtime.tv_sec - ps->prevtime.tv_sec;
-    /* update for next round */
-        ps->prevtime = ps->currtime;
-
-        /* calculate the numbers */
-        kpps = ps->p_interval / 1000 / t_interval;
-		/* 125000 Mb = (1000 MB/KB * 1000 KB/B) / 8 bits/B */
-        Mbps = ps->B_interval / 125000 / t_interval;
-
-        /* report the numbers */
-        if (kpps > 0)
-        {
-            printk("pna_mod: hit %u kpps/%u Mbps {avg_size:%d, proc: %d}\n", kpps,
-                    Mbps, (ps->B_interval/ps->p_interval)-INTERFRAME_GAP,
-                    smp_processor_id());
-        }
-
-        /* set updated counters */
-        ps->p_interval = 0;
-        ps->B_interval = 0;
-        ps->t_jiffies = msecs_to_jiffies(LOGSLEEP*MSEC_PER_SEC);
-        ps->t_jiffies += get_jiffies_64();
-    }
-
-    /* increment packets seen in this interval */
-    ps->p_interval++;
-    ps->B_interval += pkt_len + ETH_HDR_LEN + INTERFRAME_GAP;
-    /**********************************
-     * END PERFORMANCE EVALUTION CODE *
-     **********************************/
-#endif /* PERF_MEASURE == 1 */
-
     /* grab transport specific information */
     switch (l3hdr->protocol)
     {
@@ -496,7 +469,7 @@ unsigned int nf_ses_watch_hook(unsigned int hooknum,
         break;
     default:
        /* If we don't recognize it, let Linux handle it */
-       return NF_ACCEPT;
+       return NF_DROP;
     }
 
 	/* Determine the nature of this packet (ingress or egress) */
@@ -508,6 +481,7 @@ unsigned int nf_ses_watch_hook(unsigned int hooknum,
 	if ( temp == net_prefix )
 	{
 		/* saddr is local */
+		// local_ip, local_port, remote_port are set
 		remote_ip = ntohl(l3hdr->daddr);
 		direction = OUTBOUND;
 	}
@@ -523,11 +497,77 @@ unsigned int nf_ses_watch_hook(unsigned int hooknum,
 		direction = INBOUND;
 	}
 
+#if PERF_MEASURE == 1
+    /**********************************
+     *   PERFORMANCE EVALUTION CODE   *
+     **********************************/
+    /* time_after_eq64(a,b) returns true if time a >= time b. */
+    if ( time_after_eq64(get_jiffies_64(), ps->t_jiffies) )
+    {
+        __u32 t_interval;
+        __u32 kpps_in, Mbps_in, avg_in;
+        __u32 kpps_out, Mbps_out, avg_out;
+
+        /* get sampling interval time */
+        do_gettimeofday(&ps->currtime);
+        t_interval = ps->currtime.tv_sec - ps->prevtime.tv_sec;
+    /* update for next round */
+        ps->prevtime = ps->currtime;
+
+        /* calculate the numbers */
+        kpps_in = ps->p_interval[INBOUND] / 1000 / t_interval;
+		/* 125000 Mb = (1000 MB/KB * 1000 KB/B) / 8 bits/B */
+        Mbps_in = ps->B_interval[INBOUND] / 125000 / t_interval;
+		if (ps->p_interval[INBOUND] != 0)
+		{
+			avg_in = (ps->B_interval[INBOUND]/ps->p_interval[INBOUND])-INTERFRAME_GAP;
+		}
+		else
+		{
+			avg_in = 0;
+		}
+
+        kpps_out = ps->p_interval[OUTBOUND] / 1000 / t_interval;
+		/* 125000 Mb = (1000 MB/KB * 1000 KB/B) / 8 bits/B */
+        Mbps_out = ps->B_interval[OUTBOUND] / 125000 / t_interval;
+		if (ps->p_interval[OUTBOUND] != 0)
+		{
+			avg_out = (ps->B_interval[OUTBOUND]/ps->p_interval[OUTBOUND])-INTERFRAME_GAP;
+		}
+		else
+		{
+			avg_out = 0;
+		}
+
+        /* report the numbers */
+        if (kpps_in + kpps_out > 0)
+        {
+			printk("pna_mod: hit in:{kpps:%u,Mbps:%u,avg:%u} out:{kpps:%u,Mbps:%u,avg:%u}\n",
+					kpps_in, Mbps_in, avg_in, kpps_out, Mbps_out, avg_out);
+			printk("on processor %d\n", smp_processor_id());
+        }
+
+        /* set updated counters */
+        ps->p_interval[INBOUND] = 0;
+        ps->B_interval[INBOUND] = 0;
+        ps->p_interval[OUTBOUND] = 0;
+        ps->B_interval[OUTBOUND] = 0;
+        ps->t_jiffies = msecs_to_jiffies(LOGSLEEP*MSEC_PER_SEC);
+        ps->t_jiffies += get_jiffies_64();
+    }
+
+    /* increment packets seen in this interval */
+    ps->p_interval[direction]++;
+    ps->B_interval[direction] += pkt_len + ETH_HDR_LEN + INTERFRAME_GAP;
+    /**********************************
+     * END PERFORMANCE EVALUTION CODE *
+     **********************************/
+#endif /* PERF_MEASURE == 1 */
 
     /* We'll let Linux handle ARP packets from monitored ports */
     if ((ETH_P_ARP == htons(l2hdr->h_proto)))
     {
-        return NF_ACCEPT;
+        return NF_DROP;
     }
 
 	/* make sure the local IP is one of interest */
@@ -592,7 +632,6 @@ unsigned int nf_ses_watch_hook(unsigned int hooknum,
     /* update the session entry */
 	prt_entry = do_prt_entry(lip_entry, rip_entry, proto, local_port,
 			                 remote_port, pkt_len, direction);
-
     if ( NULL == prt_entry )
     {
 		if (debug) printk("detected full port table\n");
@@ -663,10 +702,14 @@ static int __init nf_ses_watch_init(void)
 	net_mask = CFG_DEF_NET_MASK;
 
     /* netfilter ops setup */
+    //nf_ops.list.next = nf_ops.list.prev = NULL;
+    //nf_ops.hook = (nf_hookfn *)nf_ses_watch_hook;
+    //nf_ops.pf = PF_INET; /* IP protocol family */
+    //nf_ops.hooknum = NF_INET_PRE_ROUTING;
     nf_register_hook(&nf_ops);
 
 #if PERF_MEASURE == 1
-    for (i = 0; i < NCPUS; i++)
+    for (i = 0; i < NTABS; i++)
     {
         ps = &(pstab[i]);
         /* set performance counters to initial values */
@@ -683,12 +726,9 @@ static int __init nf_ses_watch_init(void)
     for (i = 0; i < NTABS; i++)
     {
         /* setup smp structure */
-        tab_info[i].read_id = i;
-        tab_info[i].write_id = i;
-        tab_info[i].local_idx = 0;
-        tab_info[i].remote_idx = 0;
-        tab_info[i].proto_idx = 0;
-        tab_info[i].port_idx = 0;
+        smp_info[i].id = i;
+        smp_info[i].local_idx = 0;
+        smp_info[i].remote_idx = 0;
 
         snprintf(i_str, MAX_STR, "%d", i);
         proc_node = create_proc_entry(i_str, 0644, proc_parent);
@@ -698,8 +738,9 @@ static int __init nf_ses_watch_init(void)
             printk("Could not initialize /proc/%s/%d\n", PROCDIR, i);
             return -ENOMEM;
         }
+//        proc_node->read_proc = proc_read[i];
         proc_node->read_proc = monitor_read;
-        proc_node->data = &tab_info[i];
+        proc_node->data = &smp_info[i];
         proc_node->mode = S_IFREG | S_IRUGO;
         proc_node->uid = 0;
         proc_node->gid = 0;

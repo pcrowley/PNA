@@ -4,14 +4,10 @@
 
 /* configuration variables */
 #define NCPUS              8
-//#define PNA_IF             "eth0"
+#define PNA_IF             "eth0"
 //#define CFG_DEF_NET_PREFIX 0x80fc0000
-//#define CFG_DEF_NET_MASK   0xffff0000
-
-#define PNA_IF             "eth6"
 #define CFG_DEF_NET_PREFIX 0xc0a80000
 #define CFG_DEF_NET_MASK   0xffff0000
-
 
 #include <asm/types.h>
 #include <linux/if_ether.h>

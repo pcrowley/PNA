@@ -38,22 +38,19 @@ int monitor_read(char *buffer, char **buffer_location, off_t offset,
     struct nf_lip_entry *lip_entry;
     struct nf_rip_entry *rip_entry;
     struct nf_prt_entry *prt_entry;
-    tab_info_t *smp = (tab_info_t *)data;
-	int tab_id = smp->read_id;
+    smp_info_t *smp = (smp_info_t *)data;
+	int tab_id = smp->id;
     buf_idx = 0;
 
     if (debug) printk("new call: %d (%d)\n", buffer_length, tab_id);
 
     if ( 0 == offset )
     {
-        spin_lock_bh(&tab_lock[tab_id]);
         /* this is a new call, start at the beginning */
         smp->local_idx = 0;
         smp->remote_idx = 0;
         smp->proto_idx = 0;
         smp->port_idx = 0;
-        smp->write_id = (smp->write_id + 1) % NTABS;
-        spin_unlock_bh(&tab_lock[tab_id]);
 
 		atomic_set(&rec_count[tab_id], 0);
     }
@@ -184,6 +181,9 @@ int monitor_read(char *buffer, char **buffer_location, off_t offset,
                     port->nbytes[OUTBOUND] = prt_entry->nbytes[OUTBOUND];
                     port->timestamp= prt_entry->timestamp;
                     port->direction = prt_entry->info_bits & 0xff;
+                    port->pad[0] = 0x00;
+                    port->pad[1] = 0x00;
+                    port->pad[2] = 0x00;
                     buf_idx += sizeof(watch_port_t);
 
                     /* clear this entry */
@@ -239,43 +239,35 @@ int monitor_read(char *buffer, char **buffer_location, off_t offset,
             sizeof(struct nf_rip_entry)*NDST_ENTS);
     memset((void *)prt_tab[tab_id], 0,
             sizeof(struct nf_prt_entry)*NF_NPROTO*NPRT_ENTS);
+
+	lip_count = atomic_read(&nlip[tab_id]);
+	rip_count = atomic_read(&nrip[tab_id]);
+	prt_count = atomic_read(&nprt[tab_id]);
+	lip_excess = atomic_read(&excess_lip[tab_id]);
+	rip_excess = atomic_read(&excess_rip[tab_id]);
+	prt_excess = atomic_read(&excess_prt[tab_id]);
+
+	atomic_set(&nlip[tab_id], 0);
+	atomic_set(&nrip[tab_id], 0);
+	atomic_set(&nprt[tab_id], 0);
+	atomic_set(&excess_lip[tab_id], 0);
+	atomic_set(&excess_rip[tab_id], 0);
+	atomic_set(&excess_prt[tab_id], 0);
+
     // unlock tables
     spin_unlock_bh(&tab_lock[tab_id]);
 
-    lip_count = rip_count = prt_count = 0;
-    lip_excess = rip_excess = prt_excess = 0;
-
-    if (atomic_read(&rec_count[tab_id]) > 0)
-    {
-        printk("end with %d records (idx exhaust, %d)\n",
-	    		atomic_read(&rec_count[tab_id]), tab_id);
-
-        lip_count = atomic_read(&nlip[tab_id]);
-        rip_count = atomic_read(&nrip[tab_id]);
-        prt_count = atomic_read(&nprt[tab_id]);
-        lip_excess = atomic_read(&excess_lip[tab_id]);
-        rip_excess = atomic_read(&excess_rip[tab_id]);
-        prt_excess = atomic_read(&excess_prt[tab_id]);
-
-        atomic_set(&nlip[tab_id], 0);
-        atomic_set(&nrip[tab_id], 0);
-        atomic_set(&nprt[tab_id], 0);
-        atomic_set(&excess_lip[tab_id], 0);
-        atomic_set(&excess_rip[tab_id], 0);
-        atomic_set(&excess_prt[tab_id], 0);
-    }
-
-	if (lip_count + rip_count + prt_count != 0)
+	if (lip_count + rip_count + prt_count != 0 
+		|| lip_excess + rip_excess + prt_excess != 0)
 	{
 		printk("pna_mod: {lip_ents:%u, rip_ents:%u, prt_ents:%u}\n",
 				lip_count, rip_count, prt_count);
-	}
-
-	if (lip_excess + rip_excess + prt_excess != 0)
-	{
-		printk("{lip_excess:%u, rip_excess:%u, prt_excess:%u}\n",
+		printk("pna_mod: {lip_excess:%u, rip_excess:%u, prt_excess:%u}\n",
 				lip_excess, rip_excess, prt_excess);
 	}
+
+	printk("end with %d records (idx exhaust, %d)\n",
+			atomic_read(&rec_count[tab_id]), tab_id);
 
     *buffer_location = (char *)1;
     return buf_idx;
