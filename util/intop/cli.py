@@ -101,7 +101,7 @@ class CommandLineInterface :
     # dump the data in a "human readable" format
     def human_format(self, data) :
         # none, inbound, outbound, bi-directional
-        dir = ('x', 'in', 'out', 'both')
+        dir = ('x', 'in', 'out', 'legacy-both')
         for step in data :
             ts = '@'+str(step['end-time'])
             for e in step['watch-data'] :
@@ -111,7 +111,7 @@ class CommandLineInterface :
 
                 print 'tcp:(',
                 for p in e['tcp-tuples'] :
-                    print dir[p['direction']]+':(',
+                    print dir[p['first-direction']]+':(',
                     print '@'+str(p['begin-time'])+',',
                     print str(p['local-port'])+':'+str(p['remote-port'])+',',
                     print str(p['npkts-in'])+'/'+str(p['npkts-out'])+',',
@@ -121,7 +121,7 @@ class CommandLineInterface :
 
                 print 'udp:(',
                 for p in e['udp-tuples'] :
-                    print dir[p['direction']]+':(',
+                    print dir[p['first-direction']]+':(',
                     print '@'+str(p['begin-time'])+',',
                     print str(p['local-port'])+':'+str(p['remote-port'])+',',
                     print str(p['npkts-in'])+'/'+str(p['npkts-out'])+',',

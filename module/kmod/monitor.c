@@ -180,7 +180,7 @@ int monitor_read(char *buffer, char **buffer_location, off_t offset,
                     port->nbytes[INBOUND] = prt_entry->nbytes[INBOUND];
                     port->nbytes[OUTBOUND] = prt_entry->nbytes[OUTBOUND];
                     port->timestamp= prt_entry->timestamp;
-                    port->direction = prt_entry->info_bits & 0xff;
+                    port->first_dir = (prt_entry->info_bits&0x0c)>>NDIRECTIONS;
                     port->pad[0] = 0x00;
                     port->pad[1] = 0x00;
                     port->pad[2] = 0x00;

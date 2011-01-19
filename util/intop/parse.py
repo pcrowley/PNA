@@ -13,7 +13,7 @@ class PNALogParser :
     watch_tuple_names = ('local-port', 'remote-port',
                         'npkts-in', 'npkts-out',
                         'nbytes-in', 'nbytes-out',
-                        'begin-time', 'direction',)
+                        'begin-time', 'first-direction',)
 
     # log files may have some 0xffffffffs in the buffer, ignore those
     @classmethod
@@ -81,7 +81,7 @@ class PNALogParser :
                     if all(v==0 for v in tuple_values) :
                         break
                     tuple = dict(zip(cls.watch_tuple_names, tuple_values))
-                    if tuple['direction'] == 0 :
+                    if tuple['first-direction'] == 0 :
                         file_pos -= 4
                         sub_data = file_data[file_pos-28:file_pos]
                         tuple_values = struct.unpack('HHIIIIIBxxx', sub_data)
@@ -99,7 +99,7 @@ class PNALogParser :
                     if all(v==0 for v in tuple_values) :
                         break
                     tuple = dict(zip(cls.watch_tuple_names, tuple_values))
-                    if tuple['direction'] == 0 :
+                    if tuple['first-direction'] == 0 :
                         file_pos -= 4
                         sub_data = file_data[file_pos-28:file_pos]
                         tuple_values = struct.unpack('HHIIIIIBxxx', sub_data)

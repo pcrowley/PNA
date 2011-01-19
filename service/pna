@@ -14,7 +14,7 @@
 SERVICE=pna
 
 # PNA configuration
-PNAIF="eth6"            # Interface for PNA
+PNAIF="eth0"            # Interface for PNA
 PNA_AFFINITY="02"       # PNA interface irqs linked to cpu 6
 
 # ONL configuration

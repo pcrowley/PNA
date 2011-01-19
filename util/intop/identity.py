@@ -38,7 +38,7 @@ class PNAParseLogger :
                     e = t['nbytes-in']
                     f = t['nbytes-out']
                     g = t['begin-time']
-                    h = t['direction']
+                    h = t['first-direction']
                     tcp_data += struct.pack('HHIIIIIBxxx',a,b,c,d,e,f,g,h)
                 udp_data = ''
                 for t in udp_tuples :
@@ -50,7 +50,7 @@ class PNAParseLogger :
                     e = t['nbytes-in']
                     f = t['nbytes-out']
                     g = t['begin-time']
-                    h = t['direction']
+                    h = t['first-direction']
                     udp_data += struct.pack('HHIIIIIBxxx',a,b,c,d,e,f,g,h)
                 # aggregate data for an entry
                 entry_data += struct.pack('IIII',lip,rip,ntcp,nudp)

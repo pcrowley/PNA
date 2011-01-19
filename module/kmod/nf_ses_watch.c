@@ -291,6 +291,8 @@ struct nf_rip_entry *do_rip_entry(struct nf_lip_entry *lip_entry,
             lip_entry->ndsts[direction]++;
 			/* indicate that we've seen this direction */
 			rip_entry->info_bits |= (1 << direction);
+            /* first time this remote IP was seen it was travelling ... */
+			rip_entry->info_bits |= (1 << (direction + NDIRECTIONS));
 			atomic_inc(&nrip[rip_idx]);
             return rip_entry;
         }
@@ -372,6 +374,8 @@ struct nf_prt_entry *do_prt_entry(struct nf_lip_entry *lip_entry,
             rip_entry->nprts[direction][proto]++;
 			/* indicate that we've seen this direction */
 			prt_entry->info_bits |= (1 << direction);
+            /* the first packet of a flow, mark the direction it came from */
+			prt_entry->info_bits |= (1 << (direction + NDIRECTIONS));
 
 			/* also update the lip_entry because this is a new session */
 			lip_entry->nsess[direction]++;

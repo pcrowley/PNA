@@ -18,7 +18,7 @@
 #                                   nbytes-in:int,
 #                                   nbytes-out:int,
 #                                   begin-time:int,
-#                                   direction:byte }, ]
+#                                   first-direction:byte }, ]
 #                    udp-tuples:[ { local-port:short,
 #                                   remote-port:short,
 #                                   source-port:int,
@@ -28,7 +28,7 @@
 #                                   nbytes-in:int,
 #                                   nbytes-out:int,
 #                                   begin-time:int,
-#                                   direction:byte }, ] }, ] }, ]
+#                                   first-direction:byte }, ] }, ] }, ]
 
 import re
 from datetime import datetime, date as dt_date, time as dt_time, timedelta

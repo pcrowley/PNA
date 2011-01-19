@@ -57,7 +57,7 @@ typedef struct watch_port
     __u32 npkts[NDIRECTIONS];
     __u32 nbytes[NDIRECTIONS];
     __u32 timestamp;
-    __u8 direction;
+    __u8 first_dir;
 	__u8 pad[3];
 } watch_port_t;
 
