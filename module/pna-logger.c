@@ -78,6 +78,7 @@ void dump_table(void *table_base, char *out_file)
 		perror("open out_file");
 		return;
 	}
+    fchmod(fd, S_IRUSR | S_IRGRP | S_IROTH);
 
 	offset = 0;
 	lips = table_base + offset;
