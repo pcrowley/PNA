@@ -1,6 +1,6 @@
 # kernel module files
 obj-m += pna.o
-pna-objs := hooks.o action.o
+pna-objs := pna-kmod.o hooks.o action.o
 
 # user-space files
 LOGGER := pna-logger

@@ -3,6 +3,7 @@
 #include <linux/kernel.h>
 #include <linux/percpu.h>
 #include <linux/hash.h>
+#include <linux/mutex.h>
 
 #include <linux/net.h>
 #include <linux/netdevice.h>
@@ -17,27 +18,28 @@
 
 /* constants for this file */
 #define PROBE_LIMIT 128
-#define PERF_MEASURE 0
+#define PERF_MEASURE 1
 
 /* configuration settings */
-char *pna_iface;
-uint pna_prefix;
-uint pna_mask;
-uint pna_connections;
-uint pna_sessions;
-uint pna_tcp_ports;
-uint pna_tcp_bytes;
-uint pna_tcp_packets;
-uint pna_udp_ports;
-uint pna_udp_bytes;
-uint pna_udp_packets;
-uint pna_ports;
-uint pna_bytes;
-uint pna_packets;
-uint pna_debug;
+extern char *pna_iface;
+extern uint pna_prefix;
+extern uint pna_mask;
+extern uint pna_tables;
+extern uint pna_connections;
+extern uint pna_sessions;
+extern uint pna_tcp_ports;
+extern uint pna_tcp_bytes;
+extern uint pna_tcp_packets;
+extern uint pna_udp_ports;
+extern uint pna_udp_bytes;
+extern uint pna_udp_packets;
+extern uint pna_ports;
+extern uint pna_bytes;
+extern uint pna_packets;
+extern uint pna_debug;
 
 /* table meta-information */
-struct utab_info *utab_info;
+extern struct utab_info *utab_info;
 
 /* for performance measures */
 #include <linux/jiffies.h>
@@ -45,8 +47,8 @@ struct pna_perf {
     __u64 t_jiffies; /* 8 */
     struct timeval currtime; /* 8 */
     struct timeval prevtime; /* 8 */
-    __u32 p_interval[DIRECTIONS]; /* 8 */
-    __u32 B_interval[DIRECTIONS]; /* 8 */
+    __u32 p_interval[PNA_DIRECTIONS]; /* 8 */
+    __u32 B_interval[PNA_DIRECTIONS]; /* 8 */
     char pad[64-24-2*sizeof(struct timeval)];
 }; /* should total 64 bytes */
 /* taken from linux/jiffies.h in kernel v2.6.21 */
@@ -54,6 +56,11 @@ struct pna_perf {
 # define time_after_eq64(a,b) \
    (typecheck(__u64,a) && typecheck(__u64,b) && ((__s64)(a)-(__s64)(b)>=0))
 #endif
+#if PERF_MEASURE == 1
+# define INTERFRAME_GAP 8
+# define ETH_HDR_LEN    14
+# define PERF_INTERVAL  10
+#endif /* PERF_MEASURE == 1 */
 
 /* union for l4 headers */
 union l4hdr {
@@ -63,18 +70,14 @@ union l4hdr {
 
 /* per-cpu data */
 DEFINE_PER_CPU(int, utab_index);
-DEFINE_PER_CPU(struct pna_perf *, perf_data);
+DEFINE_PER_CPU(struct pna_perf, perf_data);
 
 /* Find and set/update the level 1 table entry */
-struct lip_entry *do_lip_entry(uint local_ip, uint direction)
+struct lip_entry *do_lip_entry(struct utab_info *info, uint local_ip, uint direction)
 {
-    struct utab_info *info;
     struct lip_entry *lip_entry;
     unsigned int i;
     unsigned int hash = hash_long(local_ip, PNA_LIP_BITS);
-
-    /* get this table this CPU is using */
-    info = &utab_info[get_cpu_var(utab_index)];
 
     /* loop through table until we find right entry */
     for ( i = 0; i < PROBE_LIMIT; i++ )
@@ -104,16 +107,13 @@ struct lip_entry *do_lip_entry(uint local_ip, uint direction)
 }
 
 /* Find and set/update the level 2 table entry */
-struct rip_entry *do_rip_entry(struct lip_entry *lip_entry,
+struct rip_entry *do_rip_entry(struct utab_info *info, struct lip_entry *lip_entry,
 					           uint remote_ip, uint direction)
 {
-    struct utab_info *info;
     struct rip_entry *rip_entry;
-	nf_bitmap rip_bits;
+	pna_bitmap rip_bits;
     unsigned int i;
     unsigned int hash = lip_entry->local_ip ^ remote_ip;
-
-    info = &utab_info[get_cpu_var(utab_index)];
 
 	hash = hash_long(hash, PNA_RIP_BITS);
 
@@ -149,7 +149,7 @@ struct rip_entry *do_rip_entry(struct lip_entry *lip_entry,
 			/* indicate that we've seen this direction */
 			rip_entry->info_bits |= (1 << direction);
             /* first time this remote IP was seen it was travelling ... */
-			rip_entry->info_bits |= (1 << (direction + DIRECTIONS));
+			rip_entry->info_bits |= (1 << (direction + PNA_DIRECTIONS));
 
             info->nrips++;
             return rip_entry;
@@ -164,20 +164,17 @@ struct rip_entry *do_rip_entry(struct lip_entry *lip_entry,
 }
 
 /* Find and set/update the level 3 table entry */
-struct port_entry *do_port_entry(struct lip_entry *lip_entry,
+struct port_entry *do_port_entry(struct utab_info *info, struct lip_entry *lip_entry,
                                   struct rip_entry *rip_entry,
                                   ushort proto, ushort local_port,
                                   ushort remote_port, uint length, uint direction)
 {
-    struct utab_info *info;
 	struct timeval timeval;
     struct port_entry *prt_entry;
-    nf_bitmap prt_bits;
+    pna_bitmap prt_bits;
     unsigned int i, hash;
     u32 ports;
 
-	info = &utab_info[get_cpu_var(utab_index)];
-    
     /* hash on <(local_port << 16)|remote_port> */
     ports = rip_entry->remote_ip ^ ((remote_port << 16) | local_port);
     hash = hash_long(ports, PNA_PORT_BITS);
@@ -229,7 +226,7 @@ struct port_entry *do_port_entry(struct lip_entry *lip_entry,
 			/* indicate that we've seen this direction */
 			prt_entry->info_bits |= (1 << direction);
             /* the first packet of a flow, mark the direction it came from */
-			prt_entry->info_bits |= (1 << (direction + DIRECTIONS));
+			prt_entry->info_bits |= (1 << (direction + PNA_DIRECTIONS));
 
 			/* also update the lip_entry because this is a new session */
 			lip_entry->nsess[direction]++;
@@ -251,11 +248,11 @@ struct port_entry *do_port_entry(struct lip_entry *lip_entry,
  */
 
 /* Netfilter hook */
-unsigned int nf_ses_watch_hook(unsigned int hooknum, 
-                               struct sk_buff *skb,
-                               const struct net_device *in,
-                               const struct net_device *out,
-                               int (*okfn)(struct sk_buff *))
+unsigned int pna_packet_hook(unsigned int hooknum, 
+                             struct sk_buff *skb,
+                             const struct net_device *in,
+                             const struct net_device *out,
+                             int (*okfn)(struct sk_buff *))
 {
     unsigned int ret;
     struct ethhdr *l2hdr;
@@ -268,15 +265,25 @@ unsigned int nf_ses_watch_hook(unsigned int hooknum,
 	uint direction, temp;
 	uint local_ip, remote_ip;
     ushort local_port, remote_port, proto, pkt_len;
+	struct utab_info *info;
 #if PERF_MEASURE == 1
-    struct pna_perf *perf = get_cpu_var(perf_data);
+    struct pna_perf *perf = &get_cpu_var(perf_data);
 #endif /* PERF_MEASURE == 1 */
+
+	/* set some informational values for the table */
+   	info = &utab_info[get_cpu_var(utab_index)];
+
+	/* see if this table is locked */
+	while (mutex_is_locked(&info->read_mutex)) {
+		/* if it is locked try the next table ... */
+		get_cpu_var(utab_index) = (get_cpu_var(utab_index) + 1) % pna_tables;
+		put_cpu_var(utab_index);
+   		info = &utab_info[get_cpu_var(utab_index)];
+		printk("trying next table\n");
+	}
 
     /* We have one function, snoop and log packets, Linux can ignore them */
     ret = NF_DROP;
-
-    printk("got packet: %d %d %d\n", pna_prefix, pna_mask, pna_connections);
-    return ret;
 
 	/* We only accept if the `in` device is not one we care about */
 	if ( 0 != strcmp(in->name, pna_iface))
@@ -341,8 +348,7 @@ unsigned int nf_ses_watch_hook(unsigned int hooknum,
      *   PERFORMANCE EVALUTION CODE   *
      **********************************/
     /* time_after_eq64(a,b) returns true if time a >= time b. */
-    if ( time_after_eq64(get_jiffies_64(), perf->t_jiffies) )
-    {
+    if ( time_after_eq64(get_jiffies_64(), perf->t_jiffies) ) {
         __u32 t_interval;
         __u32 kpps_in, Mbps_in, avg_in;
         __u32 kpps_out, Mbps_out, avg_out;
@@ -354,44 +360,42 @@ unsigned int nf_ses_watch_hook(unsigned int hooknum,
         perf->prevtime = perf->currtime;
 
         /* calculate the numbers */
-        kpps_in = perf->p_interval[INBOUND] / 1000 / t_interval;
+        kpps_in = perf->p_interval[PNA_DIR_INBOUND] / 1000 / t_interval;
 		/* 125000 Mb = (1000 MB/KB * 1000 KB/B) / 8 bits/B */
-        Mbps_in = perf->B_interval[INBOUND] / 125000 / t_interval;
-		if (perf->p_interval[INBOUND] != 0)
-		{
-			avg_in = (perf->B_interval[INBOUND]/perf->p_interval[INBOUND])-INTERFRAME_GAP;
+        Mbps_in = perf->B_interval[PNA_DIR_INBOUND] / 125000 / t_interval;
+		if (perf->p_interval[PNA_DIR_INBOUND] != 0) {
+			avg_in = perf->B_interval[PNA_DIR_INBOUND];
+			avg_in /= perf->p_interval[PNA_DIR_INBOUND];
+			avg_in -= INTERFRAME_GAP;
 		}
-		else
-		{
+		else {
 			avg_in = 0;
 		}
 
-        kpps_out = perf->p_interval[OUTBOUND] / 1000 / t_interval;
+        kpps_out = perf->p_interval[PNA_DIR_OUTBOUND] / 1000 / t_interval;
 		/* 125000 Mb = (1000 MB/KB * 1000 KB/B) / 8 bits/B */
-        Mbps_out = perf->B_interval[OUTBOUND] / 125000 / t_interval;
-		if (perf->p_interval[OUTBOUND] != 0)
-		{
-			avg_out = (perf->B_interval[OUTBOUND]/perf->p_interval[OUTBOUND])-INTERFRAME_GAP;
+        Mbps_out = perf->B_interval[PNA_DIR_OUTBOUND] / 125000 / t_interval;
+		if (perf->p_interval[PNA_DIR_OUTBOUND] != 0) {
+			avg_out = perf->B_interval[PNA_DIR_OUTBOUND];
+			avg_out /= perf->p_interval[PNA_DIR_OUTBOUND];
+			avg_out -= INTERFRAME_GAP;
 		}
-		else
-		{
+		else {
 			avg_out = 0;
 		}
 
         /* report the numbers */
-        if (kpps_in + kpps_out > 0)
-        {
-			printk("pna_mod: hit in:{kpps:%u,Mbps:%u,avg:%u} out:{kpps:%u,Mbps:%u,avg:%u}\n",
-					kpps_in, Mbps_in, avg_in, kpps_out, Mbps_out, avg_out);
+        if (kpps_in + kpps_out > 0) {
+			printk("pna_mod: hit in:{kpps:%u,Mbps:%u,avg:%u} out:{kpps:%u,Mbps:%u,avg:%u}\n", kpps_in, Mbps_in, avg_in, kpps_out, Mbps_out, avg_out);
 			printk("on processor %d\n", smp_processor_id());
         }
 
         /* set updated counters */
-        perf->p_interval[INBOUND] = 0;
-        perf->B_interval[INBOUND] = 0;
-        perf->p_interval[OUTBOUND] = 0;
-        perf->B_interval[OUTBOUND] = 0;
-        perf->t_jiffies = msecs_to_jiffies(LOGSLEEP*MSEC_PER_SEC);
+        perf->p_interval[PNA_DIR_INBOUND] = 0;
+        perf->B_interval[PNA_DIR_INBOUND] = 0;
+        perf->p_interval[PNA_DIR_OUTBOUND] = 0;
+        perf->B_interval[PNA_DIR_OUTBOUND] = 0;
+        perf->t_jiffies = msecs_to_jiffies(PERF_INTERVAL*MSEC_PER_SEC);
         perf->t_jiffies += get_jiffies_64();
     }
 
@@ -404,55 +408,54 @@ unsigned int nf_ses_watch_hook(unsigned int hooknum,
 #endif /* PERF_MEASURE == 1 */
 
     /* We'll let Linux handle ARP packets from monitored ports */
-    if ((ETH_P_ARP == htons(l2hdr->h_proto)))
-    {
+    if ((ETH_P_ARP == htons(l2hdr->h_proto))) {
         return NF_DROP;
     }
 
 	/* make sure the local IP is one of interest */
 	temp = local_ip & pna_mask;
-	if ( temp != pna_prefix )
-	{
+	if ( temp != pna_prefix ) {
 		/* don't monitor this packet, but don't let Linux see it either */
 		return NF_DROP;
 	}
 
+	/* make sure this table is marked as dirty */
+	if (info->table_dirty == 0) {
+		info->table_dirty = 1;
+		info->smp_id = smp_processor_id();
+		memcpy(info->iface, pna_iface, PNA_MAX_STR);
+	}
+
     /* find the entry beginning this connection*/
-    lip_entry = do_lip_entry(local_ip, direction);
-    if ( NULL == lip_entry )
-    {
+    lip_entry = do_lip_entry(info, local_ip, direction);
+    if ( NULL == lip_entry ) {
 		if (pna_debug) printk("detected full source table\n");
         return ret;
     }
-    else if ( lip_entry->ndsts[PNA_DIR_OUTBOUND] >= pna_connections )
-	{
+    else if ( lip_entry->ndsts[PNA_DIR_OUTBOUND] >= pna_connections ) {
 		/* host is trying to connect to too many destinations, ignore */
 		session_action(PNA_MSG_BLOCK, local_ip, "too many connections");
         return ret;
 	}
 
     /* find the entry completing this connection */
-    rip_entry = do_rip_entry(lip_entry, remote_ip, direction);
-    if ( NULL == rip_entry )
-    {
+    rip_entry = do_rip_entry(info, lip_entry, remote_ip, direction);
+    if ( NULL == rip_entry ) {
 		/* destination table is *FULL,* can't do anything */
 		if (pna_debug) printk("detected full destination table\n");
         return ret;
     }
-    else if ( rip_entry->nprts[PNA_DIR_OUTBOUND][proto] >= pna_ports )
-	{
+    else if ( rip_entry->nprts[PNA_DIR_OUTBOUND][proto] >= pna_ports ) {
 		/* host is creating too many unique sessions, ignore */
 		session_action(PNA_MSG_BLOCK, local_ip, "too many ports");
         return ret;
 	}
-	else if ( rip_entry->nbytes[PNA_DIR_OUTBOUND][proto] >= pna_bytes )
-	{
+	else if ( rip_entry->nbytes[PNA_DIR_OUTBOUND][proto] >= pna_bytes ) {
 		/* host has surpassed a huge amount of protocol bandwidth, ignore */
 		session_action(PNA_MSG_BLOCK, local_ip, "too many bytes");
         return ret;
 	}
-	else if ( rip_entry->npkts[PNA_DIR_OUTBOUND][proto] >= pna_packets )
-	{
+	else if ( rip_entry->npkts[PNA_DIR_OUTBOUND][proto] >= pna_packets ) {
 		/* host has surpassed a huge amount of protocol traffic, ignore */
 		session_action(PNA_MSG_BLOCK, local_ip, "too many packets");
         return ret;
@@ -460,21 +463,18 @@ unsigned int nf_ses_watch_hook(unsigned int hooknum,
 	/* XXX: might also want to do ALL thresholds */
 
     /* update the session entry */
-	prt_entry = do_port_entry(lip_entry, rip_entry, proto, local_port,
+	prt_entry = do_port_entry(info, lip_entry, rip_entry, proto, local_port,
 			                 remote_port, pkt_len, direction);
-    if ( NULL == prt_entry )
-    {
+    if ( NULL == prt_entry ) {
 		if (pna_debug) printk("detected full port table\n");
         return ret;
     }
-	else if ( lip_entry->nsess[PNA_DIR_OUTBOUND] >= pna_sessions )
-	{
+	else if ( lip_entry->nsess[PNA_DIR_OUTBOUND] >= pna_sessions ) {
 		/* host is trying to connect to too many destinations, ignore */
 		session_action(PNA_MSG_BLOCK, local_ip, "too many sessions");
         return ret;
 	}
-	else if ( lip_entry->nsess[PNA_DIR_INBOUND] >= pna_sessions )
-	{
+	else if ( lip_entry->nsess[PNA_DIR_INBOUND] >= pna_sessions ) {
 		/* host is trying to connect to too many destinations, ignore */
 		session_action(PNA_MSG_WHITELIST, local_ip, "external scan");
         return ret;
