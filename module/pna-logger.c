@@ -21,13 +21,13 @@
 
 /* log file format structures */
 struct watch_port {
-	ushort local_port;
-	ushort remote_port;
-	uint npkts[PNA_DIRECTIONS];
-	uint nbytes[PNA_DIRECTIONS];
-	uint timestamp;
-	uchar first_dir;
-	uchar pad[3];
+    ushort local_port;
+    ushort remote_port;
+    uint npkts[PNA_DIRECTIONS];
+    uint nbytes[PNA_DIRECTIONS];
+    uint timestamp;
+    uchar first_dir;
+    uchar pad[3];
 };
 
 struct pna_log_hdr {
@@ -36,68 +36,68 @@ struct pna_log_hdr {
 };
 
 struct watch_data {   
-	uint local_ip;
-	uint remote_ip;
+    uint local_ip;
+    uint remote_ip;
 };
 
 char *prog_name;
 
 int buf_flush(int out_fd, char *buffer, int buf_idx)
 {
-	int count;
+    int count;
 
-	while (buf_idx > 0) {
-		count = write(out_fd, buffer, buf_idx);
-		if (count < 0) {
-			perror("write");
-		}
-		buf_idx -= count;
-	}
+    while (buf_idx > 0) {
+        count = write(out_fd, buffer, buf_idx);
+        if (count < 0) {
+            perror("write");
+        }
+        buf_idx -= count;
+    }
 
-	return buf_idx;
+    return buf_idx;
 }
 
 void dump_table(void *table_base, char *out_file)
 {
-	int fd;
-	uint nips, nports;
-	uint offset;
-	struct lip_entry *lips;
-	struct rip_entry *rips;
-	struct port_entry *ports[PNA_PROTOS];
-	struct lip_entry *lip_entry;
-	struct rip_entry *rip_entry;
-	struct port_entry *port_entry;
+    int fd;
+    uint nips, nports;
+    uint offset;
+    struct lip_entry *lips;
+    struct rip_entry *rips;
+    struct port_entry *ports[PNA_PROTOS];
+    struct lip_entry *lip_entry;
+    struct rip_entry *rip_entry;
+    struct port_entry *port_entry;
     struct pna_log_hdr *log_header;
-	int lip_idx, rip_idx, proto_idx, port_idx;
-	char buf[BUF_SIZE];
+    int lip_idx, rip_idx, proto_idx, port_idx;
+    char buf[BUF_SIZE];
     int buf_idx;
     struct watch_data *monitor;
     struct watch_port *port;
     pna_bitmap bitmap;
 
-	/* open up the output file */
-	fd = open(out_file, O_CREAT|O_RDWR);
-	if (fd < 0) {
-		perror("open out_file");
-		return;
-	}
+    /* open up the output file */
+    fd = open(out_file, O_CREAT|O_RDWR);
+    if (fd < 0) {
+        perror("open out_file");
+        return;
+    }
     fchmod(fd, S_IRUSR | S_IRGRP | S_IROTH);
     lseek(fd, sizeof(struct pna_log_hdr), SEEK_SET);
 
-	offset = 0;
-	lips = table_base + offset;
-	offset += PNA_SZ_LIP_ENTRIES; 
-	rips = table_base + offset;
-	offset += PNA_SZ_RIP_ENTRIES;
-	ports[PNA_PROTO_TCP] = table_base + offset;
-	offset += PNA_SZ_PORT_ENTRIES;
-	ports[PNA_PROTO_UDP] = table_base + offset;
-	offset += PNA_SZ_PORT_ENTRIES;
+    offset = 0;
+    lips = table_base + offset;
+    offset += PNA_SZ_LIP_ENTRIES; 
+    rips = table_base + offset;
+    offset += PNA_SZ_RIP_ENTRIES;
+    ports[PNA_PROTO_TCP] = table_base + offset;
+    offset += PNA_SZ_PORT_ENTRIES;
+    ports[PNA_PROTO_UDP] = table_base + offset;
+    offset += PNA_SZ_PORT_ENTRIES;
 
-	buf_idx = 0;
-	nips = 0;
-	nports = 0;
+    buf_idx = 0;
+    nips = 0;
+    nports = 0;
 
     /* now we loop through the tables ... */
     for (lip_idx = 0; lip_idx < PNA_LIP_ENTRIES; lip_idx++ ) {
@@ -112,7 +112,7 @@ void dump_table(void *table_base, char *out_file)
         for (rip_idx = 0; rip_idx < PNA_RIP_ENTRIES; rip_idx++ ) {
             /* check if a subset of remote IPs have been used */
             if ((0 == rip_idx % BITMAP_BITS) &&
-				(0 == lip_entry->dsts[rip_idx/BITMAP_BITS]) ) {
+                (0 == lip_entry->dsts[rip_idx/BITMAP_BITS]) ) {
                 /* nope, we can skip this subset */
                 rip_idx += (BITMAP_BITS-1);
                 continue;
@@ -128,14 +128,14 @@ void dump_table(void *table_base, char *out_file)
             /* get the second level entry */
             rip_entry = &rips[rip_idx];
 
-			/* set up monitor buffer */
-			monitor = (struct watch_data *)&buf[buf_idx];
+            /* set up monitor buffer */
+            monitor = (struct watch_data *)&buf[buf_idx];
 
-			/* copy the local, remote IP pair */
-			monitor->local_ip = lip_entry->local_ip;
-			monitor->remote_ip = rip_entry->remote_ip;
-			buf_idx += sizeof(struct watch_data);
-			nips++;
+            /* copy the local, remote IP pair */
+            monitor->local_ip = lip_entry->local_ip;
+            monitor->remote_ip = rip_entry->remote_ip;
+            buf_idx += sizeof(struct watch_data);
+            nips++;
 
             /* now we can just dump, set up port pointer */
             for (proto_idx = 0; proto_idx < PNA_PROTOS; proto_idx++) {
@@ -157,8 +157,8 @@ void dump_table(void *table_base, char *out_file)
 
                     /* check if we have the room for this entry */
                     if (buf_idx + sizeof(struct watch_port) >= BUF_SIZE) {
-						/* flush the buffer */
-						buf_idx = buf_flush(fd, buf, buf_idx);
+                        /* flush the buffer */
+                        buf_idx = buf_flush(fd, buf, buf_idx);
                     }
 
                     /* get the third level entry */
@@ -178,13 +178,13 @@ void dump_table(void *table_base, char *out_file)
                     port->pad[1] = 0x00;
                     port->pad[2] = 0x00;
                     buf_idx += sizeof(struct watch_port);
-					nports++;
+                    nports++;
                 }
 
-				/* check if we can fit the sentinal */
+                /* check if we can fit the sentinal */
                 if (buf_idx + sizeof(struct watch_port) >= BUF_SIZE) {
-					/* flush the buffer */
-					buf_idx = buf_flush(fd, buf, buf_idx);
+                    /* flush the buffer */
+                    buf_idx = buf_flush(fd, buf, buf_idx);
                 }
 
                 /* insert a sentinal entry (all zeros) */
@@ -192,15 +192,15 @@ void dump_table(void *table_base, char *out_file)
                 buf_idx += sizeof(struct watch_port);
             }
 
-			/* flush before next remote IP round */
-			buf_idx = buf_flush(fd, buf, buf_idx);
+            /* flush before next remote IP round */
+            buf_idx = buf_flush(fd, buf, buf_idx);
         }
     }
 
     /* make sure we're flushed */
-	buf_idx = buf_flush(fd, buf, buf_idx);
+    buf_idx = buf_flush(fd, buf, buf_idx);
 
-	printf("dumped %d ports with %d <lip,rip> entries to '%s'\n", nports, nips, out_file);
+    printf("dumped %d ports with %d <lip,rip> entries to '%s'\n", nports, nips, out_file);
 
     /* write out header data */
     lseek(fd, 0, SEEK_SET);
@@ -210,113 +210,113 @@ void dump_table(void *table_base, char *out_file)
     log_header->size += nports * sizeof(struct watch_port);
     write(fd, log_header, sizeof(log_header));
 
-	close(fd);
+    close(fd);
 }
 
 void usage(void)
 {
-	printf("usage: %s [-d <logdir>] [-i <interval] <procfile>\n", prog_name);
-	printf("\t-d <logdir>\tsave logs to <logdir> (default: %s)\n",
-			DEFAULT_LOG_DIR);
-	printf("\t-i <interval>\texecute once per <interval> (default: %d)\n",
-			DEFAULT_INTERVAL);
-	printf("\t<procfile>\tfile containing PNA tables to watch\n");
-	exit(1);
+    printf("usage: %s [-d <logdir>] [-i <interval] <procfile>\n", prog_name);
+    printf("\t-d <logdir>\tsave logs to <logdir> (default: %s)\n",
+            DEFAULT_LOG_DIR);
+    printf("\t-i <interval>\texecute once per <interval> (default: %d)\n",
+            DEFAULT_INTERVAL);
+    printf("\t<procfile>\tfile containing PNA tables to watch\n");
+    exit(1);
 }
 
 int main(int argc, char **argv)
 {
-	char opt;
-	char *proc_file;
-	char out_base[MAX_STR], out_file[MAX_STR];
-	int fd, out_fd;
-	struct stat pf_stat;
-	size_t size;
-	void *table_base;
-	struct timeval start, stop, diff;
-	struct tm *start_tm;
-	char *log_dir = DEFAULT_LOG_DIR;
-	int interval = DEFAULT_INTERVAL;
+    char opt;
+    char *proc_file;
+    char out_base[MAX_STR], out_file[MAX_STR];
+    int fd, out_fd;
+    struct stat pf_stat;
+    size_t size;
+    void *table_base;
+    struct timeval start, stop, diff;
+    struct tm *start_tm;
+    char *log_dir = DEFAULT_LOG_DIR;
+    int interval = DEFAULT_INTERVAL;
 
-	gettimeofday(&start, NULL);
+    gettimeofday(&start, NULL);
 
-	prog_name = argv[0];
-	/* process any arguments */
-	while ((opt = getopt(argc, argv, "i:d:")) != -1) {
-		switch (opt) {
-		case 'd':
-			log_dir = optarg;
-			break;
-		case 'i':
-			interval = atoi(optarg);
-			break;
-		case '?':
-		default:
-			usage();
-		}
-	}
-	argc -= optind;
-	argv += optind;
+    prog_name = argv[0];
+    /* process any arguments */
+    while ((opt = getopt(argc, argv, "i:d:")) != -1) {
+        switch (opt) {
+        case 'd':
+            log_dir = optarg;
+            break;
+        case 'i':
+            interval = atoi(optarg);
+            break;
+        case '?':
+        default:
+            usage();
+        }
+    }
+    argc -= optind;
+    argv += optind;
 
-	/* get the proc file from command line */
-	if (argc != 1) {
-		usage();
-	}
-	proc_file = argv[0];
+    /* get the proc file from command line */
+    if (argc != 1) {
+        usage();
+    }
+    proc_file = argv[0];
 
-	/* fetch size of proc file (used for mmap) */
-	if (stat(proc_file, &pf_stat) != 0) {
-		perror("stat");
-		return -1;
-	}
-	size = pf_stat.st_size;
+    /* fetch size of proc file (used for mmap) */
+    if (stat(proc_file, &pf_stat) != 0) {
+        perror("stat");
+        return -1;
+    }
+    size = pf_stat.st_size;
 
-	snprintf(out_base, MAX_STR, LOG_FILE_FORMAT, log_dir, basename(proc_file));
+    snprintf(out_base, MAX_STR, LOG_FILE_FORMAT, log_dir, basename(proc_file));
 
-	while (1) {
-		/* sleep for interval (correct for processing time) */
-		gettimeofday(&stop, NULL);
-		timersub(&stop, &start, &diff);
-		sleep(interval - diff.tv_sec);
+    while (1) {
+        /* sleep for interval (correct for processing time) */
+        gettimeofday(&stop, NULL);
+        timersub(&stop, &start, &diff);
+        sleep(interval - diff.tv_sec);
 
-		/* begin processing */
-		gettimeofday(&start, NULL);
+        /* begin processing */
+        gettimeofday(&start, NULL);
 
-		/* attempt to proc_open file */
-		fd = open(proc_file, O_RDONLY);
-		if (fd < 0) {
-			if (errno == EACCES) {
-				/* EACCES means the file was not used */
-				/* we can just skip this round */
-				continue;
-			}
-			perror("open proc_file");
-			return -1;
-		}
+        /* attempt to proc_open file */
+        fd = open(proc_file, O_RDONLY);
+        if (fd < 0) {
+            if (errno == EACCES) {
+                /* EACCES means the file was not used */
+                /* we can just skip this round */
+                continue;
+            }
+            perror("open proc_file");
+            return -1;
+        }
 
-		/* mmap() for access */
-		table_base = mmap(NULL, size, PROT_READ, MAP_SHARED, fd, 0);
-		if (table_base == MAP_FAILED) {
-			perror("mmap");
-			close(fd);
-			continue;
-		}
+        /* mmap() for access */
+        table_base = mmap(NULL, size, PROT_READ, MAP_SHARED, fd, 0);
+        if (table_base == MAP_FAILED) {
+            perror("mmap");
+            close(fd);
+            continue;
+        }
 
-		/* figure out (time based) name of output file */
-		start_tm = localtime((time_t *)&start);
-		strftime(out_file, MAX_STR, out_base, start_tm);
+        /* figure out (time based) name of output file */
+        start_tm = localtime((time_t *)&start);
+        strftime(out_file, MAX_STR, out_base, start_tm);
 
-		/* perform dumping ... */
-		dump_table(table_base, out_file);
+        /* perform dumping ... */
+        dump_table(table_base, out_file);
 
-		/* unmmap() for access */
-		if (munmap(table_base, size) == -1) {
-			perror("munmap");
-		}
+        /* unmmap() for access */
+        if (munmap(table_base, size) == -1) {
+            perror("munmap");
+        }
 
-		/* close file */
-		close(fd);
-	}
+        /* close file */
+        close(fd);
+    }
 
-	return 0;
+    return 0;
 }

@@ -87,7 +87,7 @@ struct lip_entry *do_lip_entry(struct utab_info *info, uint local_ip, uint direc
         /* check if IP is a match */
         if (local_ip == lip_entry->local_ip)
         {
-        	return lip_entry;
+            return lip_entry;
         }
 
         /* check if IP is clear */
@@ -108,32 +108,32 @@ struct lip_entry *do_lip_entry(struct utab_info *info, uint local_ip, uint direc
 
 /* Find and set/update the level 2 table entry */
 struct rip_entry *do_rip_entry(struct utab_info *info, struct lip_entry *lip_entry,
-					           uint remote_ip, uint direction)
+                               uint remote_ip, uint direction)
 {
     struct rip_entry *rip_entry;
-	pna_bitmap rip_bits;
+    pna_bitmap rip_bits;
     unsigned int i;
     unsigned int hash = lip_entry->local_ip ^ remote_ip;
 
-	hash = hash_long(hash, PNA_RIP_BITS);
+    hash = hash_long(hash, PNA_RIP_BITS);
 
     /* loop through table until we find right entry */
     for ( i = 0; i < PROBE_LIMIT; i++ )
     {
         rip_entry = &info->rips[hash];
-		rip_bits = lip_entry->dsts[hash/BITMAP_BITS];
+        rip_bits = lip_entry->dsts[hash/BITMAP_BITS];
 
         /* check for match */
         if ( remote_ip == rip_entry->remote_ip
-			&& 0 != (rip_bits & (1 << hash % BITMAP_BITS)))
+            && 0 != (rip_bits & (1 << hash % BITMAP_BITS)))
         {
-			if ( 0 == (rip_entry->info_bits & (1 << direction)) )
-			{
-				/* we haven't seen this direction yet, add it */
-				lip_entry->ndsts[direction]++;
-				/* indicate that we've seen this direction */
-				rip_entry->info_bits |= (1 << direction);
-			}
+            if ( 0 == (rip_entry->info_bits & (1 << direction)) )
+            {
+                /* we haven't seen this direction yet, add it */
+                lip_entry->ndsts[direction]++;
+                /* indicate that we've seen this direction */
+                rip_entry->info_bits |= (1 << direction);
+            }
             return rip_entry;
         }
 
@@ -146,10 +146,10 @@ struct rip_entry *do_rip_entry(struct utab_info *info, struct lip_entry *lip_ent
             rip_entry->remote_ip = remote_ip;
             /* update the number of connections */
             lip_entry->ndsts[direction]++;
-			/* indicate that we've seen this direction */
-			rip_entry->info_bits |= (1 << direction);
+            /* indicate that we've seen this direction */
+            rip_entry->info_bits |= (1 << direction);
             /* first time this remote IP was seen it was travelling ... */
-			rip_entry->info_bits |= (1 << (direction + PNA_DIRECTIONS));
+            rip_entry->info_bits |= (1 << (direction + PNA_DIRECTIONS));
 
             info->nrips++;
             return rip_entry;
@@ -159,17 +159,16 @@ struct rip_entry *do_rip_entry(struct utab_info *info, struct lip_entry *lip_ent
         hash = (hash + 1) % PNA_RIP_ENTRIES;
     }
 
-	info->nrips_missed++;
+    info->nrips_missed++;
     return (struct rip_entry *)NULL;
 }
 
 /* Find and set/update the level 3 table entry */
-struct port_entry *do_port_entry(struct utab_info *info, struct lip_entry *lip_entry,
-                                  struct rip_entry *rip_entry,
-                                  ushort proto, ushort local_port,
-                                  ushort remote_port, uint length, uint direction)
+struct port_entry *do_port_entry(struct utab_info *info,
+        struct lip_entry *lip_entry, struct rip_entry *rip_entry,
+        ushort proto, ushort local_port, ushort remote_port, uint length,
+        struct timeval *timeval, uint direction)
 {
-	struct timeval timeval;
     struct port_entry *prt_entry;
     pna_bitmap prt_bits;
     unsigned int i, hash;
@@ -195,13 +194,13 @@ struct port_entry *do_port_entry(struct utab_info *info, struct lip_entry *lip_e
             prt_entry->nbytes[direction] += length;
             prt_entry->npkts[direction]++;
 
-			if ( 0 == (prt_entry->info_bits & (1 << direction)) )
-			{
-				/* we haven't seen this direction yet, add it */
-				rip_entry->nprts[direction][proto]++;
-				/* indicate that we've seen this direction */
-				prt_entry->info_bits |= (1 << direction);
-			}
+            if ( 0 == (prt_entry->info_bits & (1 << direction)) )
+            {
+                /* we haven't seen this direction yet, add it */
+                rip_entry->nprts[direction][proto]++;
+                /* indicate that we've seen this direction */
+                prt_entry->info_bits |= (1 << direction);
+            }
             return prt_entry;
         }
 
@@ -216,20 +215,19 @@ struct port_entry *do_port_entry(struct utab_info *info, struct lip_entry *lip_e
             rip_entry->nbytes[direction][proto] += length;
             rip_entry->npkts[direction][proto]++;
 
-			/* port specific information */
+            /* port specific information */
             prt_entry->nbytes[direction] += length;
             prt_entry->npkts[direction]++;
-        	do_gettimeofday(&timeval);
-			prt_entry->timestamp = timeval.tv_sec;
+            prt_entry->timestamp = timeval->tv_sec;
 
             rip_entry->nprts[direction][proto]++;
-			/* indicate that we've seen this direction */
-			prt_entry->info_bits |= (1 << direction);
+            /* indicate that we've seen this direction */
+            prt_entry->info_bits |= (1 << direction);
             /* the first packet of a flow, mark the direction it came from */
-			prt_entry->info_bits |= (1 << (direction + PNA_DIRECTIONS));
+            prt_entry->info_bits |= (1 << (direction + PNA_DIRECTIONS));
 
-			/* also update the lip_entry because this is a new session */
-			lip_entry->nsess[direction]++;
+            /* also update the lip_entry because this is a new session */
+            lip_entry->nsess[direction]++;
 
             info->nports++;
             return prt_entry;
@@ -239,7 +237,7 @@ struct port_entry *do_port_entry(struct utab_info *info, struct lip_entry *lip_e
         hash = (hash + 1) % PNA_PORT_ENTRIES;
     }
 
-	info->nports_missed++;
+    info->nports_missed++;
     return (struct port_entry *)NULL;
 }
 
@@ -262,40 +260,40 @@ unsigned int pna_packet_hook(unsigned int hooknum,
     struct lip_entry *lip_entry;
     struct rip_entry *rip_entry;
     struct port_entry *prt_entry;
-	uint direction, temp;
-	uint local_ip, remote_ip;
+    uint direction, temp;
+    uint local_ip, remote_ip;
     ushort local_port, remote_port, proto, pkt_len;
     short reason;
-	struct utab_info *info;
+    struct timeval timeval;
+    struct utab_info *info;
 #if PERF_MEASURE == 1
     struct pna_perf *perf = &get_cpu_var(perf_data);
 #endif /* PERF_MEASURE == 1 */
 
-	/* set some informational values for the table */
-   	info = &utab_info[get_cpu_var(utab_index)];
-
-	/* see if this table is locked */
-	while (mutex_is_locked(&info->read_mutex)) {
-		/* if it is locked try the next table ... */
-		get_cpu_var(utab_index) = (get_cpu_var(utab_index) + 1) % pna_tables;
-		put_cpu_var(utab_index);
-   		info = &utab_info[get_cpu_var(utab_index)];
-		printk("trying next table\n");
-	}
-
     /* We have one function, snoop and log packets, Linux can ignore them */
     ret = NF_DROP;
 
-	/* We only accept if the `in` device is not one we care about */
-	if ( 0 != strcmp(in->name, pna_iface))
-	{
-		return NF_ACCEPT;
-	}
+    /* We only accept if the `in` device is not one we care about */
+    if ( 0 != strcmp(in->name, pna_iface)) {
+        return NF_ACCEPT;
+    }
+
+    /* set some informational values for the table */
+       info = &utab_info[get_cpu_var(utab_index)];
+
+    /* see if this table is locked */
+    while (mutex_is_locked(&info->read_mutex)) {
+        /* if it is locked try the next table ... */
+        get_cpu_var(utab_index) = (get_cpu_var(utab_index) + 1) % pna_tables;
+        put_cpu_var(utab_index);
+           info = &utab_info[get_cpu_var(utab_index)];
+        printk("trying next table\n");
+    }
 
     /* grab the packet headers */
     l2hdr = (struct ethhdr *)skb_mac_header(skb);
     l3hdr = (struct iphdr *)skb_network_header(skb);
-	pkt_len = ntohs(l3hdr->tot_len);
+    pkt_len = ntohs(l3hdr->tot_len);
 
     /* (*skb)->h has not been set up yet. So we hack. */
     iphdr_len = l3hdr->ihl * sizeof(int);
@@ -316,33 +314,33 @@ unsigned int pna_packet_hook(unsigned int hooknum,
         break;
     default:
        /* If we don't recognize it, let Linux handle it */
-       return NF_DROP;
+        return NF_DROP;
     }
 
-	/* Determine the nature of this packet (ingress or egress) */
-	/* assume that we have a local packet first */
-	local_ip = ntohl(l3hdr->saddr);
+    /* Determine the nature of this packet (ingress or egress) */
+    /* assume that we have a local packet first */
+    local_ip = ntohl(l3hdr->saddr);
 
-	/* check that it is local */
-	temp = local_ip & pna_mask;
-	if ( temp == pna_prefix )
-	{
-		/* saddr is local */
-		// local_ip, local_port, remote_port are set
-		remote_ip = ntohl(l3hdr->daddr);
-		direction = PNA_DIR_OUTBOUND;
-	}
-	else
-	{
-		/* assume daddr is local */
-		remote_ip = local_ip;
-		local_ip = ntohl(l3hdr->daddr);
+    /* check that it is local */
+    temp = local_ip & pna_mask;
+    if ( temp == (pna_prefix & pna_mask) )
+    {
+        /* saddr is local */
+        // local_ip, local_port, remote_port are set
+        remote_ip = ntohl(l3hdr->daddr);
+        direction = PNA_DIR_OUTBOUND;
+    }
+    else
+    {
+        /* assume daddr is local */
+        remote_ip = local_ip;
+        local_ip = ntohl(l3hdr->daddr);
 
-		temp = local_port;
-		local_port = remote_port;
-		remote_port = temp;
-		direction = PNA_DIR_INBOUND;
-	}
+        temp = local_port;
+        local_port = remote_port;
+        remote_port = temp;
+        direction = PNA_DIR_INBOUND;
+    }
 
 #if PERF_MEASURE == 1
     /**********************************
@@ -362,33 +360,33 @@ unsigned int pna_packet_hook(unsigned int hooknum,
 
         /* calculate the numbers */
         kpps_in = perf->p_interval[PNA_DIR_INBOUND] / 1000 / t_interval;
-		/* 125000 Mb = (1000 MB/KB * 1000 KB/B) / 8 bits/B */
+        /* 125000 Mb = (1000 MB/KB * 1000 KB/B) / 8 bits/B */
         Mbps_in = perf->B_interval[PNA_DIR_INBOUND] / 125000 / t_interval;
-		if (perf->p_interval[PNA_DIR_INBOUND] != 0) {
-			avg_in = perf->B_interval[PNA_DIR_INBOUND];
-			avg_in /= perf->p_interval[PNA_DIR_INBOUND];
-			avg_in -= INTERFRAME_GAP;
-		}
-		else {
-			avg_in = 0;
-		}
+        if (perf->p_interval[PNA_DIR_INBOUND] != 0) {
+            avg_in = perf->B_interval[PNA_DIR_INBOUND];
+            avg_in /= perf->p_interval[PNA_DIR_INBOUND];
+            avg_in -= INTERFRAME_GAP;
+        }
+        else {
+            avg_in = 0;
+        }
 
         kpps_out = perf->p_interval[PNA_DIR_OUTBOUND] / 1000 / t_interval;
-		/* 125000 Mb = (1000 MB/KB * 1000 KB/B) / 8 bits/B */
+        /* 125000 Mb = (1000 MB/KB * 1000 KB/B) / 8 bits/B */
         Mbps_out = perf->B_interval[PNA_DIR_OUTBOUND] / 125000 / t_interval;
-		if (perf->p_interval[PNA_DIR_OUTBOUND] != 0) {
-			avg_out = perf->B_interval[PNA_DIR_OUTBOUND];
-			avg_out /= perf->p_interval[PNA_DIR_OUTBOUND];
-			avg_out -= INTERFRAME_GAP;
-		}
-		else {
-			avg_out = 0;
-		}
+        if (perf->p_interval[PNA_DIR_OUTBOUND] != 0) {
+            avg_out = perf->B_interval[PNA_DIR_OUTBOUND];
+            avg_out /= perf->p_interval[PNA_DIR_OUTBOUND];
+            avg_out -= INTERFRAME_GAP;
+        }
+        else {
+            avg_out = 0;
+        }
 
         /* report the numbers */
         if (kpps_in + kpps_out > 0) {
-			printk("pna_mod: hit in:{kpps:%u,Mbps:%u,avg:%u} out:{kpps:%u,Mbps:%u,avg:%u}\n", kpps_in, Mbps_in, avg_in, kpps_out, Mbps_out, avg_out);
-			printk("on processor %d\n", smp_processor_id());
+            printk("pna_mod: hit in:{kpps:%u,Mbps:%u,avg:%u} out:{kpps:%u,Mbps:%u,avg:%u}\n", kpps_in, Mbps_in, avg_in, kpps_out, Mbps_out, avg_out);
+            printk("on processor %d\n", smp_processor_id());
         }
 
         /* set updated counters */
@@ -413,42 +411,46 @@ unsigned int pna_packet_hook(unsigned int hooknum,
         return NF_DROP;
     }
 
-	/* make sure the local IP is one of interest */
-	temp = local_ip & pna_mask;
-	if ( temp != pna_prefix ) {
-		/* don't monitor this packet, but don't let Linux see it either */
-		return NF_DROP;
-	}
+    /* make sure the local IP is one of interest */
+    temp = local_ip & pna_mask;
+    if ( temp != (pna_prefix & pna_mask) ) {
+        /* don't monitor this packet, but don't let Linux see it either */
+        return NF_DROP;
+    }
 
-	/* make sure this table is marked as dirty */
-	if (info->table_dirty == 0) {
-		info->table_dirty = 1;
-		info->smp_id = smp_processor_id();
-		memcpy(info->iface, pna_iface, PNA_MAX_STR);
-	}
+    /* get the timestamp on the packet */
+    skb_get_timestamp(skb, &timeval);
+
+    /* make sure this table is marked as dirty */
+    if (info->table_dirty == 0) {
+        info->table_dirty = 1;
+        info->first_sec = timeval.tv_sec;
+        info->smp_id = smp_processor_id();
+        memcpy(info->iface, pna_iface, PNA_MAX_STR);
+    }
 
     /* find the entry beginning this connection*/
     lip_entry = do_lip_entry(info, local_ip, direction);
     if ( NULL == lip_entry ) {
-		if (pna_debug) printk("detected full source table\n");
+        if (pna_debug) printk("detected full source table\n");
         return ret;
     }
     else if ( lip_entry->ndsts[PNA_DIR_OUTBOUND] >= pna_connections ) {
-		/* host is trying to connect to too many destinations, ignore */
+        /* host is trying to connect to too many destinations, ignore */
         reason = PNA_ALERT_TYPE_CONNECTIONS | PNA_ALERT_DIR_OUT;
-		pna_alert_warn(reason, local_ip);
+        pna_alert_warn(reason, local_ip);
         return ret;
-	}
+    }
 
     /* find the entry completing this connection */
     rip_entry = do_rip_entry(info, lip_entry, remote_ip, direction);
     if ( NULL == rip_entry ) {
-		/* destination table is *FULL,* can't do anything */
-		if (pna_debug) printk("detected full destination table\n");
+        /* destination table is *FULL,* can't do anything */
+        if (pna_debug) printk("detected full destination table\n");
         return ret;
     }
     else if ( rip_entry->nprts[PNA_DIR_OUTBOUND][proto] >= pna_ports ) {
-		/* host is creating too many unique sessions, ignore */
+        /* host is creating too many unique sessions, ignore */
         reason = PNA_ALERT_TYPE_PORTS | PNA_ALERT_DIR_OUT;
         if (proto == PNA_PROTO_TCP) {
             reason |= PNA_ALERT_PROTO_TCP;
@@ -456,11 +458,11 @@ unsigned int pna_packet_hook(unsigned int hooknum,
         else if (proto == PNA_PROTO_UDP) {
             reason |= PNA_ALERT_PROTO_UDP;
         }
-		pna_alert_warn(reason, local_ip);
+        pna_alert_warn(reason, local_ip);
         return ret;
-	}
-	else if ( rip_entry->nbytes[PNA_DIR_OUTBOUND][proto] >= pna_bytes ) {
-		/* host has surpassed a huge amount of protocol bandwidth, ignore */
+    }
+    else if ( rip_entry->nbytes[PNA_DIR_OUTBOUND][proto] >= pna_bytes ) {
+        /* host has surpassed a huge amount of protocol bandwidth, ignore */
         reason = PNA_ALERT_TYPE_BYTES | PNA_ALERT_DIR_OUT;
         if (proto == PNA_PROTO_TCP) {
             reason |= PNA_ALERT_PROTO_TCP;
@@ -468,11 +470,11 @@ unsigned int pna_packet_hook(unsigned int hooknum,
         else if (proto == PNA_PROTO_UDP) {
             reason |= PNA_ALERT_PROTO_UDP;
         }
-		pna_alert_warn(reason, local_ip);
+        pna_alert_warn(reason, local_ip);
         return ret;
-	}
-	else if ( rip_entry->npkts[PNA_DIR_OUTBOUND][proto] >= pna_packets ) {
-		/* host has surpassed a huge amount of protocol traffic, ignore */
+    }
+    else if ( rip_entry->npkts[PNA_DIR_OUTBOUND][proto] >= pna_packets ) {
+        /* host has surpassed a huge amount of protocol traffic, ignore */
         reason = PNA_ALERT_TYPE_PACKETS | PNA_ALERT_DIR_OUT;
         if (proto == PNA_PROTO_TCP) {
             reason |= PNA_ALERT_PROTO_TCP;
@@ -480,28 +482,28 @@ unsigned int pna_packet_hook(unsigned int hooknum,
         else if (proto == PNA_PROTO_UDP) {
             reason |= PNA_ALERT_PROTO_UDP;
         }
-		pna_alert_warn(reason, local_ip);
-        return ret;
-	}
-	/* XXX: might also want to do ALL thresholds */
-
-    /* update the session entry */
-	prt_entry = do_port_entry(info, lip_entry, rip_entry, proto, local_port,
-			                 remote_port, pkt_len, direction);
-    if ( NULL == prt_entry ) {
-		if (pna_debug) printk("detected full port table\n");
+        pna_alert_warn(reason, local_ip);
         return ret;
     }
-	else if ( lip_entry->nsess[PNA_DIR_OUTBOUND] >= pna_sessions ) {
-		/* host is trying to connect to too many destinations, ignore */
-		pna_alert_warn(PNA_ALERT_TYPE_SESSIONS | PNA_ALERT_DIR_OUT, local_ip);
+    /* XXX: might also want to do ALL thresholds */
+
+    /* update the session entry */
+    prt_entry = do_port_entry(info, lip_entry, rip_entry, proto, local_port,
+                             remote_port, pkt_len, &timeval, direction);
+    if ( NULL == prt_entry ) {
+        if (pna_debug) printk("detected full port table\n");
         return ret;
-	}
-	else if ( lip_entry->nsess[PNA_DIR_INBOUND] >= pna_sessions ) {
-		/* host is trying to connect to too many destinations, ignore */
-		pna_alert_warn(PNA_ALERT_TYPE_SESSIONS | PNA_ALERT_DIR_IN, local_ip);
+    }
+    else if ( lip_entry->nsess[PNA_DIR_OUTBOUND] >= pna_sessions ) {
+        /* host is trying to connect to too many destinations, ignore */
+        pna_alert_warn(PNA_ALERT_TYPE_SESSIONS | PNA_ALERT_DIR_OUT, local_ip);
         return ret;
-	}
+    }
+    else if ( lip_entry->nsess[PNA_DIR_INBOUND] >= pna_sessions ) {
+        /* host is trying to connect to too many destinations, ignore */
+        pna_alert_warn(PNA_ALERT_TYPE_SESSIONS | PNA_ALERT_DIR_IN, local_ip);
+        return ret;
+    }
 
     return ret;
 }

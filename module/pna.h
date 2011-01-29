@@ -124,6 +124,7 @@ struct utab_info {
 
 	struct mutex read_mutex;
 	int  table_dirty;
+	time_t first_sec;
 	int  smp_id;
 	char iface[PNA_MAX_STR];
     uint nlips;
