@@ -265,6 +265,7 @@ unsigned int pna_packet_hook(unsigned int hooknum,
 	uint direction, temp;
 	uint local_ip, remote_ip;
     ushort local_port, remote_port, proto, pkt_len;
+    short reason;
 	struct utab_info *info;
 #if PERF_MEASURE == 1
     struct pna_perf *perf = &get_cpu_var(perf_data);
@@ -434,7 +435,8 @@ unsigned int pna_packet_hook(unsigned int hooknum,
     }
     else if ( lip_entry->ndsts[PNA_DIR_OUTBOUND] >= pna_connections ) {
 		/* host is trying to connect to too many destinations, ignore */
-		session_action(PNA_MSG_BLOCK, local_ip, "too many connections");
+        reason = PNA_ALERT_TYPE_CONNECTIONS | PNA_ALERT_DIR_OUT;
+		pna_alert_warn(reason, local_ip);
         return ret;
 	}
 
@@ -447,17 +449,38 @@ unsigned int pna_packet_hook(unsigned int hooknum,
     }
     else if ( rip_entry->nprts[PNA_DIR_OUTBOUND][proto] >= pna_ports ) {
 		/* host is creating too many unique sessions, ignore */
-		session_action(PNA_MSG_BLOCK, local_ip, "too many ports");
+        reason = PNA_ALERT_TYPE_PORTS | PNA_ALERT_DIR_OUT;
+        if (proto == PNA_PROTO_TCP) {
+            reason |= PNA_ALERT_PROTO_TCP;
+        }
+        else if (proto == PNA_PROTO_UDP) {
+            reason |= PNA_ALERT_PROTO_UDP;
+        }
+		pna_alert_warn(reason, local_ip);
         return ret;
 	}
 	else if ( rip_entry->nbytes[PNA_DIR_OUTBOUND][proto] >= pna_bytes ) {
 		/* host has surpassed a huge amount of protocol bandwidth, ignore */
-		session_action(PNA_MSG_BLOCK, local_ip, "too many bytes");
+        reason = PNA_ALERT_TYPE_BYTES | PNA_ALERT_DIR_OUT;
+        if (proto == PNA_PROTO_TCP) {
+            reason |= PNA_ALERT_PROTO_TCP;
+        }
+        else if (proto == PNA_PROTO_UDP) {
+            reason |= PNA_ALERT_PROTO_UDP;
+        }
+		pna_alert_warn(reason, local_ip);
         return ret;
 	}
 	else if ( rip_entry->npkts[PNA_DIR_OUTBOUND][proto] >= pna_packets ) {
 		/* host has surpassed a huge amount of protocol traffic, ignore */
-		session_action(PNA_MSG_BLOCK, local_ip, "too many packets");
+        reason = PNA_ALERT_TYPE_PACKETS | PNA_ALERT_DIR_OUT;
+        if (proto == PNA_PROTO_TCP) {
+            reason |= PNA_ALERT_PROTO_TCP;
+        }
+        else if (proto == PNA_PROTO_UDP) {
+            reason |= PNA_ALERT_PROTO_UDP;
+        }
+		pna_alert_warn(reason, local_ip);
         return ret;
 	}
 	/* XXX: might also want to do ALL thresholds */
@@ -471,12 +494,12 @@ unsigned int pna_packet_hook(unsigned int hooknum,
     }
 	else if ( lip_entry->nsess[PNA_DIR_OUTBOUND] >= pna_sessions ) {
 		/* host is trying to connect to too many destinations, ignore */
-		session_action(PNA_MSG_BLOCK, local_ip, "too many sessions");
+		pna_alert_warn(PNA_ALERT_TYPE_SESSIONS | PNA_ALERT_DIR_OUT, local_ip);
         return ret;
 	}
 	else if ( lip_entry->nsess[PNA_DIR_INBOUND] >= pna_sessions ) {
 		/* host is trying to connect to too many destinations, ignore */
-		session_action(PNA_MSG_WHITELIST, local_ip, "external scan");
+		pna_alert_warn(PNA_ALERT_TYPE_SESSIONS | PNA_ALERT_DIR_IN, local_ip);
         return ret;
 	}
 

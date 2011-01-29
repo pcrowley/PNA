@@ -12,19 +12,6 @@
 #include <linux/netfilter.h>
 #include <linux/netfilter_ipv4.h>
 
-//#include <linux/smp.h>
-//#include <linux/hash.h>
-//#include <linux/if_ether.h>
-//#include <linux/ip.h>
-//#include <linux/netdevice.h>
-//#include <linux/tcp.h>
-//#include <linux/udp.h>
-//#include <linux/socket.h>
-//#include <net/ip.h>
-//#include <asm/atomic.h>
-
-//#include <linux/net.h>
-
 #include "pna.h"
 
 /****************/
@@ -206,9 +193,10 @@ static void utab_clean(struct utab_info *info)
  */
 /* cleanup and exit/error */
 #define __ALL    0
-#define __HOOK   1
-#define __TABLES 2
-#define __INFO   3
+#define __ALERTS 1
+#define __HOOK   2
+#define __TABLES 3
+#define __INFO   4
 static void pna_cleanup(int start)
 {
 	int i;
@@ -216,6 +204,8 @@ static void pna_cleanup(int start)
 	switch (start)
 	{
 	case __ALL:
+    case __ALERTS:
+        pna_alert_cleanup();
 	case __HOOK:
 		/* remove the packet hook */
 		nf_unregister_hook(&nf_ops);
@@ -302,6 +292,11 @@ static int __init pna_init(void)
 
 	/* everything is set up, register the packet hook */
 	nf_register_hook(&nf_ops);
+
+    if (pna_alert_init() < 0) {
+        pna_cleanup(__ALERTS);
+        return -1;
+    }
 
 	printk("PNA module is initialized\n");
 

@@ -1,22 +1,22 @@
 # kernel module files
 obj-m += pna.o
-pna-objs := pna-kmod.o hooks.o action.o
+pna-objs := pna-kmod.o hooks.o alert.o
 
-# user-space files
-LOGGER := pna-logger
+# user-space programs
+USER_PROGS := pna-logger pna-alerts
 
 ###
 KERNELDIR := /lib/modules/`uname -r`/build
 
-all: module logger
+all: module $(USER_PROGS)
 
 module:
 	$(MAKE) -C $(KERNELDIR) M=`pwd` modules
 
-logger:
-	$(CC) -o $(LOGGER) $(LOGGER).c
+$(USER_PROGS):
+	$(CC) -o $@ $@.c
 
 clean:
 	$(MAKE) -C $(KERNELDIR) M=`pwd` clean
 	rm -f Module.markers
-	rm -f $(LOGGER)
+	rm -f $(USER_PROGS)

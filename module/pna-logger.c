@@ -30,6 +30,11 @@ struct watch_port {
 	uchar pad[3];
 };
 
+struct pna_log_hdr {
+    unsigned int timestamp;
+    unsigned int size;
+};
+
 struct watch_data {   
 	uint local_ip;
 	uint remote_ip;
@@ -49,8 +54,6 @@ int buf_flush(int out_fd, char *buffer, int buf_idx)
 		buf_idx -= count;
 	}
 
-	printf("flushed to %d\n", buf_idx);
-
 	return buf_idx;
 }
 
@@ -65,6 +68,7 @@ void dump_table(void *table_base, char *out_file)
 	struct lip_entry *lip_entry;
 	struct rip_entry *rip_entry;
 	struct port_entry *port_entry;
+    struct pna_log_hdr *log_header;
 	int lip_idx, rip_idx, proto_idx, port_idx;
 	char buf[BUF_SIZE];
     int buf_idx;
@@ -79,6 +83,7 @@ void dump_table(void *table_base, char *out_file)
 		return;
 	}
     fchmod(fd, S_IRUSR | S_IRGRP | S_IROTH);
+    lseek(fd, sizeof(struct pna_log_hdr), SEEK_SET);
 
 	offset = 0;
 	lips = table_base + offset;
@@ -192,7 +197,18 @@ void dump_table(void *table_base, char *out_file)
         }
     }
 
-	printf("dumped %d ports with %d <lip,rip> entries\n", nports, nips);
+    /* make sure we're flushed */
+	buf_idx = buf_flush(fd, buf, buf_idx);
+
+	printf("dumped %d ports with %d <lip,rip> entries to '%s'\n", nports, nips, out_file);
+
+    /* write out header data */
+    lseek(fd, 0, SEEK_SET);
+    log_header = (struct pna_log_hdr *)&buf[buf_idx];
+    log_header->timestamp = time(NULL);
+    log_header->size = nips * sizeof(struct watch_data);
+    log_header->size += nports * sizeof(struct watch_port);
+    write(fd, log_header, sizeof(log_header));
 
 	close(fd);
 }
@@ -299,9 +315,7 @@ int main(int argc, char **argv)
 		}
 
 		/* close file */
-		printf("closing fd\n");
 		close(fd);
-		printf("fd closed\n");
 	}
 
 	return 0;
