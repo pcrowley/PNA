@@ -109,13 +109,16 @@ static int utab_open(struct inode *inode, struct file *filep)
 {
     int i;
     struct utab_info *info;
+    struct timeval now;
+    do_gettimeofday(&now);
 
     try_module_get(THIS_MODULE);
 
     /* find the name of file opened (index into utab_info) */
     sscanf(filep->f_path.dentry->d_iname, PNA_PROCFILE, &i);
     info = &utab_info[i];
-    if (!info->table_dirty) {
+    /* make sure the table was written and not in the last second */
+    if (!info->table_dirty || (info->first_sec + 1) > now.tv_sec ) {
         module_put(THIS_MODULE);
         return -EACCES;
     }

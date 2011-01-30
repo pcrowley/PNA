@@ -11,12 +11,12 @@
 /* shared kernel/user space data for alert system */
 #ifndef __KERNEL__
 char *pna_alert_types[] = {
-	"none",
-	"connections",
-	"sessions",
-	"ports",
-	"bytes",
-	"packets",
+    "none",
+    "connections",
+    "sessions",
+    "ports",
+    "bytes",
+    "packets",
 };
 char *pna_alert_protocols[] = { "none", "tcp", "udp", "both", };
 char *pna_alert_directions[] = { "none", "in", "out", "bi", };
@@ -53,9 +53,9 @@ char *pna_alert_directions[] = { "none", "in", "out", "bi", };
 #define PNA_ALERT_DIR_SHIFT        12
 
 struct pna_alert_msg {
-	short command;
-	short reason;
-	unsigned int value;
+    short command;
+    short reason;
+    unsigned int value;
 };
 #define PNA_ALERT_MSG_SZ (sizeof(struct pna_alert_msg))
 
@@ -111,22 +111,22 @@ struct port_entry {
 #define PNA_SZ_PORT_ENTRIES (PNA_PORT_ENTRIES * sizeof(struct port_entry))
 
 #define PNA_TABLE_SIZE \
-	(PNA_SZ_LIP_ENTRIES + PNA_SZ_RIP_ENTRIES + 2*PNA_SZ_PORT_ENTRIES)
+    (PNA_SZ_LIP_ENTRIES + PNA_SZ_RIP_ENTRIES + 2*PNA_SZ_PORT_ENTRIES)
 
 /* table meta-information */
 #ifdef __KERNEL__
 struct utab_info {
-	void *table_base;
-	char table_name[PNA_MAX_STR];
+    void *table_base;
+    char table_name[PNA_MAX_STR];
     struct lip_entry *lips;
     struct rip_entry *rips;
     struct port_entry *ports[PNA_PROTOS];
 
-	struct mutex read_mutex;
-	int  table_dirty;
-	time_t first_sec;
-	int  smp_id;
-	char iface[PNA_MAX_STR];
+    struct mutex read_mutex;
+    int  table_dirty;
+    time_t first_sec;
+    int  smp_id;
+    char iface[PNA_MAX_STR];
     uint nlips;
     uint nlips_missed;
     uint nrips;

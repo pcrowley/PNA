@@ -282,12 +282,19 @@ unsigned int pna_packet_hook(unsigned int hooknum,
        info = &utab_info[get_cpu_var(utab_index)];
 
     /* see if this table is locked */
-    while (mutex_is_locked(&info->read_mutex)) {
+    temp = 0;
+    while (mutex_is_locked(&info->read_mutex) && temp < pna_tables) {
         /* if it is locked try the next table ... */
         get_cpu_var(utab_index) = (get_cpu_var(utab_index) + 1) % pna_tables;
         put_cpu_var(utab_index);
            info = &utab_info[get_cpu_var(utab_index)];
+        /* don't try a table more than once */
+        temp++;
         printk("trying next table\n");
+    }
+    if (temp == pna_tables) {
+        printk("too many tables tried\n");
+        return NF_DROP;
     }
 
     /* grab the packet headers */
