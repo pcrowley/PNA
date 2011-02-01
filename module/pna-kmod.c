@@ -9,6 +9,7 @@
 #include <linux/fs.h>
 #include <linux/mutex.h>
 #include <linux/proc_fs.h>
+#include <linux/netdevice.h>
 #include <linux/netfilter.h>
 #include <linux/netfilter_ipv4.h>
 
@@ -110,15 +111,18 @@ static int utab_open(struct inode *inode, struct file *filep)
     int i;
     struct utab_info *info;
     struct timeval now;
-    do_gettimeofday(&now);
+    unsigned int first_sec;
 
     try_module_get(THIS_MODULE);
 
     /* find the name of file opened (index into utab_info) */
     sscanf(filep->f_path.dentry->d_iname, PNA_PROCFILE, &i);
     info = &utab_info[i];
+
     /* make sure the table was written and not in the last second */
-    if (!info->table_dirty || (info->first_sec + 1) > now.tv_sec ) {
+    do_gettimeofday(&now);
+    first_sec = info->first_sec + PNA_LAG_TIME;
+    if (!info->table_dirty || first_sec >= now.tv_sec ) {
         module_put(THIS_MODULE);
         return -EACCES;
     }
@@ -142,6 +146,12 @@ static int utab_release(struct inode *inode, struct file *filep)
     sscanf(filep->f_path.dentry->d_iname, PNA_PROCFILE, &i);
     info = &utab_info[i];
 
+    /* dump a little info about that table */
+    printk(KERN_INFO "pna table%d: inserted {lips:%u, rips:%u, ports:%u}; "
+            "dropped {lips:%u, rips:%u, ports:%u}\n", i, info->nlips,
+            info->nrips, info->nports, info->nlips_missed,
+            info->nrips_missed, info->nports_missed);
+
     /* zero out the table */
     memset(info->table_base, 0, PNA_TABLE_SIZE);
 
@@ -158,22 +168,13 @@ static int utab_release(struct inode *inode, struct file *filep)
 /* runs when user space wants to mmap the file */
 static int utab_mmap(struct file *filep, struct vm_area_struct *vma)
 {
-    unsigned long utab_pfn;
-    unsigned long size;
     struct utab_info *info = filep->private_data;
 
-    utab_pfn = page_to_pfn(virt_to_page(info->table_base));
-
-    size = vma->vm_end - vma->vm_start;
-    if (size > PNA_TABLE_SIZE) {
-        return -EIO;
-    }
-
-    if (remap_pfn_range(vma, vma->vm_start, utab_pfn, size,
-                vma->vm_page_prot)) {
-        printk("remap_pfn_range failed\n");
+    if (remap_vmalloc_range(vma, info->table_base, 0)) {
+        printk(KERN_WARNING "remap_vmalloc_range failed\n");
         return -EAGAIN;
     }
+
     return 0;
 }
 
@@ -181,6 +182,7 @@ static int utab_mmap(struct file *filep, struct vm_area_struct *vma)
 static void utab_clean(struct utab_info *info)
 {
     info->table_dirty = 0;
+    info->first_sec = 0;
     info->smp_id = 0;
     memset(info->iface, 0, PNA_MAX_STR);
     info->nlips = 0;
@@ -212,6 +214,7 @@ static void pna_cleanup(int start)
     case __HOOK:
         /* remove the packet hook */
         nf_unregister_hook(&nf_ops);
+        net_disable_timestamp();
     case __TABLES:
         /* destroy each table file we created */
         for (i = pna_tables - 1; i >= 0; i--) {
@@ -219,7 +222,7 @@ static void pna_cleanup(int start)
                 remove_proc_entry(utab_info[i].table_name, proc_parent);
             }
             if (utab_info[i].table_base != NULL) {
-                kfree(utab_info[i].table_base);
+                vfree(utab_info[i].table_base);
             }
         }
     case __INFO:
@@ -247,7 +250,7 @@ static int __init pna_init(void)
     utab_info = (struct utab_info *)
                     vmalloc(pna_tables * sizeof(struct utab_info));
     if (!utab_info) {
-        printk("insufficient memory for utab_info\n");
+        printk(KERN_ERR "insufficient memory for utab_info\n");
         pna_cleanup(__INFO);
         return -ENOMEM;
     }
@@ -256,10 +259,10 @@ static int __init pna_init(void)
     /* configure each table for use */
     for (i = 0; i < pna_tables; i++) {
         info = &utab_info[i];
-        info->table_base = kzalloc(PNA_TABLE_SIZE, GFP_KERNEL);
+        info->table_base = vmalloc_user(PNA_TABLE_SIZE + PAGE_SIZE);
         if (!info->table_base) {
-            printk("insufficient memory for %d tables (%lu bytes)\n",
-                    pna_tables, (pna_tables * PNA_TABLE_SIZE));
+            printk(KERN_ERR "insufficient memory for %d/%d tables (%lu bytes)\n",
+                    i, pna_tables, (pna_tables * PNA_TABLE_SIZE));
             pna_cleanup(__TABLES);
             return -ENOMEM;
         }
@@ -282,7 +285,7 @@ static int __init pna_init(void)
         strncpy(info->table_name, table_str, PNA_MAX_STR);
         proc_node = create_proc_entry(info->table_name, 0644, proc_parent);
         if (!proc_node) {
-            printk("failed to make proc entry: %s\n", table_str);
+            printk(KERN_ERR "failed to make proc entry: %s\n", table_str);
             pna_cleanup(__TABLES);
             return -ENOMEM;
         }
@@ -294,6 +297,7 @@ static int __init pna_init(void)
     }
 
     /* everything is set up, register the packet hook */
+    net_enable_timestamp();
     nf_register_hook(&nf_ops);
 
     if (pna_alert_init() < 0) {
@@ -301,7 +305,7 @@ static int __init pna_init(void)
         return -1;
     }
 
-    printk("PNA module is initialized\n");
+    printk(KERN_INFO "pna: module is initialized\n");
 
     return ret;
 }
@@ -310,7 +314,7 @@ static int __init pna_init(void)
 static void __exit pna_exit(void)
 {
     pna_cleanup(__ALL);
-    printk("PNA module is inactive\n");
+    printk(KERN_INFO "pna: module is inactive\n");
 }
 
 module_init(pna_init);

@@ -13,7 +13,7 @@ static void pna_alert_recv(struct sk_buff *skb);
 static int pna_alert_send(struct pna_alert_msg *alert);
 
 /* this function is called when a threshold is crossed */
-int pna_alert_warn(int reason, int value)
+int pna_alert_warn(int reason, int value, struct timeval *time)
 {
     struct pna_alert_msg alert;
 
@@ -21,6 +21,7 @@ int pna_alert_warn(int reason, int value)
     alert.command = PNA_ALERT_CMD_WARN;
     alert.reason = reason;
     alert.value = value;
+    memcpy(&alert.timeval, time, sizeof(alert.timeval));
 
     return pna_alert_send(&alert);
 }
@@ -40,7 +41,7 @@ static void pna_alert_recv(struct sk_buff *skb)
             if ( nlh->nlmsg_pid == alert->value ) {
                 /* and we know who to send messages to */
                 pna_alert_pid = alert->value;
-                printk("pna alerts registered to pid %d\n", pna_alert_pid);
+                printk(KERN_INFO "pna alerts registered to pid %d\n", pna_alert_pid);
             }
             break;
         case PNA_ALERT_CMD_UNREGISTER:
@@ -48,11 +49,11 @@ static void pna_alert_recv(struct sk_buff *skb)
             if ( pna_alert_pid == alert->value ) {
                 /* unregister the alerts */
                 pna_alert_pid = 0;
-                printk("pna alerts unregistered\n");
+                printk(KERN_INFO "pna alerts unregistered\n");
             }
             break;
         default:
-            printk("pna_alert: invalid command %d\n", alert->command);
+            printk(KERN_WARNING "pna_alert: invalid command %d\n", alert->command);
     }
 }
 
@@ -71,7 +72,7 @@ static int pna_alert_send(struct pna_alert_msg *alert)
     /* allocate the message buffer */
     skb = nlmsg_new(PNA_ALERT_MSG_SZ, 0);
     if (!skb) {
-        printk("could not allocate socket buffer\n");
+        printk(KERN_WARNING "could not allocate socket buffer\n");
         return -2;
     } 
 
@@ -85,7 +86,7 @@ static int pna_alert_send(struct pna_alert_msg *alert)
     /* send the message */
     ret = nlmsg_unicast(pna_alert_sock, skb, pna_alert_pid);
     if (ret < 0) {
-        printk("could not send buffer to pid %d\n", pna_alert_pid);
+        printk(KERN_WARNING "could not send buffer to pid %d\n", pna_alert_pid);
         return -3;
     }
 
@@ -97,7 +98,7 @@ int pna_alert_init(void)
     pna_alert_sock = netlink_kernel_create(&init_net, NETLINK_PNA, 0,
             pna_alert_recv, NULL, THIS_MODULE);
     if (!pna_alert_sock) {
-        printk("failed to create netlink socket\n");
+        printk(KERN_ERR "failed to create netlink socket\n");
         return -1;
     }
 

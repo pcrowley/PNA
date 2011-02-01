@@ -9,7 +9,8 @@
 #include "pna.h"
 
 #define PNA_ALERT_LOG_FORMAT \
-    "pna_alert type:%s, protocol:%s, direction:%s, offender:%s\n"
+    "%s: pna_alert type:%s, protocol:%s, direction:%s, offender:%s\n"
+#define PNA_ALERT_TIME_FORMAT "%F %T"
 #define MAX_IP_STR 32
 
 /* some useful global variables */
@@ -66,9 +67,10 @@ void pna_alert_send(struct pna_alert_msg *alert)
 void pna_alert_recv(struct pna_alert_msg *alert)
 {
     int type_i, proto_i, dir_i;
-    char *type, *proto, *dir;
+    char *type, *proto, *dir, tstamp[PNA_MAX_STR];
     int ip_i[4];
     char ip[MAX_IP_STR];
+    struct tm *time;
 
     if (alert->command != PNA_ALERT_CMD_WARN) {
         printf("unknown command: %d\n", alert->command);
@@ -86,11 +88,15 @@ void pna_alert_recv(struct pna_alert_msg *alert)
     ip_i[1] = (alert->value & 0x00ff0000) >> 16;
     ip_i[2] = (alert->value & 0x0000ff00) >> 8;
     ip_i[3] = (alert->value & 0x000000ff) >> 0;
-    snprintf(ip, MAX_IP_STR, "%d.%d.%d.%d", ip_i[0], ip_i[1], ip_i[2], ip_i[3]);
+    snprintf(ip, MAX_IP_STR, "%d.%d.%d.%d",
+            ip_i[0], ip_i[1], ip_i[2], ip_i[3]);
+    snprintf(tstamp, PNA_MAX_STR, PNA_ALERT_TIME_FORMAT,
+            localtime(alert->timeval.tv_sec));
 
     if (out_file != NULL) {
-        fprintf(out_file, PNA_ALERT_LOG_FORMAT, type, proto, dir, ip);
+        fprintf(out_file, PNA_ALERT_LOG_FORMAT, tstamp, type, proto, dir, ip);
     }
+
     if (handler_path != NULL) {
         if (fork() == 0) {
             /* child can exec */

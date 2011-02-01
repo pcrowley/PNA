@@ -8,6 +8,9 @@
 #define PNA_PROCFILE "table%d"
 #define PNA_MAX_STR  16
 
+/* a table must have at least PNA_LAG_TIME seconds before dumping */
+#define PNA_LAG_TIME 1
+
 /* shared kernel/user space data for alert system */
 #ifndef __KERNEL__
 char *pna_alert_types[] = {
@@ -56,6 +59,7 @@ struct pna_alert_msg {
     short command;
     short reason;
     unsigned int value;
+    struct timeval timeval;
 };
 #define PNA_ALERT_MSG_SZ (sizeof(struct pna_alert_msg))
 
@@ -69,12 +73,12 @@ struct pna_alert_msg {
 # define PNA_PROTO_UDP 1
 
 /* settings/structures for storing <src,dst,port> entries */
-#define PNA_LIP_ENTRIES  1024
-#define PNA_LIP_BITS     10
-#define PNA_RIP_ENTRIES  1024
-#define PNA_RIP_BITS     10
-#define PNA_PORT_ENTRIES 1024
-#define PNA_PORT_BITS    10
+#define PNA_LIP_ENTRIES  16384
+#define PNA_LIP_BITS     14
+#define PNA_RIP_ENTRIES  32768
+#define PNA_RIP_BITS     15
+#define PNA_PORT_ENTRIES 65536
+#define PNA_PORT_BITS    16
 
 /* some typedefs */
 typedef unsigned char uchar;
@@ -88,7 +92,7 @@ struct lip_entry {
     uint local_ip;
     ushort ndsts[PNA_DIRECTIONS];
     uint nsess[PNA_DIRECTIONS];
-    pna_bitmap dsts[PNA_LIP_ENTRIES/BITMAP_BITS];
+    pna_bitmap dsts[PNA_RIP_ENTRIES/BITMAP_BITS];
 };
 #define PNA_SZ_LIP_ENTRIES (PNA_LIP_ENTRIES * sizeof(struct lip_entry))
 struct rip_entry {
@@ -111,7 +115,7 @@ struct port_entry {
 #define PNA_SZ_PORT_ENTRIES (PNA_PORT_ENTRIES * sizeof(struct port_entry))
 
 #define PNA_TABLE_SIZE \
-    (PNA_SZ_LIP_ENTRIES + PNA_SZ_RIP_ENTRIES + 2*PNA_SZ_PORT_ENTRIES)
+    (PNA_SZ_LIP_ENTRIES + PNA_SZ_RIP_ENTRIES + PNA_PROTOS*PNA_SZ_PORT_ENTRIES)
 
 /* table meta-information */
 #ifdef __KERNEL__
@@ -138,7 +142,7 @@ struct utab_info {
 
 /* some prototypes */
 #ifdef __KERNEL__
-int pna_alert_warn(int reason, int value);
+int pna_alert_warn(int reason, int value, struct timeval *time);
 int pna_alert_init(void);
 void pna_alert_cleanup(void);
 unsigned int pna_packet_hook(unsigned int hooknum, 

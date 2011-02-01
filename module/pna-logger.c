@@ -17,7 +17,8 @@
 #define DEFAULT_INTERVAL 10
 #define LOG_FILE_FORMAT  "%s/pna-%%Y%%m%%d%%H%%M%%S-%s.log"
 #define MAX_STR          1024
-#define BUF_SIZE         1024
+#define BUF_SIZE         (1 * 1024 * 1024)
+#define USECS_PER_SEC    1000000
 
 /* log file format structures */
 struct watch_port {
@@ -40,6 +41,8 @@ struct watch_data {
     uint remote_ip;
 };
 
+/* global variables */
+int verbose = 0;
 char *prog_name;
 
 int buf_flush(int out_fd, char *buffer, int buf_idx)
@@ -119,7 +122,7 @@ void dump_table(void *table_base, char *out_file)
             }
 
             /* now check if the local IP uses this specific remote IP */
-            if ( 0 == (lip_entry->dsts[rip_idx/BITMAP_BITS] 
+            if ( 0 == (lip_entry->dsts[rip_idx/BITMAP_BITS]
                         & (1 << rip_idx % BITMAP_BITS)) ) {
                 /* it isn't, keep moving */
                 continue;
@@ -200,7 +203,10 @@ void dump_table(void *table_base, char *out_file)
     /* make sure we're flushed */
     buf_idx = buf_flush(fd, buf, buf_idx);
 
-    printf("dumped %d ports with %d <lip,rip> entries to '%s'\n", nports, nips, out_file);
+    /* display the number of entries we got */
+    if (verbose) {
+        printf("%d ports, %d <lip,rip> to '%s' ", nports, nips, out_file);
+    }
 
     /* write out header data */
     lseek(fd, 0, SEEK_SET);
@@ -215,7 +221,8 @@ void dump_table(void *table_base, char *out_file)
 
 void usage(void)
 {
-    printf("usage: %s [-d <logdir>] [-i <interval] <procfile>\n", prog_name);
+    printf("usage: %s [-v] [-d <logdir>] [-i <interval] <procfile>\n", prog_name);
+    printf("\t-v\tverbose mode (show quantities and time information)\n");
     printf("\t-d <logdir>\tsave logs to <logdir> (default: %s)\n",
             DEFAULT_LOG_DIR);
     printf("\t-i <interval>\texecute once per <interval> (default: %d)\n",
@@ -234,6 +241,7 @@ int main(int argc, char **argv)
     size_t size;
     void *table_base;
     struct timeval start, stop, diff;
+    unsigned int remainder, frac;
     struct tm *start_tm;
     char *log_dir = DEFAULT_LOG_DIR;
     int interval = DEFAULT_INTERVAL;
@@ -242,13 +250,16 @@ int main(int argc, char **argv)
 
     prog_name = argv[0];
     /* process any arguments */
-    while ((opt = getopt(argc, argv, "i:d:")) != -1) {
+    while ((opt = getopt(argc, argv, "i:d:v")) != -1) {
         switch (opt) {
         case 'd':
             log_dir = optarg;
             break;
         case 'i':
             interval = atoi(optarg);
+            break;
+        case 'v':
+            verbose = 1;
             break;
         case '?':
         default:
@@ -277,7 +288,22 @@ int main(int argc, char **argv)
         /* sleep for interval (correct for processing time) */
         gettimeofday(&stop, NULL);
         timersub(&stop, &start, &diff);
-        sleep(interval - diff.tv_sec);
+        /* show processing time if bigger than 100 microseconds */
+        if (verbose && diff.tv_usec > 100) {
+            printf("processed in %d.%06d seconds (sleeping for %d seconds)\n",
+                    diff.tv_sec, diff.tv_usec,
+                    interval - diff.tv_sec - frac/USECS_PER_SEC);
+        }
+        remainder = sleep(interval - diff.tv_sec - frac/USECS_PER_SEC);
+        if (remainder != 0) {
+            continue;
+        }
+
+        /* detect accumulating slippage */
+        if ( frac >= USECS_PER_SEC ) {
+            frac -= USECS_PER_SEC;
+        }
+        frac += diff.tv_usec;
 
         /* begin processing */
         gettimeofday(&start, NULL);

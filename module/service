@@ -9,8 +9,8 @@
 #               Appliacte (PNA).
 
 # PNA configuration
-BASE="/home/mjschultz/module" # Base directory for PNA module
-PNA_IFACE="eth2"              # Interface for PNA to listen on
+BASE="/home/mjschultz/pna/module" # Base directory for PNA module
+PNA_IFACE="eth0"              # Interface for PNA to listen on
 PNA_PREFIX="192.168.0.0"      # IP Prefix to watch
 PNA_MASK="255.255.0.0"        # Network Mask to watch
 PNA_LOGDIR="../logs"          # Directory to store log files
@@ -29,60 +29,60 @@ ALERTS="pna-alerts" # Name of alerts program
 
 # Program Locations
 IFCONFIG="/sbin/ifconfig"
+INSMOD="/sbin/insmod"
+RMMOD="/sbin/rmmod"
 
 ip2hex () {
-	IP=$1
-	printf "0x%02x%02x%02x%02x\n" $(echo "$IP" | sed "s/\./ /g")
+    IP=$1
+    printf "0x%02x%02x%02x%02x\n" $(echo "$IP" | sed "s/\./ /g")
 }
 
 start () {
     echo -n $"Starting $SERVICE: "
 
-	# Turn prefix and mask to hex values
-	PNA_PREFIX=$(ip2hex "$PNA_PREFIX")
-	PNA_MASK=$(ip2hex "$PNA_MASK")
+    # Turn prefix and mask to hex values
+    PNA_PREFIX=$(ip2hex "$PNA_PREFIX")
+    PNA_MASK=$(ip2hex "$PNA_MASK")
 
-	# Make sure PNA interface is up
-	${IFCONFIG} ${PNA_IFACE} up
-	${IFCONFIG} ${PNA_IFACE} promisc
+    # Make sure PNA interface is up
+    ${IFCONFIG} ${PNA_IFACE} up
+    ${IFCONFIG} ${PNA_IFACE} promisc
 
     # Set CPU <-> IRQ affinity for PNA_IFACE
-	NPROCS=$(grep processor /proc/cpuinfo | wc -l)
-	AFFINITY=$(printf "%x" $((1 << ($NPROCS - 1))))
+    NPROCS=$(grep processor /proc/cpuinfo | wc -l)
+    AFFINITY=$(printf "%x" $((1 << ($NPROCS - 1))))
 
-    for e in `find /proc/irq -name "${PNA_IFACE}*"`; do
-		IRQPATH=$(dirname $e)
-		if [ -f ${IRQPATH}/smp_affinity ] ; then
-			echo ${AFFINITY} > ${IRQPATH}/smp_affinity
-		fi
-	done
-
-    # load the module
-	PNA_ARGS="pna_iface=\"$PNA_IFACE\""
-	PNA_ARGS="$PNA_ARGS pna_prefix=\"$PNA_PREFIX\""
-	PNA_ARGS="$PNA_ARGS pna_mask=\"$PNA_MASK\""
-    insmod ${BASE}/${MODULE}.ko $PNA_ARGS
-    RETVAL=$?
-
-	# make sure we have some place to save log files
-	mkdir -p "$PNA_LOGDIR"
-
-    # start the logging monitor(s)
-	PID_LIST=""
-    for f in /proc/$MODULE/*; do
-		${BASE}/${LOGGER} -d "$PNA_LOGDIR" "$f" &
-		PID_LIST="$PID_LIST $!"
-		RETVAL=$(($RETVAL+$?))
+    
+    for f in /proc/irq/*/${PNA_IFACE}*/../smp_affinity ; do
+        echo ${AFFINITY} > $f
     done
 
-	# start the alerts monitor
-	# TODO...
+    # load the module
+    PNA_ARGS="pna_iface=\"$PNA_IFACE\""
+    PNA_ARGS="$PNA_ARGS pna_prefix=\"$PNA_PREFIX\""
+    PNA_ARGS="$PNA_ARGS pna_mask=\"$PNA_MASK\""
+    ${INSMOD} ${BASE}/${MODULE}.ko $PNA_ARGS
+    RETVAL=$?
+
+    # make sure we have some place to save log files
+    mkdir -p "$PNA_LOGDIR"
+
+    # start the logging monitor(s)
+    PID_LIST=""
+    for f in /proc/$MODULE/*; do
+        ${BASE}/${LOGGER} -d "$PNA_LOGDIR" "$f" &
+        PID_LIST="$PID_LIST $!"
+        RETVAL=$(($RETVAL+$?))
+    done
+
+    # start the alerts monitor
+    # TODO...
 
     # in theory I should add entry to cron...
     
     # finish up with script-y stuff
     [ $RETVAL = 0 ] && touch /var/lock/subsys/${SERVICE}
-	[ $RETVAL = 0 ] && echo $PID_LIST > /var/run/${SERVICE}.pids
+    [ $RETVAL = 0 ] && echo $PID_LIST > /var/run/${SERVICE}.pids
     [ $RETVAL = 0 ] && success || failure
     echo
 
@@ -92,12 +92,12 @@ start () {
 stop () {
     echo -n $"Stopping $SERVICE: "
 
-	# make sure there is something to stop
-	if [ ! -f /var/lock/subsys/${SERVICE} ] ; then
-		failure
-		echo 
-		return
-	fi
+    # make sure there is something to stop
+    if [ ! -f /var/lock/subsys/${SERVICE} ] ; then
+        failure
+        echo 
+        return
+    fi
 
     # in theory I should remove entry from cron...
 
@@ -105,18 +105,15 @@ stop () {
     kill $(cat /var/run/${SERVICE}.pids)
 
     # unload the module
-    rmmod ${MODULE}
+    ${RMMOD} ${MODULE}
     RETVAL=$?
 
     # unset CPU affinities
-    for e in `find /proc/irq -name "eth*"`; do
-		IRQPATH=$(dirname $e)
-		if [ -f ${IRQPATH}/smp_affinity ] ; then
-			cat /proc/irq/default_smp_affinity > ${IRQPATH}/smp_affinity
-		fi
+    for f in /proc/irq/*/${PNA_IFACE}*/../smp_affinity ; do
+        cat /proc/irq/default_smp_affinity > $f
     done
 
-	# Take down PNA interface
+    # Take down PNA interface
     ${IFCONFIG} ${PNA_IFACE} down
 
     # End with script-y stuff

@@ -77,7 +77,7 @@ struct lip_entry *do_lip_entry(struct utab_info *info, uint local_ip, uint direc
 {
     struct lip_entry *lip_entry;
     unsigned int i;
-    unsigned int hash = hash_long(local_ip, PNA_LIP_BITS);
+    unsigned int hash = hash_32(local_ip, PNA_LIP_BITS);
 
     /* loop through table until we find right entry */
     for ( i = 0; i < PROBE_LIMIT; i++ )
@@ -115,7 +115,7 @@ struct rip_entry *do_rip_entry(struct utab_info *info, struct lip_entry *lip_ent
     unsigned int i;
     unsigned int hash = lip_entry->local_ip ^ remote_ip;
 
-    hash = hash_long(hash, PNA_RIP_BITS);
+    hash = hash_32(hash, PNA_RIP_BITS);
 
     /* loop through table until we find right entry */
     for ( i = 0; i < PROBE_LIMIT; i++ )
@@ -175,8 +175,9 @@ struct port_entry *do_port_entry(struct utab_info *info,
     u32 ports;
 
     /* hash on <(local_port << 16)|remote_port> */
-    ports = rip_entry->remote_ip ^ ((remote_port << 16) | local_port);
-    hash = hash_long(ports, PNA_PORT_BITS);
+    ports = lip_entry->local_ip ^ rip_entry->remote_ip;
+    ports ^= ((remote_port << 16) | local_port);
+    hash = hash_32(ports, PNA_PORT_BITS);
 
     /* loop through table until we find right entry */
     for ( i = 0; i < PROBE_LIMIT; i++ )
@@ -278,8 +279,8 @@ unsigned int pna_packet_hook(unsigned int hooknum,
         return NF_ACCEPT;
     }
 
-    /* set some informational values for the table */
-       info = &utab_info[get_cpu_var(utab_index)];
+    /* get some informational values for the table */
+    info = &utab_info[get_cpu_var(utab_index)];
 
     /* see if this table is locked */
     temp = 0;
@@ -287,13 +288,12 @@ unsigned int pna_packet_hook(unsigned int hooknum,
         /* if it is locked try the next table ... */
         get_cpu_var(utab_index) = (get_cpu_var(utab_index) + 1) % pna_tables;
         put_cpu_var(utab_index);
-           info = &utab_info[get_cpu_var(utab_index)];
+        info = &utab_info[get_cpu_var(utab_index)];
         /* don't try a table more than once */
         temp++;
-        printk("trying next table\n");
     }
     if (temp == pna_tables) {
-        printk("too many tables tried\n");
+        printk(KERN_WARNING "pna: all tables are locked\n");
         return NF_DROP;
     }
 
@@ -330,15 +330,13 @@ unsigned int pna_packet_hook(unsigned int hooknum,
 
     /* check that it is local */
     temp = local_ip & pna_mask;
-    if ( temp == (pna_prefix & pna_mask) )
-    {
+    if ( temp == (pna_prefix & pna_mask) ) {
         /* saddr is local */
         // local_ip, local_port, remote_port are set
         remote_ip = ntohl(l3hdr->daddr);
         direction = PNA_DIR_OUTBOUND;
     }
-    else
-    {
+    else {
         /* assume daddr is local */
         remote_ip = local_ip;
         local_ip = ntohl(l3hdr->daddr);
@@ -392,8 +390,10 @@ unsigned int pna_packet_hook(unsigned int hooknum,
 
         /* report the numbers */
         if (kpps_in + kpps_out > 0) {
-            printk("pna_mod: hit in:{kpps:%u,Mbps:%u,avg:%u} out:{kpps:%u,Mbps:%u,avg:%u}\n", kpps_in, Mbps_in, avg_in, kpps_out, Mbps_out, avg_out);
-            printk("on processor %d\n", smp_processor_id());
+            printk(KERN_INFO "pna throughput smpid:%d, "
+                    "in:{kpps:%u,Mbps:%u,avg:%u}, "
+                    "out:{kpps:%u,Mbps:%u,avg:%u}\n", smp_processor_id(),
+                    kpps_in, Mbps_in, avg_in, kpps_out, Mbps_out, avg_out);
         }
 
         /* set updated counters */
@@ -430,8 +430,8 @@ unsigned int pna_packet_hook(unsigned int hooknum,
 
     /* make sure this table is marked as dirty */
     if (info->table_dirty == 0) {
-        info->table_dirty = 1;
         info->first_sec = timeval.tv_sec;
+        info->table_dirty = 1;
         info->smp_id = smp_processor_id();
         memcpy(info->iface, pna_iface, PNA_MAX_STR);
     }
@@ -439,13 +439,13 @@ unsigned int pna_packet_hook(unsigned int hooknum,
     /* find the entry beginning this connection*/
     lip_entry = do_lip_entry(info, local_ip, direction);
     if ( NULL == lip_entry ) {
-        if (pna_debug) printk("detected full source table\n");
+        if (pna_debug) printk(KERN_DEBUG "full local ip table\n");
         return ret;
     }
     else if ( lip_entry->ndsts[PNA_DIR_OUTBOUND] >= pna_connections ) {
         /* host is trying to connect to too many destinations, ignore */
         reason = PNA_ALERT_TYPE_CONNECTIONS | PNA_ALERT_DIR_OUT;
-        pna_alert_warn(reason, local_ip);
+        pna_alert_warn(reason, local_ip, &timeval);
         return ret;
     }
 
@@ -453,7 +453,7 @@ unsigned int pna_packet_hook(unsigned int hooknum,
     rip_entry = do_rip_entry(info, lip_entry, remote_ip, direction);
     if ( NULL == rip_entry ) {
         /* destination table is *FULL,* can't do anything */
-        if (pna_debug) printk("detected full destination table\n");
+        if (pna_debug) printk(KERN_DEBUG "full remote ip table\n");
         return ret;
     }
     else if ( rip_entry->nprts[PNA_DIR_OUTBOUND][proto] >= pna_ports ) {
@@ -465,7 +465,7 @@ unsigned int pna_packet_hook(unsigned int hooknum,
         else if (proto == PNA_PROTO_UDP) {
             reason |= PNA_ALERT_PROTO_UDP;
         }
-        pna_alert_warn(reason, local_ip);
+        pna_alert_warn(reason, local_ip, &timeval);
         return ret;
     }
     else if ( rip_entry->nbytes[PNA_DIR_OUTBOUND][proto] >= pna_bytes ) {
@@ -477,7 +477,7 @@ unsigned int pna_packet_hook(unsigned int hooknum,
         else if (proto == PNA_PROTO_UDP) {
             reason |= PNA_ALERT_PROTO_UDP;
         }
-        pna_alert_warn(reason, local_ip);
+        pna_alert_warn(reason, local_ip, &timeval);
         return ret;
     }
     else if ( rip_entry->npkts[PNA_DIR_OUTBOUND][proto] >= pna_packets ) {
@@ -489,7 +489,7 @@ unsigned int pna_packet_hook(unsigned int hooknum,
         else if (proto == PNA_PROTO_UDP) {
             reason |= PNA_ALERT_PROTO_UDP;
         }
-        pna_alert_warn(reason, local_ip);
+        pna_alert_warn(reason, local_ip, &timeval);
         return ret;
     }
     /* XXX: might also want to do ALL thresholds */
@@ -498,17 +498,19 @@ unsigned int pna_packet_hook(unsigned int hooknum,
     prt_entry = do_port_entry(info, lip_entry, rip_entry, proto, local_port,
                              remote_port, pkt_len, &timeval, direction);
     if ( NULL == prt_entry ) {
-        if (pna_debug) printk("detected full port table\n");
+        if (pna_debug) printk(KERN_DEBUG "full port table\n");
         return ret;
     }
     else if ( lip_entry->nsess[PNA_DIR_OUTBOUND] >= pna_sessions ) {
         /* host is trying to connect to too many destinations, ignore */
-        pna_alert_warn(PNA_ALERT_TYPE_SESSIONS | PNA_ALERT_DIR_OUT, local_ip);
+        reason = PNA_ALERT_TYPE_SESSIONS | PNA_ALERT_DIR_OUT;
+        pna_alert_warn(reason, local_ip, &timeval);
         return ret;
     }
     else if ( lip_entry->nsess[PNA_DIR_INBOUND] >= pna_sessions ) {
         /* host is trying to connect to too many destinations, ignore */
-        pna_alert_warn(PNA_ALERT_TYPE_SESSIONS | PNA_ALERT_DIR_IN, local_ip);
+        reason = PNA_ALERT_TYPE_SESSIONS | PNA_ALERT_DIR_IN;
+        pna_alert_warn(reason, local_ip, &timeval);
         return ret;
     }
 
