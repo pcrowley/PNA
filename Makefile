@@ -10,7 +10,7 @@ $(MODULE):
 $(USER):
 	$(MAKE) -C user/
 
-start:
+start: $(MODULE) $(USER)
 	./service/pna start
 
 stop:
