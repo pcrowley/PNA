@@ -17,7 +17,7 @@
 #include "pna.h"
 
 /* constants for this file */
-#define PROBE_LIMIT 128
+#define PNA_TABLE_TRIES 128
 #define PERF_MEASURE 1
 
 /* configuration settings */
@@ -72,34 +72,53 @@ union l4hdr {
 DEFINE_PER_CPU(int, utab_index);
 DEFINE_PER_CPU(struct pna_perf, perf_data);
 
+/* non-kernel hash function for double hashing -- should return odd number */
+unsigned int hash_pna(unsigned int key, int bits)
+{
+    unsigned int hash = key;
+
+    /* lets take the highest bits */
+    hash = key >> (sizeof(unsigned int) - bits);
+
+    /* divide by 2 and make it odd */
+    hash = (hash >> 1) | 0x01;
+
+    return hash;
+}
+
 /* Find and set/update the level 1 table entry */
-struct lip_entry *do_lip_entry(struct utab_info *info, uint local_ip, uint direction)
+struct lip_entry *do_lip_entry(struct utab_info *info, uint local_ip,
+        uint direction)
 {
     struct lip_entry *lip_entry;
     unsigned int i;
-    unsigned int hash = hash_32(local_ip, PNA_LIP_BITS);
+    unsigned int hash, hash_0, hash_1;
+    
+    hash_0 = hash_32(local_ip, PNA_LIP_BITS);
+    hash_1 = hash_pna(local_ip, PNA_LIP_BITS);
 
     /* loop through table until we find right entry */
-    for ( i = 0; i < PROBE_LIMIT; i++ )
-    {
+    for ( i = 0; i < PNA_TABLE_TRIES; i++ ) {
+        /* use linear probing for next entry */
+        //hash = (hash_0 + i) & (PNA_LIP_ENTRIES-1);
+        /* double hashing for entry */
+        hash = (hash_0 + i*hash_1) & (PNA_LIP_ENTRIES-1);
+
+        /* start testing the waters */
         lip_entry = &info->lips[hash];
 
         /* check if IP is a match */
-        if (local_ip == lip_entry->local_ip)
-        {
+        if (local_ip == lip_entry->local_ip) {
             return lip_entry;
         }
 
         /* check if IP is clear */
-        if (0 == lip_entry->local_ip)
-        {
+        if (0 == lip_entry->local_ip) {
             /* set up entry and return it */
             lip_entry->local_ip = local_ip;
             info->nlips++;
             return lip_entry;
         }
-
-        hash = (hash + 1) % PNA_LIP_ENTRIES;
     }
    
     info->nlips_missed++;
@@ -107,28 +126,32 @@ struct lip_entry *do_lip_entry(struct utab_info *info, uint local_ip, uint direc
 }
 
 /* Find and set/update the level 2 table entry */
-struct rip_entry *do_rip_entry(struct utab_info *info, struct lip_entry *lip_entry,
-                               uint remote_ip, uint direction)
+struct rip_entry *do_rip_entry(struct utab_info *info,
+        struct lip_entry *lip_entry, uint remote_ip, uint direction)
 {
     struct rip_entry *rip_entry;
     pna_bitmap rip_bits;
     unsigned int i;
-    unsigned int hash = lip_entry->local_ip ^ remote_ip;
+    unsigned int hash, hash_0, hash_1;
+    
+    hash = lip_entry->local_ip ^ remote_ip;
 
-    hash = hash_32(hash, PNA_RIP_BITS);
+    hash_0 = hash_32(hash, PNA_RIP_BITS);
+    hash_1 = hash_pna(hash, PNA_RIP_BITS);
 
     /* loop through table until we find right entry */
-    for ( i = 0; i < PROBE_LIMIT; i++ )
-    {
+    for ( i = 0; i < PNA_TABLE_TRIES; i++ ) {
+        /* double hashing for entry */
+        hash = (hash_0 + i*hash_1) & (PNA_RIP_ENTRIES-1);
+
+        /* start testing the waters */
         rip_entry = &info->rips[hash];
         rip_bits = lip_entry->dsts[hash/BITMAP_BITS];
 
         /* check for match */
         if ( remote_ip == rip_entry->remote_ip
-            && 0 != (rip_bits & (1 << hash % BITMAP_BITS)))
-        {
-            if ( 0 == (rip_entry->info_bits & (1 << direction)) )
-            {
+            && 0 != (rip_bits & (1 << hash % BITMAP_BITS))) {
+            if ( 0 == (rip_entry->info_bits & (1 << direction)) ) {
                 /* we haven't seen this direction yet, add it */
                 lip_entry->ndsts[direction]++;
                 /* indicate that we've seen this direction */
@@ -138,8 +161,7 @@ struct rip_entry *do_rip_entry(struct utab_info *info, struct lip_entry *lip_ent
         }
 
         /* check for free spot */
-        if ( 0 == rip_entry->remote_ip )
-        {
+        if ( 0 == rip_entry->remote_ip ) {
             /* set index of src IP */
             lip_entry->dsts[hash/BITMAP_BITS] |= (1 << (hash % BITMAP_BITS));
             /* set all fields if a match */
@@ -154,9 +176,6 @@ struct rip_entry *do_rip_entry(struct utab_info *info, struct lip_entry *lip_ent
             info->nrips++;
             return rip_entry;
         }
-
-        /* move to next entry */
-        hash = (hash + 1) % PNA_RIP_ENTRIES;
     }
 
     info->nrips_missed++;
@@ -171,25 +190,26 @@ struct port_entry *do_port_entry(struct utab_info *info,
 {
     struct port_entry *prt_entry;
     pna_bitmap prt_bits;
-    unsigned int i, hash;
-    u32 ports;
+    unsigned int i, hash_0, hash;
 
-    /* hash on <(local_port << 16)|remote_port> */
-    ports = lip_entry->local_ip ^ rip_entry->remote_ip;
-    ports ^= ((remote_port << 16) | local_port);
-    hash = hash_32(ports, PNA_PORT_BITS);
+    /* hash */
+    hash = lip_entry->local_ip ^ rip_entry->remote_ip;
+    hash ^= ((remote_port << 16) | local_port);
+    hash_0 = hash_32(hash, PNA_PORT_BITS);
 
     /* loop through table until we find right entry */
-    for ( i = 0; i < PROBE_LIMIT; i++ )
-    {
+    for ( i = 0; i < PNA_TABLE_TRIES; i++ ) {
+        /* quadratic probe for next entry */
+        hash = (hash_0 + ((i+i*i) >> 1)) & (PNA_PORT_ENTRIES-1);
+
+        /* strt testing the waters */
         prt_entry = &(info->ports[proto][hash]);
         prt_bits = rip_entry->prts[proto][hash/BITMAP_BITS];
 
         /* check for match */
-        if ( local_port == prt_entry->local_port
-            && remote_port == prt_entry->remote_port
-            && 0 != (prt_bits & (1 << hash%BITMAP_BITS)) )
-        {
+        if (local_port == prt_entry->local_port
+             && remote_port == prt_entry->remote_port
+             && 0 != (prt_bits & (1 << hash%BITMAP_BITS)) ) {
             rip_entry->nbytes[direction][proto] += length;
             rip_entry->npkts[direction][proto]++;
             prt_entry->nbytes[direction] += length;
@@ -206,8 +226,7 @@ struct port_entry *do_port_entry(struct utab_info *info,
         }
 
         /* check for free spot */
-        if ( 0 == (prt_entry->local_port | prt_entry->remote_port) )
-        {
+        if ( 0 == (prt_entry->local_port | prt_entry->remote_port) ) {
             prt_entry->local_port = local_port;
             prt_entry->remote_port = remote_port;
 
@@ -233,9 +252,6 @@ struct port_entry *do_port_entry(struct utab_info *info,
             info->nports++;
             return prt_entry;
         }
-
-        /* move to next entry */
-        hash = (hash + 1) % PNA_PORT_ENTRIES;
     }
 
     info->nports_missed++;
@@ -307,8 +323,7 @@ unsigned int pna_packet_hook(unsigned int hooknum,
     l4hdr = (union l4hdr *)((uintptr_t)(skb->data) + iphdr_len);
 
     /* grab transport specific information */
-    switch (l3hdr->protocol)
-    {
+    switch (l3hdr->protocol) {
     case SOL_TCP:
         proto = PNA_PROTO_TCP;
         local_port = ntohs(l4hdr->tcp.source);

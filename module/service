@@ -70,7 +70,7 @@ start () {
     # start the logging monitor(s)
     PID_LIST=""
     for f in /proc/$MODULE/*; do
-        ${BASE}/${LOGGER} -d "$PNA_LOGDIR" "$f" &
+        ${BASE}/${LOGGER} -v -d "$PNA_LOGDIR" "$f" &
         PID_LIST="$PID_LIST $!"
         RETVAL=$(($RETVAL+$?))
     done
