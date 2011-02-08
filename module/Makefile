@@ -1,26 +1,15 @@
 # kernel module files
 obj-m += pna.o
-pna-objs := pna-kmod.o hooks.o alert.o
+pna-objs := pna_main.o pna_flowmon.o pna_rtmon.o pna_alerts.o
 
-# user-space programs
-ULOGGER := pna-logger
-UALERTS := pna-alerts
+KDIR := /lib/modules/`uname -r`/build
+EXTRA_CFLAGS += -I$(PWD)/../include/
 
-###
-KERNELDIR := /lib/modules/`uname -r`/build
-
-all: module $(ULOGGER) $(UALERTS)
+all: module $(user-progs)
 
 module:
-	$(MAKE) -C $(KERNELDIR) M=`pwd` modules
-
-$(ULOGGER): $(ULOGGER).c
-	$(CC) -o $@ $^
-
-$(UALERTS): $(UALERTS).c
-	$(CC) -o $@ $^
+	$(MAKE) -C $(KDIR) M=`pwd` modules
 
 clean:
-	$(MAKE) -C $(KERNELDIR) M=`pwd` clean
+	$(MAKE) -C $(KDIR) M=`pwd` clean
 	rm -f Module.markers
-	rm -f $(ULOGGER) $(UALERTS)
