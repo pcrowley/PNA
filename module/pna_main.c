@@ -2,7 +2,6 @@
 #include <linux/kernel.h>
 #include <linux/version.h>
 #include <linux/module.h>
-#include <linux/moduleparam.h>
 #include <linux/mm.h>
 #include <linux/vmalloc.h>
 #include <linux/slab.h>
@@ -13,311 +12,275 @@
 #include <linux/netfilter.h>
 #include <linux/netfilter_ipv4.h>
 
+#include <linux/jiffies.h>
+
+#include <net/ip.h>
+
 #include "pna.h"
 
-/****************/
-/* Memory users */
-/****************/
+/* for performance measurement */
+struct pna_perf {
+    __u64 t_jiffies; /* 8 */
+    struct timeval currtime; /* 8 */
+    struct timeval prevtime; /* 8 */
+    __u32 p_interval[PNA_DIRECTIONS]; /* 8 */
+    __u32 B_interval[PNA_DIRECTIONS]; /* 8 */
+    char pad[64-24-2*sizeof(struct timeval)];
+}; /* should total 64 bytes */
 
-/* configuration parameters */
-char *pna_iface = "eth0";
-uint pna_prefix = 0xc0a80000; /* 192.168.0.0    */
-uint pna_mask = 0xffff0000;   /*            /16 */
-uint pna_tables = 2;
-uint pna_connections = 0xffffffff;
-uint pna_sessions = 0xffffffff;
-uint pna_tcp_ports = 0xffffffff;
-uint pna_tcp_bytes = 0xffffffff;
-uint pna_tcp_packets = 0xffffffff;
-uint pna_udp_ports = 0xffffffff;
-uint pna_udp_bytes = 0xffffffff;
-uint pna_udp_packets = 0xffffffff;
-uint pna_ports = 0xffffffff;
-uint pna_bytes = 0xffffffff;
-uint pna_packets = 0xffffffff;
-bool pna_debug = false;
+DEFINE_PER_CPU(struct pna_perf, perf_data);
 
-module_param(pna_iface, charp, S_IRUGO | S_IWUSR);
-MODULE_PARM_DESC(pna_iface, "Interface on which we listen to packets");
-module_param(pna_prefix, uint, S_IRUGO | S_IWUSR);
-MODULE_PARM_DESC(pna_prefix, "Network prefix defining 'local' IP addresses");
-module_param(pna_mask, uint, S_IRUGO | S_IWUSR);
-MODULE_PARM_DESC(pna_mask, "Network mask for IP addresses");
-module_param(pna_tables, uint, S_IRUGO | S_IWUSR);
-MODULE_PARM_DESC(pna_tables, "Number of <src,dst,port> tables to use");
+/* taken from linux/jiffies.h in kernel v2.6.21 */
+#ifndef time_after_eq64
+# define time_after_eq64(a,b) \
+   (typecheck(__u64,a) && typecheck(__u64,b) && ((__s64)(a)-(__s64)(b)>=0))
+#endif
+# define ETH_INTERFRAME_GAP 8
+# define ETH_OVERHEAD (ETH_FCS_LEN + ETH_INTERFRAME_GAP)
+# define PERF_INTERVAL      10
 
-module_param(pna_connections, uint, S_IRUGO | S_IWUSR);
-MODULE_PARM_DESC(pna_connections, "Number of connections to trigger alert");
-module_param(pna_sessions, uint, S_IRUGO | S_IWUSR);
-MODULE_PARM_DESC(pna_sessions, "Number of sessions to trigger alert");
-module_param(pna_tcp_ports, uint, S_IRUGO | S_IWUSR);
-MODULE_PARM_DESC(pna_tcp_ports, "Number of TCP ports to trigger alert");
-module_param(pna_tcp_bytes, uint, S_IRUGO | S_IWUSR);
-MODULE_PARM_DESC(pna_tcp_bytes, "Number of TCP bytes to trigger alert");
-module_param(pna_tcp_packets, uint, S_IRUGO | S_IWUSR);
-MODULE_PARM_DESC(pna_tcp_packets, "Number of TCP packets to trigger alert");
-module_param(pna_udp_ports, uint, S_IRUGO | S_IWUSR);
-MODULE_PARM_DESC(pna_udp_ports, "Number of UDP ports to trigger alert");
-module_param(pna_udp_bytes, uint, S_IRUGO | S_IWUSR);
-MODULE_PARM_DESC(pna_udp_bytes, "Number of UDP bytes to trigger alert");
-module_param(pna_udp_packets, uint, S_IRUGO | S_IWUSR);
-MODULE_PARM_DESC(pna_udp_packets, "Number of TCP packets to trigger alert");
-module_param(pna_ports, uint, S_IRUGO | S_IWUSR);
-MODULE_PARM_DESC(pna_ports, "Number of total ports to trigger alert");
-module_param(pna_bytes, uint, S_IRUGO | S_IWUSR);
-MODULE_PARM_DESC(pna_bytes, "Number of total bytes to trigger alert");
-module_param(pna_packets, uint, S_IRUGO | S_IWUSR);
-MODULE_PARM_DESC(pna_packets, "Number of total packets to trigger alert");
-
-module_param(pna_debug, bool, S_IRUGO | S_IWUSR);
-MODULE_PARM_DESC(pna_debug, "Enable kernel debug log messages");
-
-/* kernel/user table interaction */
-static int utab_open(struct inode *inode, struct file *filep);
-static int utab_release(struct inode *inode, struct file *filep);
-static int utab_mmap(struct file *filep, struct vm_area_struct *vma);
-static const struct file_operations utab_fops = {
-    .owner      = THIS_MODULE,
-    .open       = utab_open,
-    .release    = utab_release,
-    .mmap       = utab_mmap,
-};
-
-/* we're hooking on to packets with netfilter */
-struct nf_hook_ops nf_ops = {
-    .hook = pna_packet_hook,
-    .owner = THIS_MODULE,
-    .pf = PF_INET,
-    .hooknum = NF_INET_PRE_ROUTING,
-    .priority = NF_IP_PRI_FIRST,
-};
-
-/* per-table information */
-struct utab_info *utab_info;
-
-/* pointer to the /proc durectiry parent node */
-static struct proc_dir_entry *proc_parent;
-
-static void utab_clean(struct utab_info *info);
+int pna_localize(struct pna_flowkey *key, int *direction);
+int pna_done(struct sk_buff *skb);
+int pna_hook(struct sk_buff *skb, struct net_device *dev,
+        struct packet_type *pt, struct net_device *orig_dev);
+void pna_perflog(struct sk_buff *skb, int direction);
 static int __init pna_init(void);
-static void __exit pna_exit(void);
+static void pna_cleanup(void);
 
-/*
- * kernel/user table interaction
+/* define a new packet type to hook on */
+static struct packet_type pna_packet_type = {
+    .type = htons(ETH_P_ALL),
+    .func = pna_hook,
+    .dev = NULL,
+};
+
+/**
+ * Receive Packet Hook (and helpers)
  */
-/* runs when user space has opened the file */
-static int utab_open(struct inode *inode, struct file *filep)
+/* make sure the local and remote values are correct in the key */
+int pna_localize(struct pna_flowkey *key, int *direction)
 {
-    int i;
-    struct utab_info *info;
-    struct timeval now;
-    unsigned int first_sec;
+    unsigned int temp;
 
-    try_module_get(THIS_MODULE);
+    /* test local_ip against pna_prefix/pna_mask */
+    temp = key->local_ip & pna_mask;
+    if (temp == (pna_prefix & pna_mask)) {
+        /* local ip is local! */
+        *direction = PNA_DIR_OUTBOUND;
 
-    /* find the name of file opened (index into utab_info) */
-    sscanf(filep->f_path.dentry->d_iname, PNA_PROCFILE, &i);
-    info = &utab_info[i];
-
-    /* make sure the table was written and not in the last second */
-    do_gettimeofday(&now);
-    first_sec = info->first_sec + PNA_LAG_TIME;
-    if (!info->table_dirty || first_sec >= now.tv_sec ) {
-        module_put(THIS_MODULE);
-        return -EACCES;
+        return 1;
     }
 
-    /* give pointer to filep struct for mmap */
-    filep->private_data = info;
+    /* test if remote_ip is actually local */
+    temp = key->remote_ip & pna_mask;
+    if (temp == (pna_prefix & pna_mask)) {
+        /* remote_ip is local, swap! */
+        *direction = PNA_DIR_INBOUND;
 
-    /* lock the table, has the effect of kernel changing tables */
-    mutex_lock(&info->read_mutex);
+        temp = key->local_ip;
+        key->local_ip = key->remote_ip;
+        key->remote_ip = temp;
 
-    return 0;
-}
+        temp = key->local_port;
+        key->local_port = key->remote_port;
+        key->remote_port = temp;
 
-/* runs when user space has closed the file */
-static int utab_release(struct inode *inode, struct file *filep)
-{
-    int i;
-    struct utab_info *info;
-
-    /* find the name of file opened (index into utab_info) */
-    sscanf(filep->f_path.dentry->d_iname, PNA_PROCFILE, &i);
-    info = &utab_info[i];
-
-    /* dump a little info about that table */
-    printk(KERN_INFO "pna table%d: inserted {lips:%u, rips:%u, ports:%u}; "
-            "dropped {lips:%u, rips:%u, ports:%u}\n", i, info->nlips,
-            info->nrips, info->nports, info->nlips_missed,
-            info->nrips_missed, info->nports_missed);
-
-    /* zero out the table */
-    memset(info->table_base, 0, PNA_TABLE_SIZE);
-
-    /* this table is safe to use again */
-    utab_clean(info);
-
-    /* unlock this table, has the effect of being free for use again */
-    mutex_unlock(&info->read_mutex);
-
-    module_put(THIS_MODULE);
-    return 0;
-}
-
-/* runs when user space wants to mmap the file */
-static int utab_mmap(struct file *filep, struct vm_area_struct *vma)
-{
-    struct utab_info *info = filep->private_data;
-
-    if (remap_vmalloc_range(vma, info->table_base, 0)) {
-        printk(KERN_WARNING "remap_vmalloc_range failed\n");
-        return -EAGAIN;
+        return 1;
     }
 
     return 0;
 }
 
-/* clear out all the mutable data from a utab entry */
-static void utab_clean(struct utab_info *info)
+/* free all te resources we've used */
+int pna_done(struct sk_buff *skb)
 {
-    info->table_dirty = 0;
-    info->first_sec = 0;
-    info->smp_id = 0;
-    memset(info->iface, 0, PNA_MAX_STR);
-    info->nlips = 0;
-    info->nrips = 0;
-    info->nports = 0;
-    info->nlips_missed = 0;
-    info->nrips_missed = 0;
-    info->nports_missed = 0;
+    kfree_skb(skb);
+    return NET_RX_DROP;
+}
+
+/* per-packet hook that begins pna processing */
+int pna_hook(struct sk_buff *skb, struct net_device *dev,
+        struct packet_type *pt, struct net_device *orig_dev)
+{
+    struct pna_flowkey key;
+    struct ethhdr *ethhdr;
+    struct iphdr *iphdr;
+    struct tcphdr *tcphdr;
+    struct udphdr *udphdr;
+    int ret, direction;
+    
+    /* we don't care about outgoing packets */
+    if (skb->pkt_type == PACKET_OUTGOING) {
+        return pna_done(skb);
+    }   
+    
+    /* make sure we have the skb exclusively */
+    if ((skb = skb_share_check(skb, GFP_ATOMIC)) == NULL) {
+        /* non-exclusive and couldn't clone, must drop */ 
+        return NET_RX_DROP;
+    }   
+    
+    /* we now have exclusive access, so let's decode the skb */
+    ethhdr = eth_hdr(skb);
+    key.l3_protocol = ntohs(ethhdr->h_proto);
+    
+    switch (key.l3_protocol) {
+    case ETH_P_IP:
+        /* this is a supported type, continue */
+        iphdr = ip_hdr(skb);
+        __skb_pull(skb, ip_hdrlen(skb));
+        /* assume for now that src is local */
+        key.local_ip = ntohl(iphdr->saddr);
+        key.remote_ip = ntohl(iphdr->daddr);
+        key.l4_protocol = iphdr->protocol;
+
+        skb_reset_transport_header(skb);
+        switch (key.l4_protocol) {
+        case IPPROTO_TCP:
+            tcphdr = tcp_hdr(skb);
+            key.local_port = ntohs(tcphdr->source);
+            key.remote_port = ntohs(tcphdr->dest);
+            break;
+        case IPPROTO_UDP:
+            udphdr = udp_hdr(skb);
+            key.local_port = ntohs(udphdr->source);
+            key.remote_port = ntohs(udphdr->dest);
+            break;
+        default:
+            return pna_done(skb);
+        }
+        break;
+    default:
+        return pna_done(skb);
+    }
+
+    /* entire key should now be filled in and we have a flow, localize it */
+    if (!pna_localize(&key, &direction)) {
+        /* couldn't localize the IP (neither source nor dest in prefix) */
+        return pna_done(skb);
+    }
+
+    /* hook actions here */
+    pr_info("key: {%d: 0x%08x, 0x%08x, %d, 0x%04x, 0x%04x}\n", direction, key.   local_ip, key.remote_ip, key.l4_protocol, key.local_port, key.remote_port);
+
+    /* log performance data */
+    if (pna_perfmon) {
+        pna_perflog(skb, direction);
+    }
+
+    /* insert into flow table */
+    if ((ret = flowmon_hook(&key, skb, direction)) < 0) {
+        /* failed to insert -- cleanup */
+        return pna_done(skb);
+    }
+
+    /* run real-time hooks */
+    //rtmon_hook();
+
+    /* free our skb */
+    return pna_done(skb);
+}
+
+/**
+ * Performance Monitoring
+ */
+void pna_perflog(struct sk_buff *skb, int direction)
+{
+    __u32 t_interval;
+    __u32 kpps_in, Mbps_in, avg_in;
+    __u32 kpps_out, Mbps_out, avg_out;
+    struct pna_perf *perf = &get_cpu_var(perf_data);
+
+    /* time_after_eq64(a,b) returns true if time a >= time b. */
+    if ( time_after_eq64(get_jiffies_64(), perf->t_jiffies) ) {
+
+        /* get sampling interval time */
+        do_gettimeofday(&perf->currtime);
+        t_interval = perf->currtime.tv_sec - perf->prevtime.tv_sec;
+        /* update for next round */
+        perf->prevtime = perf->currtime;
+
+        /* calculate the numbers */
+        kpps_in = perf->p_interval[PNA_DIR_INBOUND] / 1000 / t_interval;
+        /* 125000 Mb = (1000 MB/KB * 1000 KB/B) / 8 bits/B */
+        Mbps_in = perf->B_interval[PNA_DIR_INBOUND] / 125000 / t_interval;
+        avg_in = 0;
+        if (perf->p_interval[PNA_DIR_INBOUND] != 0) {
+            avg_in = perf->B_interval[PNA_DIR_INBOUND];
+            avg_in /= perf->p_interval[PNA_DIR_INBOUND];
+            avg_in -= ETH_OVERHEAD;
+        }
+
+        kpps_out = perf->p_interval[PNA_DIR_OUTBOUND] / 1000 / t_interval;
+        /* 125000 Mb = (1000 MB/KB * 1000 KB/B) / 8 bits/B */
+        Mbps_out = perf->B_interval[PNA_DIR_OUTBOUND] / 125000 / t_interval;
+        avg_out = 0;
+        if (perf->p_interval[PNA_DIR_OUTBOUND] != 0) {
+            avg_out = perf->B_interval[PNA_DIR_OUTBOUND];
+            avg_out /= perf->p_interval[PNA_DIR_OUTBOUND];
+            avg_out -= ETH_OVERHEAD;
+        }
+
+        /* report the numbers */
+        if (kpps_in + kpps_out > 0) {
+            pr_info("pna throughput smpid:%d, "
+                    "in:{kpps:%u,Mbps:%u,avg:%u}, "
+                    "out:{kpps:%u,Mbps:%u,avg:%u}\n", smp_processor_id(),
+                    kpps_in, Mbps_in, avg_in, kpps_out, Mbps_out, avg_out);
+        }
+
+        /* set updated counters */
+        perf->p_interval[PNA_DIR_INBOUND] = 0;
+        perf->B_interval[PNA_DIR_INBOUND] = 0;
+        perf->p_interval[PNA_DIR_OUTBOUND] = 0;
+        perf->B_interval[PNA_DIR_OUTBOUND] = 0;
+        perf->t_jiffies = msecs_to_jiffies(PERF_INTERVAL*MSEC_PER_SEC);
+        perf->t_jiffies += get_jiffies_64();
+    }
+
+    /* increment packets seen in this interval */
+    perf->p_interval[direction]++;
+    perf->B_interval[direction] += (skb->tail-skb->mac_header) + ETH_OVERHEAD;
 }
 
 /*
  * Module oriented code
  */
-/* cleanup and exit/error */
-#define __ALL    0
-#define __ALERTS 1
-#define __HOOK   2
-#define __TABLES 3
-#define __INFO   4
-static void pna_cleanup(int start)
-{
-    int i;
-
-    switch (start)
-    {
-    case __ALL:
-    case __ALERTS:
-        pna_alert_cleanup();
-    case __HOOK:
-        /* remove the packet hook */
-        nf_unregister_hook(&nf_ops);
-        net_disable_timestamp();
-    case __TABLES:
-        /* destroy each table file we created */
-        for (i = pna_tables - 1; i >= 0; i--) {
-            if (utab_info[i].table_name[0] != '\0') {
-                remove_proc_entry(utab_info[i].table_name, proc_parent);
-            }
-            if (utab_info[i].table_base != NULL) {
-                vfree(utab_info[i].table_base);
-            }
-        }
-    case __INFO:
-        /* free up table meta-information struct */
-        vfree(utab_info);
-        /* destroy /proc directory */
-        remove_proc_entry(PNA_PROCDIR, NULL);
-    }
-}
-
 /* Initialization hook */
 static int __init pna_init(void)
 {
-    int i;
-    uint offset;
-    char table_str[PNA_MAX_STR];
-    static struct proc_dir_entry *proc_node;
-    struct utab_info *info;
     int ret = 0;
 
-    /* create the /proc base dir for pna tables */
-    proc_parent = proc_mkdir(PNA_PROCDIR, NULL);
-
-    /* make memory for table meta-information */
-    utab_info = (struct utab_info *)
-                    vmalloc(pna_tables * sizeof(struct utab_info));
-    if (!utab_info) {
-        printk(KERN_ERR "insufficient memory for utab_info\n");
-        pna_cleanup(__INFO);
-        return -ENOMEM;
-    }
-    memset(utab_info, 0, pna_tables * sizeof(struct utab_info));
-
-    /* configure each table for use */
-    for (i = 0; i < pna_tables; i++) {
-        info = &utab_info[i];
-        info->table_base = vmalloc_user(PNA_TABLE_SIZE + PAGE_SIZE);
-        if (!info->table_base) {
-            printk(KERN_ERR "insufficient memory for %d/%d tables (%lu bytes)\n",
-                    i, pna_tables, (pna_tables * PNA_TABLE_SIZE));
-            pna_cleanup(__TABLES);
-            return -ENOMEM;
-        }
-        /* set up table pointers */
-        offset = 0;
-        info->lips = info->table_base + offset;
-        offset += PNA_SZ_LIP_ENTRIES;
-        info->rips = info->table_base + offset;
-        offset += PNA_SZ_RIP_ENTRIES;
-        info->ports[PNA_PROTO_TCP] = info->table_base + offset;
-        offset += PNA_SZ_PORT_ENTRIES;
-        info->ports[PNA_PROTO_UDP] = info->table_base + offset;
-        offset += PNA_SZ_PORT_ENTRIES;
-        utab_clean(info);
-
-        /* initialize the read_mutec */
-        mutex_init(&info->read_mutex);
-
-        snprintf(table_str, PNA_MAX_STR, PNA_PROCFILE, i);
-        strncpy(info->table_name, table_str, PNA_MAX_STR);
-        proc_node = create_proc_entry(info->table_name, 0644, proc_parent);
-        if (!proc_node) {
-            printk(KERN_ERR "failed to make proc entry: %s\n", table_str);
-            pna_cleanup(__TABLES);
-            return -ENOMEM;
-        }
-        proc_node->proc_fops = &utab_fops;
-        proc_node->mode = S_IFREG | S_IRUGO | S_IWUSR | S_IWGRP;
-        proc_node->uid = 0;
-        proc_node->gid = 0;
-        proc_node->size = PNA_TABLE_SIZE;
+    /* set up the flow table(s) */
+    if ((ret = flowmon_init()) < 0) {
+        return ret;
     }
 
-    /* everything is set up, register the packet hook */
-    net_enable_timestamp();
-    nf_register_hook(&nf_ops);
-
+    /* set up the alert system */
     if (pna_alert_init() < 0) {
-        pna_cleanup(__ALERTS);
+        pna_cleanup();
         return -1;
     }
 
-    printk(KERN_INFO "pna: module is initialized\n");
+    /* everything is set up, register the packet hook */
+    pna_packet_type.dev = dev_get_by_name(&init_net, pna_iface);
+    dev_add_pack(&pna_packet_type);
+
+    pr_info("pna: module is initialized\n");
 
     return ret;
 }
 
 /* Destruction hook */
-static void __exit pna_exit(void)
+static void pna_cleanup(void)
 {
-    pna_cleanup(__ALL);
-    printk(KERN_INFO "pna: module is inactive\n");
+    dev_remove_pack(&pna_packet_type);
+    pna_alert_cleanup();
+    flowmon_cleanup();
+    pr_info("pna: module is inactive\n");
 }
 
 module_init(pna_init);
-module_exit(pna_exit);
+module_exit(pna_cleanup);
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Michael J. Schultz <mjschultz@gmail.com>");

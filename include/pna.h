@@ -73,83 +73,81 @@ struct pna_alert_msg {
 # define PNA_PROTO_UDP 1
 
 /* settings/structures for storing <src,dst,port> entries */
-#define PNA_LIP_ENTRIES  16384
-#define PNA_LIP_BITS     14
-#define PNA_RIP_ENTRIES  32768
-#define PNA_RIP_BITS     15
-#define PNA_PORT_ENTRIES 65536
-#define PNA_PORT_BITS    16
+#define PNA_FLOW_BITS    17
+#define PNA_FLOW_ENTRIES (1 << PNA_FLOW_BITS)
 
-/* some typedefs */
-typedef unsigned char uchar;
-#define PNA_BITS_PER_BYTE 8
-
-/* number of bits in a prt or dst entry index */
-typedef uchar pna_bitmap;
-#define BITMAP_BITS  (PNA_BITS_PER_BYTE*sizeof(pna_bitmap))
-
-struct lip_entry {
-    uint local_ip;
-    ushort ndsts[PNA_DIRECTIONS];
-    uint nsess[PNA_DIRECTIONS];
-    pna_bitmap dsts[PNA_RIP_ENTRIES/BITMAP_BITS];
+/* definition of a flow for PNA */
+struct pna_flowkey {
+    unsigned short l3_protocol;
+    unsigned char l4_protocol;
+    unsigned int local_ip;
+    unsigned int remote_ip;
+    unsigned short local_port;
+    unsigned short remote_port;
 };
-#define PNA_SZ_LIP_ENTRIES (PNA_LIP_ENTRIES * sizeof(struct lip_entry))
-struct rip_entry {
-    uint remote_ip;
-    uint info_bits;
-    ushort nprts[PNA_DIRECTIONS][PNA_PROTOS];
-    uint nbytes[PNA_DIRECTIONS][PNA_PROTOS];
-    uint npkts[PNA_DIRECTIONS][PNA_PROTOS];
-    pna_bitmap prts[PNA_PROTOS][PNA_PORT_ENTRIES/BITMAP_BITS];
-};
-#define PNA_SZ_RIP_ENTRIES (PNA_RIP_ENTRIES * sizeof(struct rip_entry))
-struct port_entry {
-    ushort local_port;
-    ushort remote_port;
-    uint nbytes[PNA_DIRECTIONS];
-    uint npkts[PNA_DIRECTIONS];
-    uint timestamp;
-    uint info_bits;
-};
-#define PNA_SZ_PORT_ENTRIES (PNA_PORT_ENTRIES * sizeof(struct port_entry))
 
-#define PNA_TABLE_SIZE \
-    (PNA_SZ_LIP_ENTRIES + PNA_SZ_RIP_ENTRIES + PNA_PROTOS*PNA_SZ_PORT_ENTRIES)
+/* flow data we're interested in off-line */
+struct pna_flow_data {
+    unsigned int bytes[PNA_DIRECTIONS];
+    unsigned int packets[PNA_DIRECTIONS];
+    unsigned int timestamp;
+    unsigned int first_tstamp;
+    unsigned int first_dir;
+};
+
+struct flow_entry {
+    struct pna_flowkey key;
+    struct pna_flow_data data;
+};
+#define PNA_SZ_FLOW_ENTRIES (PNA_FLOW_ENTRIES * sizeof(struct flow_entry))
+
+#ifdef __KERNEL__
+/* kernel configuration settings */
+extern char *pna_iface;
+extern uint pna_prefix;
+extern uint pna_mask;
+extern uint pna_tables;
+extern uint pna_connections;
+extern uint pna_sessions;
+extern uint pna_tcp_ports;
+extern uint pna_tcp_bytes;
+extern uint pna_tcp_packets;
+extern uint pna_udp_ports;
+extern uint pna_udp_bytes;
+extern uint pna_udp_packets;
+extern uint pna_ports;
+extern uint pna_bytes;
+extern uint pna_packets;
+extern bool pna_debug;
+extern bool pna_perfmon;
+#endif /* __KERNEL__ */
 
 /* table meta-information */
 #ifdef __KERNEL__
-struct utab_info {
+struct flowtab_info {
     void *table_base;
     char table_name[PNA_MAX_STR];
-    struct lip_entry *lips;
-    struct rip_entry *rips;
-    struct port_entry *ports[PNA_PROTOS];
+    struct flow_entry *flowtab;
 
     struct mutex read_mutex;
     int  table_dirty;
     time_t first_sec;
     int  smp_id;
     char iface[PNA_MAX_STR];
-    uint nlips;
-    uint nlips_missed;
-    uint nrips;
-    uint nrips_missed;
-    uint nports;
-    uint nports_missed;
+    unsigned int nflows;
+    unsigned int nflows_missed;
 };
 #endif /* __KERNEL__ */
 
 /* some prototypes */
 #ifdef __KERNEL__
+int flowmon_hook(struct pna_flowkey *key, struct sk_buff *skb, int direction);
+int flowmon_init(void);
+void flowmon_cleanup(void);
+
 int pna_alert_warn(int reason, int value, struct timeval *time);
 int pna_alert_init(void);
 void pna_alert_cleanup(void);
-unsigned int pna_packet_hook(unsigned int hooknum, 
-                             struct sk_buff *skb,
-                             const struct net_device *in,
-                             const struct net_device *out,
-                             int (*okfn)(struct sk_buff *));
 #endif /* __KERNEL__ */
 
 #endif /* __PNA_H */

@@ -1,6 +1,6 @@
 # kernel module files
 obj-m += pna.o
-pna-objs := pna_main.o pna_flowmon.o pna_rtmon.o pna_alerts.o
+pna-objs := pna_main.o pna_config.o pna_flowmon.o pna_rtmon.o pna_alerts.o
 
 KDIR := /lib/modules/`uname -r`/build
 EXTRA_CFLAGS += -I$(PWD)/../include/
