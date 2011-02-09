@@ -11,13 +11,13 @@ $(USER):
 	$(MAKE) -C user/
 
 start: $(MODULE) $(USER)
-	./service/pna start
+	sudo ./service/pna start
 
 stop:
-	./service/pna stop
+	sudo ./service/pna stop
 
 status:
-	./service/pna status
+	sudo ./service/pna status
 
 clean:
 	$(MAKE) -C module clean

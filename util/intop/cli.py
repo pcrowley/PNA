@@ -98,38 +98,6 @@ class CommandLineInterface :
         else :
             print 'json unavailable'
 
-    # dump the data in a "human readable" format
-    def human_format(self, data) :
-        # none, inbound, outbound, bi-directional
-        dir = ('x', 'in', 'out', 'legacy-both')
-        for step in data :
-            ts = '@'+str(step['end-time'])
-            for e in step['watch-data'] :
-                lip = self.int2ip(e['local-ip'])
-                rip = self.int2ip(e['remote-ip'])
-                print ts, 'ip:(', lip+', '+rip, ')',
-
-                print 'tcp:(',
-                for p in e['tcp-tuples'] :
-                    print dir[p['first-direction']]+':(',
-                    print '@'+str(p['begin-time'])+',',
-                    print str(p['local-port'])+':'+str(p['remote-port'])+',',
-                    print str(p['npkts-in'])+'/'+str(p['npkts-out'])+',',
-                    print str(p['nbytes-in'])+'/'+str(p['nbytes-out'])+',',
-                    print '),',
-                print ')',
-
-                print 'udp:(',
-                for p in e['udp-tuples'] :
-                    print dir[p['first-direction']]+':(',
-                    print '@'+str(p['begin-time'])+',',
-                    print str(p['local-port'])+':'+str(p['remote-port'])+',',
-                    print str(p['npkts-in'])+'/'+str(p['npkts-out'])+',',
-                    print str(p['nbytes-in'])+'/'+str(p['nbytes-out'])+',',
-                    print '),',
-                print ')',
-                print
-
     # dump the data in flow-tools' flow-print -f5 format
     def flow_format(self, data) :
         fmt = '%-17s %-17s %-5s %-15s %-5s %-5s %-15s %-5s %3s %-2s %-10s %-22s'
@@ -142,39 +110,26 @@ class CommandLineInterface :
         # header
         print fmt % display
 
-        for step in data :
-            end_time = time.localtime(step['end-time'])
+        for log in data :
+            end_time = time.localtime(log['end-time'])
             end = time.strftime(time_fmt, end_time)
-            for e in step['watch-data'] :
-                src_ip = self.int2ip(e['local-ip'])
-                dst_ip = self.int2ip(e['remote-ip'])
+            for f in log['flows'] :
+                src_ip = self.int2ip(f['local-ip'])
+                dst_ip = self.int2ip(f['remote-ip'])
                 sif = '0'
                 dif = '0'
                 flags = '0'
 
-                proto = protocols['tcp']
-                for p in e['tcp-tuples'] :
-                    start_time = time.localtime(p['begin-time'])
-                    start = time.strftime(time_fmt, start_time)
-                    src_pt = str(p['local-port'])
-                    dst_pt = str(p['remote-port'])
-                    npkts = str(p['npkts-in']+p['npkts-out'])
-                    nbytes = str(p['nbytes-in']+p['nbytes-out'])
-                    entry = (start, end, sif, src_ip, src_pt, dif, dst_ip,
-                             dst_pt, proto, flags, npkts, nbytes)
-                    print fmt % entry
-
-                proto = protocols['udp']
-                for p in e['udp-tuples'] :
-                    start_time = time.localtime(p['begin-time'])
-                    start = time.strftime(time_fmt, start_time)
-                    src_pt = str(p['local-port'])
-                    dst_pt = str(p['remote-port'])
-                    npkts = str(p['npkts-in']+p['npkts-out'])
-                    nbytes = str(p['nbytes-in']+p['nbytes-out'])
-                    entry = (start, end, sif, src_ip, src_pt, dif, dst_ip,
-                             dst_pt, proto, flags, npkts, nbytes)
-                    print fmt % entry
+                proto = f['protocol']
+                start_time = time.localtime(f['begin-time'])
+                start = time.strftime(time_fmt, start_time)
+                src_pt = str(f['local-port'])
+                dst_pt = str(f['remote-port'])
+                npkts = str(f['packets-in']+f['packets-out'])
+                nbytes = str(f['bytes-in']+f['bytes-out'])
+                entry = (start, end, sif, src_ip, src_pt, dif, dst_ip,
+                            dst_pt, proto, flags, npkts, nbytes)
+                print fmt % entry
 
     # convert an ip-as-integer to a string
     def int2ip(self, addr) :

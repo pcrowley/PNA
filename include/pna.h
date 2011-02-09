@@ -25,6 +25,25 @@ char *pna_alert_protocols[] = { "none", "tcp", "udp", "both", };
 char *pna_alert_directions[] = { "none", "in", "out", "bi", };
 #endif /* __KERNEL__ */
 
+/* log file format structures */
+struct pna_log_hdr {
+    unsigned int timestamp;
+    unsigned int size;
+};
+
+struct pna_log_entry {
+    unsigned int local_ip;
+    unsigned int remote_ip;
+    unsigned short local_port;
+    unsigned short remote_port;
+    unsigned int packets[PNA_DIRECTIONS];
+    unsigned int bytes[PNA_DIRECTIONS];
+    unsigned int first_tstamp;
+	unsigned char l4_protocol;
+    unsigned char first_dir;
+    char pad[2];
+};
+
 /* XXX: bad practice, but it gets the job done */
 /* could be trouble if Linux decides to use more netlink links */
 #define NETLINK_PNA 31

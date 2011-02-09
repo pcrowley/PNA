@@ -20,25 +20,6 @@
 #define BUF_SIZE         (1 * 1024 * 1024)
 #define USECS_PER_SEC    1000000
 
-/* log file format structures */
-struct pna_log_hdr {
-    unsigned int timestamp;
-    unsigned int size;
-};
-
-struct pna_log_entry {
-    unsigned int local_ip;
-    unsigned int remote_ip;
-    unsigned short local_port;
-    unsigned short remote_port;
-    unsigned int packets[PNA_DIRECTIONS];
-    unsigned int bytes[PNA_DIRECTIONS];
-    unsigned int first_tstamp;
-	unsigned char l4_protocol;
-    unsigned char first_dir;
-    char pad[2];
-};
-
 /* simple null key */
 static struct pna_flowkey null_key = {
 	.l3_protocol = 0,
@@ -120,14 +101,14 @@ void dump_table(void *table_base, char *out_file)
 		/* copy the flow entry */
 		log->local_ip = flow->key.local_ip;
 		log->remote_ip = flow->key.remote_ip;
-		log->l4_protocol = flow->key.l4_protocol;
 		log->local_port = flow->key.local_port;
 		log->remote_port = flow->key.remote_port;
-		log->packets[PNA_DIR_INBOUND] = flow->data.packets[PNA_DIR_INBOUND];
 		log->packets[PNA_DIR_OUTBOUND] = flow->data.packets[PNA_DIR_OUTBOUND];
-		log->bytes[PNA_DIR_INBOUND] = flow->data.bytes[PNA_DIR_INBOUND];
+		log->packets[PNA_DIR_INBOUND] = flow->data.packets[PNA_DIR_INBOUND];
 		log->bytes[PNA_DIR_OUTBOUND] = flow->data.bytes[PNA_DIR_OUTBOUND];
+		log->bytes[PNA_DIR_INBOUND] = flow->data.bytes[PNA_DIR_INBOUND];
 		log->first_tstamp = flow->data.first_tstamp;
+		log->l4_protocol = flow->key.l4_protocol;
 		log->first_dir = flow->data.first_dir;
 		log->pad[0] = 0x00;
 		log->pad[1] = 0x00;
