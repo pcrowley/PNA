@@ -118,7 +118,10 @@ int pna_hook(struct sk_buff *skb, struct net_device *dev,
     if ((skb = skb_share_check(skb, GFP_ATOMIC)) == NULL) {
         /* non-exclusive and couldn't clone, must drop */ 
         return NET_RX_DROP;
-    }   
+    }
+
+	/* make sure the key is all zeros before we start */
+	memset(&key, 0, sizeof(key));
     
     /* we now have exclusive access, so let's decode the skb */
     ethhdr = eth_hdr(skb);
@@ -160,13 +163,13 @@ int pna_hook(struct sk_buff *skb, struct net_device *dev,
         return pna_done(skb);
     }
 
-    /* hook actions here */
-    pr_info("key: {%d: 0x%08x, 0x%08x, %d, 0x%04x, 0x%04x}\n", direction, key.   local_ip, key.remote_ip, key.l4_protocol, key.local_port, key.remote_port);
-
     /* log performance data */
     if (pna_perfmon) {
         pna_perflog(skb, direction);
     }
+
+    /* hook actions here */
+    //pr_info("key: {%d/%d, 0x%08x, 0x%08x, 0x%04x, 0x%04x}\n", key.l3_protocol, key.l4_protocol, key.local_ip, key.remote_ip, key.local_port, key.remote_port);
 
     /* insert into flow table */
     if ((ret = flowmon_hook(&key, skb, direction)) < 0) {
@@ -175,7 +178,7 @@ int pna_hook(struct sk_buff *skb, struct net_device *dev,
     }
 
     /* run real-time hooks */
-    //rtmon_hook();
+    //rtmon_hook(&key, skb, direction, ret);
 
     /* free our skb */
     return pna_done(skb);
