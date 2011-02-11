@@ -19,7 +19,7 @@ uint pna_ports = 0xffffffff;
 uint pna_bytes = 0xffffffff;
 uint pna_packets = 0xffffffff;
 bool pna_debug = false;
-bool pna_perfmon = false;
+bool pna_perfmon = true;
 
 module_param(pna_iface, charp, S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(pna_iface, "Interface on which we listen to packets");

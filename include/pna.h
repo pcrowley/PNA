@@ -25,6 +25,11 @@ char *pna_alert_protocols[] = { "none", "tcp", "udp", "both", };
 char *pna_alert_directions[] = { "none", "in", "out", "bi", };
 #endif /* __KERNEL__ */
 
+/* various constants */
+#define PNA_DIRECTIONS 2 /* out and in */
+# define PNA_DIR_OUTBOUND 0
+# define PNA_DIR_INBOUND  1
+
 /* log file format structures */
 struct pna_log_hdr {
     unsigned int timestamp;
@@ -81,15 +86,6 @@ struct pna_alert_msg {
     struct timeval timeval;
 };
 #define PNA_ALERT_MSG_SZ (sizeof(struct pna_alert_msg))
-
-/* various constants */
-#define PNA_DIRECTIONS 2 /* out and in */
-# define PNA_DIR_OUTBOUND 0
-# define PNA_DIR_INBOUND  1
-
-#define PNA_PROTOS  2 /* tcp and udp */
-# define PNA_PROTO_TCP 0
-# define PNA_PROTO_UDP 1
 
 /* settings/structures for storing <src,dst,port> entries */
 #define PNA_FLOW_BITS    17

@@ -112,7 +112,11 @@ int pna_hook(struct sk_buff *skb, struct net_device *dev,
     /* we don't care about outgoing packets */
     if (skb->pkt_type == PACKET_OUTGOING) {
         return pna_done(skb);
-    }   
+    }
+
+    /* only our software deals with *dev, no one else should care about skb */
+    /* (also greatly imrpoves performance since ip_input doesn't do much) */
+    skb->pkt_type = PACKET_OTHERHOST;
     
     /* make sure we have the skb exclusively */
     if ((skb = skb_share_check(skb, GFP_ATOMIC)) == NULL) {
