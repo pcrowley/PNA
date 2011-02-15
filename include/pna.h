@@ -139,6 +139,9 @@ extern bool pna_perfmon;
 
 /* table meta-information */
 #ifdef __KERNEL__
+/* number of attempts to insert before giving up */
+#define PNA_TABLE_TRIES 32
+
 struct flowtab_info {
     void *table_base;
     char table_name[PNA_MAX_STR];
@@ -151,6 +154,7 @@ struct flowtab_info {
     char iface[PNA_MAX_STR];
     unsigned int nflows;
     unsigned int nflows_missed;
+    unsigned int probes[PNA_TABLE_TRIES];
 };
 #endif /* __KERNEL__ */
 

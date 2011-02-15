@@ -5,6 +5,7 @@
 #include <linux/hash.h>
 #include <linux/mutex.h>
 #include <linux/string.h>
+#include <linux/proc_fs.h>
 
 #include <linux/net.h>
 #include <linux/netdevice.h>
@@ -16,9 +17,6 @@
 #include <linux/udp.h>
 
 #include "pna.h"
-
-/* constants for this file */
-#define PNA_TABLE_TRIES 128
 
 /* kernel/user table interaction */
 static int flowtab_open(struct inode *inode, struct file *filep);
@@ -112,6 +110,11 @@ static int flowtab_release(struct inode *inode, struct file *filep)
 
     /* zero out the table */
     memset(info->table_base, 0, PNA_SZ_FLOW_ENTRIES);
+
+//    for (i = 0; i < PNA_TABLE_TRIES; i++) {
+//        printk("tries\t%d\t%u\n", i, info->probes[i]);
+//        info->probes[i] = 0;
+//    }
 
     /* this table is safe to use again */
     flowtab_clean(info);
@@ -227,6 +230,9 @@ int flowmon_hook(struct pna_flowkey *key, struct sk_buff *skb, int direction)
     for ( i = 0; i < PNA_TABLE_TRIES; i++ ) {
         /* quadratic probe for next entry */
         hash = (hash_0 + ((i+i*i) >> 1)) & (PNA_FLOW_ENTRIES-1);
+
+        /* increment the number of probe tries for the table */
+        info->probes[i]++;
 
         /* strt testing the waters */
         flow = &(info->flowtab[hash]);

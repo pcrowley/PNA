@@ -72,7 +72,7 @@ start () {
     PID_LIST=""
     for f in /proc/${SERVICE}/*; do
         ARGS="-v -d $PNA_LOGDIR"
-        ${PNA_MONITOR} $ARGS "$f" &
+        nohup ${PNA_MONITOR} $ARGS $f >> verbose.log &
         PID_LIST="$PID_LIST $!"
         RETVAL=$(($RETVAL+$?))
     done

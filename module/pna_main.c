@@ -15,6 +15,7 @@
 #include <linux/jiffies.h>
 
 #include <net/ip.h>
+#include <net/tcp.h>
 
 #include "pna.h"
 
@@ -35,8 +36,9 @@ DEFINE_PER_CPU(struct pna_perf, perf_data);
 # define time_after_eq64(a,b) \
    (typecheck(__u64,a) && typecheck(__u64,b) && ((__s64)(a)-(__s64)(b)>=0))
 #endif
-# define ETH_INTERFRAME_GAP 8
-# define ETH_OVERHEAD (ETH_FCS_LEN + ETH_INTERFRAME_GAP)
+# define ETH_INTERFRAME_GAP 12   /* 9.6ms @ 1Gbps */
+# define ETH_PREAMBLE       8    /* preamble + start-of-frame delimiter */
+# define ETH_OVERHEAD       (ETH_INTERFRAME_GAP + ETH_PREAMBLE)
 # define PERF_INTERVAL      10
 
 int pna_localize(struct pna_flowkey *key, int *direction);
