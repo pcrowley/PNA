@@ -1,4 +1,5 @@
 /* PNA configuration values */
+
 #include <linux/module.h>
 #include <linux/moduleparam.h>
 
@@ -20,6 +21,9 @@ uint pna_bytes = 0xffffffff;
 uint pna_packets = 0xffffffff;
 bool pna_debug = false;
 bool pna_perfmon = true;
+
+bool pna_flowmon = true;
+bool pna_rtmon = true;
 
 module_param(pna_iface, charp, S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(pna_iface, "Interface on which we listen to packets");
@@ -57,3 +61,7 @@ module_param(pna_debug, bool, S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(pna_debug, "Enable kernel debug log messages");
 module_param(pna_perfmon, bool, S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(pna_perfmon, "Enable PNA performance monitoring messages");
+module_param(pna_flowmon, bool, S_IRUGO | S_IWUSR);
+MODULE_PARM_DESC(pna_flowmon, "Enable PNA flow monitoring");
+module_param(pna_rtmon, bool, S_IRUGO | S_IWUSR);
+MODULE_PARM_DESC(pna_rtmon, "Enable PNA real-time monitoring (if pna_flowmon)");

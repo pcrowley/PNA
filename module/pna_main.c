@@ -1,3 +1,5 @@
+/* main PNA initialization (where the kernel module starts) */
+/* functions: pna_init, pna_cleanup, pna_hook */
 #include <linux/init.h>
 #include <linux/kernel.h>
 #include <linux/version.h>
@@ -26,7 +28,8 @@ struct pna_perf {
     struct timeval prevtime; /* 8 */
     __u32 p_interval[PNA_DIRECTIONS]; /* 8 */
     __u32 B_interval[PNA_DIRECTIONS]; /* 8 */
-    char pad[64-24-2*sizeof(struct timeval)];
+    unsigned long dev_last_rx;
+    unsigned long dev_last_fifo;
 }; /* should total 64 bytes */
 
 DEFINE_PER_CPU(struct pna_perf, perf_data);
@@ -41,11 +44,11 @@ DEFINE_PER_CPU(struct pna_perf, perf_data);
 # define ETH_OVERHEAD       (ETH_INTERFRAME_GAP + ETH_PREAMBLE)
 # define PERF_INTERVAL      10
 
-int pna_localize(struct pna_flowkey *key, int *direction);
-int pna_done(struct sk_buff *skb);
+static void pna_perflog(struct sk_buff *skb, int dir, struct net_device *dev);
+static int pna_localize(struct pna_flowkey *key, int *direction);
+static int pna_done(struct sk_buff *skb);
 int pna_hook(struct sk_buff *skb, struct net_device *dev,
         struct packet_type *pt, struct net_device *orig_dev);
-void pna_perflog(struct sk_buff *skb, int direction);
 static int __init pna_init(void);
 static void pna_cleanup(void);
 
@@ -56,11 +59,25 @@ static struct packet_type pna_packet_type = {
     .dev = NULL,
 };
 
+/* general non-kernel hash function for double hashing */
+unsigned int pna_hash(unsigned int key, int bits)
+{
+    unsigned int hash = key;
+
+    /* lets take the highest bits */
+    hash = key >> (sizeof(unsigned int) - bits);
+
+    /* divide by 2 and make it odd */
+    hash = (hash >> 1) | 0x01;
+
+    return hash;
+}
+
 /**
  * Receive Packet Hook (and helpers)
  */
 /* make sure the local and remote values are correct in the key */
-int pna_localize(struct pna_flowkey *key, int *direction)
+static int pna_localize(struct pna_flowkey *key, int *direction)
 {
     unsigned int temp;
 
@@ -94,7 +111,7 @@ int pna_localize(struct pna_flowkey *key, int *direction)
 }
 
 /* free all te resources we've used */
-int pna_done(struct sk_buff *skb)
+static int pna_done(struct sk_buff *skb)
 {
     kfree_skb(skb);
     return NET_RX_DROP;
@@ -171,20 +188,25 @@ int pna_hook(struct sk_buff *skb, struct net_device *dev,
 
     /* log performance data */
     if (pna_perfmon) {
-        pna_perflog(skb, direction);
+        pna_perflog(skb, direction, dev);
     }
 
     /* hook actions here */
     //pr_info("key: {%d/%d, 0x%08x, 0x%08x, 0x%04x, 0x%04x}\n", key.l3_protocol, key.l4_protocol, key.local_ip, key.remote_ip, key.local_port, key.remote_port);
 
     /* insert into flow table */
-    if ((ret = flowmon_hook(&key, skb, direction)) < 0) {
-        /* failed to insert -- cleanup */
-        return pna_done(skb);
-    }
+    if (pna_flowmon == true) {
+        ret = flowmon_hook(&key, direction, skb);
+        if (ret < 0) {
+            /* failed to insert -- cleanup */
+            return pna_done(skb);
+        }
 
-    /* run real-time hooks */
-    //rtmon_hook(&key, skb, direction, ret);
+        /* run real-time hooks */
+        if (pna_rtmon == true) {
+            rtmon_hook(&key, direction, skb, (unsigned long)ret);
+        }
+    }
 
     /* free our skb */
     return pna_done(skb);
@@ -193,12 +215,14 @@ int pna_hook(struct sk_buff *skb, struct net_device *dev,
 /**
  * Performance Monitoring
  */
-void pna_perflog(struct sk_buff *skb, int direction)
+static void pna_perflog(struct sk_buff *skb, int dir, struct net_device *dev)
 {
     __u32 t_interval;
     __u32 kpps_in, Mbps_in, avg_in;
     __u32 kpps_out, Mbps_out, avg_out;
+    struct rtnl_link_stats64 stats;
     struct pna_perf *perf = &get_cpu_var(perf_data);
+
 
     /* time_after_eq64(a,b) returns true if time a >= time b. */
     if ( time_after_eq64(get_jiffies_64(), perf->t_jiffies) ) {
@@ -236,6 +260,14 @@ void pna_perflog(struct sk_buff *skb, int direction)
                     "in:{kpps:%u,Mbps:%u,avg:%u}, "
                     "out:{kpps:%u,Mbps:%u,avg:%u}\n", smp_processor_id(),
                     kpps_in, Mbps_in, avg_in, kpps_out, Mbps_out, avg_out);
+
+            /* numbers from the NIC */
+            dev_get_stats(dev, &stats);
+            pr_info("pna rx_stats: packets:%llu, fifo_errors:%llu\n",
+                    stats.rx_packets - perf->dev_last_rx,
+                    stats.rx_fifo_errors - perf->dev_last_fifo);
+            perf->dev_last_rx = stats.rx_packets;
+            perf->dev_last_fifo = stats.rx_fifo_errors;
         }
 
         /* set updated counters */
@@ -248,15 +280,15 @@ void pna_perflog(struct sk_buff *skb, int direction)
     }
 
     /* increment packets seen in this interval */
-    perf->p_interval[direction]++;
-    perf->B_interval[direction] += (skb->tail-skb->mac_header) + ETH_OVERHEAD;
+    perf->p_interval[dir]++;
+    perf->B_interval[dir] += (skb->tail-skb->mac_header) + ETH_OVERHEAD;
 }
 
 /*
  * Module oriented code
  */
 /* Initialization hook */
-static int __init pna_init(void)
+int __init pna_init(void)
 {
     int ret = 0;
 
@@ -271,6 +303,12 @@ static int __init pna_init(void)
         return -1;
     }
 
+    if (rtmon_init() < 0) {
+        pna_alert_cleanup();
+        pna_cleanup();
+        return -1;
+    }
+
     /* everything is set up, register the packet hook */
     pna_packet_type.dev = dev_get_by_name(&init_net, pna_iface);
     dev_add_pack(&pna_packet_type);
@@ -281,9 +319,10 @@ static int __init pna_init(void)
 }
 
 /* Destruction hook */
-static void pna_cleanup(void)
+void pna_cleanup(void)
 {
     dev_remove_pack(&pna_packet_type);
+    rtmon_release();
     pna_alert_cleanup();
     flowmon_cleanup();
     pr_info("pna: module is inactive\n");

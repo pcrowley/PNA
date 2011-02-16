@@ -11,6 +11,9 @@
 /* a table must have at least PNA_LAG_TIME seconds before dumping */
 #define PNA_LAG_TIME 1
 
+/* time interval to call real-time monitor "clean" function (milliseconds) */
+#define RTMON_CLEAN_INTERVAL (10*MSEC_PER_SEC)
+
 /* shared kernel/user space data for alert system */
 #ifndef __KERNEL__
 char *pna_alert_types[] = {
@@ -29,6 +32,9 @@ char *pna_alert_directions[] = { "none", "in", "out", "bi", };
 #define PNA_DIRECTIONS 2 /* out and in */
 # define PNA_DIR_OUTBOUND 0
 # define PNA_DIR_INBOUND  1
+#define PNA_PROTOCOLS 2 /* tcp and udp */
+# define PNA_PROTO_TCP 0
+# define PNA_PROTO_UDP 1
 
 /* log file format structures */
 struct pna_log_hdr {
@@ -135,6 +141,8 @@ extern uint pna_bytes;
 extern uint pna_packets;
 extern bool pna_debug;
 extern bool pna_perfmon;
+extern bool pna_flowmon;
+extern bool pna_rtmon;
 #endif /* __KERNEL__ */
 
 /* table meta-information */
@@ -160,9 +168,28 @@ struct flowtab_info {
 
 /* some prototypes */
 #ifdef __KERNEL__
-int flowmon_hook(struct pna_flowkey *key, struct sk_buff *skb, int direction);
+unsigned int pna_hash(unsigned int key, int bits);
+
+int flowmon_hook(struct pna_flowkey *key, int direction, struct sk_buff *skb);
 int flowmon_init(void);
 void flowmon_cleanup(void);
+
+int rtmon_init(void);
+int rtmon_hook(struct pna_flowkey *key, int direction, struct sk_buff *skb,
+               unsigned long data);
+void rtmon_release(void);
+
+int conmon_init(void);
+int conmon_hook(struct pna_flowkey *key, int direction, struct sk_buff *skb,
+               unsigned long *data);
+void conmon_clean(void);
+void conmon_release(void);
+
+int lipmon_init(void);
+int lipmon_hook(struct pna_flowkey *key, int direction, struct sk_buff *skb,
+               unsigned long *data);
+void lipmon_clean(void);
+void lipmon_release(void);
 
 int pna_alert_warn(int reason, int value, struct timeval *time);
 int pna_alert_init(void);

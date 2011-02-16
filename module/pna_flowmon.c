@@ -1,4 +1,5 @@
 /* handle insertion into flow table */
+/* functions: flowmon_init, flowmon_cleanup, flowmon_hook */
 
 #include <linux/kernel.h>
 #include <linux/percpu.h>
@@ -25,9 +26,8 @@ static int flowtab_mmap(struct file *filep, struct vm_area_struct *vma);
 static void flowtab_clean(struct flowtab_info *info);
 
 /* kernel functions for flow monitoring */
-unsigned int flowtab_hash(unsigned int key, int bits);
-struct flowtab_info *flowtab_get(struct timeval *timeval);
-int flowkey_match(struct pna_flowkey *key_a, struct pna_flowkey *key_b);
+static struct flowtab_info *flowtab_get(struct timeval *timeval);
+static int flowkey_match(struct pna_flowkey *key_a, struct pna_flowkey *key_b);
 int flowmon_init(void);
 void flowmon_cleanup(void);
 
@@ -111,10 +111,10 @@ static int flowtab_release(struct inode *inode, struct file *filep)
     /* zero out the table */
     memset(info->table_base, 0, PNA_SZ_FLOW_ENTRIES);
 
-//    for (i = 0; i < PNA_TABLE_TRIES; i++) {
-//        printk("tries\t%d\t%u\n", i, info->probes[i]);
-//        info->probes[i] = 0;
-//    }
+    for (i = 0; i < PNA_TABLE_TRIES; i++) {
+        printk("tries\t%d\t%u\n", i, info->probes[i]);
+        info->probes[i] = 0;
+    }
 
     /* this table is safe to use again */
     flowtab_clean(info);
@@ -150,22 +150,8 @@ static void flowtab_clean(struct flowtab_info *info)
     info->nflows_missed = 0;
 }
 
-/* non-kernel hash function for double hashing -- should return odd number */
-unsigned int flowtab_hash(unsigned int key, int bits)
-{
-    unsigned int hash = key;
-
-    /* lets take the highest bits */
-    hash = key >> (sizeof(unsigned int) - bits);
-
-    /* divide by 2 and make it odd */
-    hash = (hash >> 1) | 0x01;
-
-    return hash;
-}
-
 /* determine which flow table to use */
-struct flowtab_info *flowtab_get(struct timeval *timeval)
+static struct flowtab_info *flowtab_get(struct timeval *timeval)
 {
     int i;
     struct flowtab_info *info;
@@ -201,13 +187,13 @@ struct flowtab_info *flowtab_get(struct timeval *timeval)
 }
 
 /* check if flow keys match */
-int flowkey_match(struct pna_flowkey *key_a, struct pna_flowkey *key_b)
+static int flowkey_match(struct pna_flowkey *key_a, struct pna_flowkey *key_b)
 {
     return !memcmp(key_a, key_b, sizeof(*key_a));
 }
 
 /* Insert/Update this flow */
-int flowmon_hook(struct pna_flowkey *key, struct sk_buff *skb, int direction)
+int flowmon_hook(struct pna_flowkey *key, int direction, struct sk_buff *skb)
 {
     struct flow_entry *flow;
     struct timeval timeval;

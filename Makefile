@@ -11,7 +11,7 @@ $(USER):
 	$(MAKE) -C user/
 
 start: $(MODULE) $(USER)
-	sudo ./service/pna start
+	sudo ./service/pna start "$(PARMS)"
 
 stop:
 	sudo ./service/pna stop

@@ -39,7 +39,13 @@ ip2hex () {
 }
 
 start () {
+    PARMS=$1
+
     echo -n $"Starting $SERVICE: "
+
+    if [ ! -z "$PARMS" ] ; then
+        echo -n "($PARMS)"
+    fi
 
     # Turn prefix and mask to hex values
     PNA_PREFIX=$(ip2hex "$PNA_PREFIX")
@@ -61,7 +67,7 @@ start () {
     # load the module
     ARGS="pna_iface=$PNA_IFACE"
     ARGS="$ARGS pna_prefix=$PNA_PREFIX"
-    ARGS="$ARGS pna_mask=$PNA_MASK"
+    ARGS="$ARGS pna_mask=$PNA_MASK $PARMS"
     ${INSMOD} ${PNA_MODULE} $ARGS
     RETVAL=$?
 
@@ -127,20 +133,16 @@ stop () {
     return $RETVAL
 }
 
-restart () {
-    stop
-    start
-}
-
 case $1 in
     start)
-        start
+        start $2
     ;;
     stop)
         stop
     ;;
     restart)
-        restart
+        stop
+        start $2
     ;;
     status)
         ${LSMOD} | grep ${SERVICE} > /dev/null
