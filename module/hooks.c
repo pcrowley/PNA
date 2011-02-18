@@ -57,8 +57,11 @@ struct pna_perf {
    (typecheck(__u64,a) && typecheck(__u64,b) && ((__s64)(a)-(__s64)(b)>=0))
 #endif
 #if PERF_MEASURE == 1
-# define INTERFRAME_GAP 8
 # define ETH_HDR_LEN    14
+# define ETH_IFG        12
+# define ETH_PREAMBLE   8
+# define ETH_CKSUM      0
+# define ETH_OVERHEAD (ETH_IFG+ETH_PREAMBLE+ETH_CKSUM)
 # define PERF_INTERVAL  10
 #endif /* PERF_MEASURE == 1 */
 
@@ -369,46 +372,46 @@ unsigned int pna_packet_hook(unsigned int hooknum,
     /* time_after_eq64(a,b) returns true if time a >= time b. */
     if ( time_after_eq64(get_jiffies_64(), perf->t_jiffies) ) {
         __u32 t_interval;
-        __u32 kpps_in, Mbps_in, avg_in;
-        __u32 kpps_out, Mbps_out, avg_out;
+        __u32 fps_in, Mbps_in, avg_in;
+        __u32 fps_out, Mbps_out, avg_out;
 
         /* get sampling interval time */
         do_gettimeofday(&perf->currtime);
         t_interval = perf->currtime.tv_sec - perf->prevtime.tv_sec;
-    /* update for next round */
+        /* update for next round */
         perf->prevtime = perf->currtime;
 
         /* calculate the numbers */
-        kpps_in = perf->p_interval[PNA_DIR_INBOUND] / 1000 / t_interval;
+        fps_in = perf->p_interval[PNA_DIR_INBOUND] / t_interval;
         /* 125000 Mb = (1000 MB/KB * 1000 KB/B) / 8 bits/B */
         Mbps_in = perf->B_interval[PNA_DIR_INBOUND] / 125000 / t_interval;
         if (perf->p_interval[PNA_DIR_INBOUND] != 0) {
             avg_in = perf->B_interval[PNA_DIR_INBOUND];
             avg_in /= perf->p_interval[PNA_DIR_INBOUND];
-            avg_in -= INTERFRAME_GAP;
+            avg_in -= ETH_OVERHEAD;
         }
         else {
             avg_in = 0;
         }
 
-        kpps_out = perf->p_interval[PNA_DIR_OUTBOUND] / 1000 / t_interval;
+        fps_out = perf->p_interval[PNA_DIR_OUTBOUND] / t_interval;
         /* 125000 Mb = (1000 MB/KB * 1000 KB/B) / 8 bits/B */
         Mbps_out = perf->B_interval[PNA_DIR_OUTBOUND] / 125000 / t_interval;
         if (perf->p_interval[PNA_DIR_OUTBOUND] != 0) {
             avg_out = perf->B_interval[PNA_DIR_OUTBOUND];
             avg_out /= perf->p_interval[PNA_DIR_OUTBOUND];
-            avg_out -= INTERFRAME_GAP;
+            avg_out -= ETH_OVERHEAD;
         }
         else {
             avg_out = 0;
         }
 
         /* report the numbers */
-        if (kpps_in + kpps_out > 0) {
+        if (fps_in + fps_out > 1000) {
             printk(KERN_INFO "pna throughput smpid:%d, "
-                    "in:{kpps:%u,Mbps:%u,avg:%u}, "
-                    "out:{kpps:%u,Mbps:%u,avg:%u}\n", smp_processor_id(),
-                    kpps_in, Mbps_in, avg_in, kpps_out, Mbps_out, avg_out);
+                    "in:{fps:%u,Mbps:%u,avg:%u}, "
+                    "out:{fps:%u,Mbps:%u,avg:%u}\n", smp_processor_id(),
+                    fps_in, Mbps_in, avg_in, fps_out, Mbps_out, avg_out);
         }
 
         /* set updated counters */
@@ -422,7 +425,7 @@ unsigned int pna_packet_hook(unsigned int hooknum,
 
     /* increment packets seen in this interval */
     perf->p_interval[direction]++;
-    perf->B_interval[direction] += pkt_len + ETH_HDR_LEN + INTERFRAME_GAP;
+    perf->B_interval[direction] += pkt_len + ETH_HDR_LEN + ETH_OVERHEAD;
     /**********************************
      * END PERFORMANCE EVALUTION CODE *
      **********************************/
