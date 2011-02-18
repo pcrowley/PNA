@@ -30,7 +30,7 @@ struct pna_perf {
     __u32 B_interval[PNA_DIRECTIONS]; /* 8 */
     unsigned long dev_last_rx;
     unsigned long dev_last_fifo;
-}; /* should total 64 bytes */
+};
 
 DEFINE_PER_CPU(struct pna_perf, perf_data);
 

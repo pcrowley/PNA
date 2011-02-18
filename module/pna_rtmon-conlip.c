@@ -16,7 +16,7 @@ struct conmon_entry {
     unsigned int   first_dir;
 };
 struct conmon_entry *contab;
-#define PNA_CONMON_BITS 14
+#define PNA_CONMON_BITS 21
 #define PNA_CONMON_ENTRIES (1 << PNA_CONMON_BITS)
 #define PNA_CONMON_TABLE_SZ (PNA_CONMON_ENTRIES*sizeof(struct conmon_entry))
 
@@ -28,7 +28,7 @@ struct lipmon_entry {
     unsigned int   packets[PNA_PROTOCOLS][PNA_DIRECTIONS];
 };
 struct lipmon_entry *liptab;
-#define PNA_LIPMON_BITS 14
+#define PNA_LIPMON_BITS 17
 #define PNA_LIPMON_ENTRIES (1 << PNA_LIPMON_BITS)
 #define PNA_LIPMON_TABLE_SZ (PNA_LIPMON_ENTRIES*sizeof(struct lipmon_entry))
 

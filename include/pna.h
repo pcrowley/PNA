@@ -94,7 +94,7 @@ struct pna_alert_msg {
 #define PNA_ALERT_MSG_SZ (sizeof(struct pna_alert_msg))
 
 /* settings/structures for storing <src,dst,port> entries */
-#define PNA_FLOW_BITS    17
+#define PNA_FLOW_BITS    23
 #define PNA_FLOW_ENTRIES (1 << PNA_FLOW_BITS)
 
 /* definition of a flow for PNA */
