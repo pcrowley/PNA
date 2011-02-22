@@ -30,7 +30,7 @@ ALERTS="pna-alerts" # Name of alerts program
 # Program Locations
 IFCONFIG="/sbin/ifconfig"
 INSMOD="/sbin/insmod"
-RMMOD="/sbin/rmmod"
+RMMOD="/sbin/rmmod -w"
 
 ip2hex () {
     IP=$1
@@ -70,7 +70,7 @@ start () {
     # start the logging monitor(s)
     PID_LIST=""
     for f in /proc/$MODULE/*; do
-        ${BASE}/${LOGGER} -v -d "$PNA_LOGDIR" "$f" &
+        nohup ${BASE}/${LOGGER} -v -d "$PNA_LOGDIR" "$f" &
         PID_LIST="$PID_LIST $!"
         RETVAL=$(($RETVAL+$?))
     done

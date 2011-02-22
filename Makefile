@@ -1,4 +1,7 @@
 
+all:
+	@echo "Specify start or stop"
+
 start:
 	sudo ./module/service start
 
