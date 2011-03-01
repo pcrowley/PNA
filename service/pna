@@ -30,7 +30,7 @@ PNA_ALERTS="${BASE}/user/user_alerts"   # Name of alerts program
 # Program Locations
 IFCONFIG="/sbin/ifconfig"
 INSMOD="/sbin/insmod"
-RMMOD="/sbin/rmmod"
+RMMOD="/sbin/rmmod -w"
 LSMOD="/sbin/lsmod"
 
 ip2hex () {

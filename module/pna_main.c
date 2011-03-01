@@ -218,8 +218,8 @@ int pna_hook(struct sk_buff *skb, struct net_device *dev,
 static void pna_perflog(struct sk_buff *skb, int dir, struct net_device *dev)
 {
     __u32 t_interval;
-    __u32 kpps_in, Mbps_in, avg_in;
-    __u32 kpps_out, Mbps_out, avg_out;
+    __u32 fps_in, Mbps_in, avg_in;
+    __u32 fps_out, Mbps_out, avg_out;
     struct rtnl_link_stats64 stats;
     struct pna_perf *perf = &get_cpu_var(perf_data);
 
@@ -234,7 +234,7 @@ static void pna_perflog(struct sk_buff *skb, int dir, struct net_device *dev)
         perf->prevtime = perf->currtime;
 
         /* calculate the numbers */
-        kpps_in = perf->p_interval[PNA_DIR_INBOUND] / 1000 / t_interval;
+        fps_in = perf->p_interval[PNA_DIR_INBOUND] / t_interval;
         /* 125000 Mb = (1000 MB/KB * 1000 KB/B) / 8 bits/B */
         Mbps_in = perf->B_interval[PNA_DIR_INBOUND] / 125000 / t_interval;
         avg_in = 0;
@@ -244,7 +244,7 @@ static void pna_perflog(struct sk_buff *skb, int dir, struct net_device *dev)
             avg_in -= ETH_OVERHEAD;
         }
 
-        kpps_out = perf->p_interval[PNA_DIR_OUTBOUND] / 1000 / t_interval;
+        fps_out = perf->p_interval[PNA_DIR_OUTBOUND] / t_interval;
         /* 125000 Mb = (1000 MB/KB * 1000 KB/B) / 8 bits/B */
         Mbps_out = perf->B_interval[PNA_DIR_OUTBOUND] / 125000 / t_interval;
         avg_out = 0;
@@ -255,11 +255,11 @@ static void pna_perflog(struct sk_buff *skb, int dir, struct net_device *dev)
         }
 
         /* report the numbers */
-        if (kpps_in + kpps_out > 0) {
+        if (fps_in + fps_out > 1000) {
             pr_info("pna throughput smpid:%d, "
-                    "in:{kpps:%u,Mbps:%u,avg:%u}, "
-                    "out:{kpps:%u,Mbps:%u,avg:%u}\n", smp_processor_id(),
-                    kpps_in, Mbps_in, avg_in, kpps_out, Mbps_out, avg_out);
+                    "in:{fps:%u,Mbps:%u,avg:%u}, "
+                    "out:{fps:%u,Mbps:%u,avg:%u}\n", smp_processor_id(),
+                    fps_in, Mbps_in, avg_in, fps_out, Mbps_out, avg_out);
 
             /* numbers from the NIC */
             dev_get_stats(dev, &stats);
