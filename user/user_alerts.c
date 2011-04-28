@@ -3,6 +3,7 @@
 #include <unistd.h>
 #include <string.h>
 #include <signal.h>
+#include <time.h>
 #include <sys/socket.h>
 #include <linux/netlink.h>
 
@@ -12,6 +13,7 @@
     "%s: pna_alert type:%s, protocol:%s, direction:%s, offender:%s\n"
 #define PNA_ALERT_TIME_FORMAT "%F %T"
 #define MAX_IP_STR 32
+#define MAX_STR 256
 
 /* some useful global variables */
 int socket_fd;
@@ -67,7 +69,7 @@ void pna_alert_send(struct pna_alert_msg *alert)
 void pna_alert_recv(struct pna_alert_msg *alert)
 {
     int type_i, proto_i, dir_i;
-    char *type, *proto, *dir, tstamp[PNA_MAX_STR];
+    char *type, *proto, *dir, tstamp[MAX_STR];
     int ip_i[4];
     char ip[MAX_IP_STR];
     struct tm *time;
@@ -90,8 +92,10 @@ void pna_alert_recv(struct pna_alert_msg *alert)
     ip_i[3] = (alert->value & 0x000000ff) >> 0;
     snprintf(ip, MAX_IP_STR, "%d.%d.%d.%d",
             ip_i[0], ip_i[1], ip_i[2], ip_i[3]);
-    snprintf(tstamp, PNA_MAX_STR, PNA_ALERT_TIME_FORMAT,
-            localtime(alert->timeval.tv_sec));
+
+    strftime(tstamp, MAX_STR, PNA_ALERT_TIME_FORMAT,
+            localtime(&alert->timeval.tv_sec));
+//    snprintf(tstamp, MAX_STR, "%u", alert->timeval.tv_sec);
 
     if (out_file != NULL) {
         fprintf(out_file, PNA_ALERT_LOG_FORMAT, tstamp, type, proto, dir, ip);
@@ -232,12 +236,10 @@ int main(int argc, char **argv)
     pna_alert_send(&reg);
 
     /* Read messages from kernel */
-    int i = 0;
-    while (i<10) {
+    while (1) {
         if (recvmsg(socket_fd, &nl_msg, 0) < 0) {
             perror("recvmsg");
         }
         pna_alert_recv((struct pna_alert_msg *)NLMSG_DATA(nlh));
-        i++;
     }
 }

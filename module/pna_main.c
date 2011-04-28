@@ -220,7 +220,9 @@ static void pna_perflog(struct sk_buff *skb, int dir, struct net_device *dev)
     __u32 t_interval;
     __u32 fps_in, Mbps_in, avg_in;
     __u32 fps_out, Mbps_out, avg_out;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,37)
     struct rtnl_link_stats64 stats;
+#endif /* LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,37) */
     struct pna_perf *perf = &get_cpu_var(perf_data);
 
 
@@ -261,6 +263,7 @@ static void pna_perflog(struct sk_buff *skb, int dir, struct net_device *dev)
                     "out:{fps:%u,Mbps:%u,avg:%u}\n", smp_processor_id(),
                     fps_in, Mbps_in, avg_in, fps_out, Mbps_out, avg_out);
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,37)
             /* numbers from the NIC */
             dev_get_stats(dev, &stats);
             pr_info("pna rx_stats: packets:%llu, fifo_errors:%llu\n",
@@ -268,6 +271,7 @@ static void pna_perflog(struct sk_buff *skb, int dir, struct net_device *dev)
                     stats.rx_fifo_errors - perf->dev_last_fifo);
             perf->dev_last_rx = stats.rx_packets;
             perf->dev_last_fifo = stats.rx_fifo_errors;
+#endif /* LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,37) */
         }
 
         /* set updated counters */

@@ -11,7 +11,7 @@ $(user-monitor): $(user-monitor).c
 	$(CC) $(CFLAGS) -o $@ $^
 
 $(user-alerts): $(user-alerts).c
-	$(CC) $(CFLAGS) -o $@ $^
+	$(CC) -ggdb $(CFLAGS) -o $@ $^
 
 clean:
 	rm -f $(user-progs)

@@ -204,16 +204,18 @@ int main(int argc, char **argv)
 
     snprintf(out_base, MAX_STR, LOG_FILE_FORMAT, log_dir, basename(proc_file));
 
+    frac = 0;
     while (1) {
         /* sleep for interval (correct for processing time) */
         gettimeofday(&stop, NULL);
         timersub(&stop, &start, &diff);
         /* show processing time if bigger than 100 microseconds */
         if (verbose && diff.tv_usec > 100) {
-            printf("processed in %d.%06d seconds (sleeping for %d seconds)\n",
+            printf("processed in %d.%06d seconds (sleeping for %u seconds)\n",
                     diff.tv_sec, diff.tv_usec,
                     interval - diff.tv_sec - frac/USECS_PER_SEC);
         }
+        fflush(stdout); fflush(stderr);
         remainder = sleep(interval - diff.tv_sec - frac/USECS_PER_SEC);
         if (remainder != 0) {
             continue;
@@ -227,7 +229,6 @@ int main(int argc, char **argv)
 
         /* begin processing */
         gettimeofday(&start, NULL);
-
         /* attempt to proc_open file */
         fd = open(proc_file, O_RDONLY);
         if (fd < 0) {
