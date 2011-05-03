@@ -208,8 +208,12 @@ int pna_hook(struct sk_buff *skb, struct net_device *dev,
         }
     }
 
+#ifdef PIPELINE_MODE
+    return NET_RX_DROP;
+#else
     /* free our skb */
     return pna_done(skb);
+#endif /* PIPELINE_MODE */
 }
 
 /**

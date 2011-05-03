@@ -6,6 +6,10 @@ pna-objs += pna_rtmon.o pna_rtmon-conlip.o pna_alerts.o
 KDIR := /lib/modules/`uname -r`/build
 EXTRA_CFLAGS += -I$(PWD)/../include/
 
+ifdef piped
+EXTRA_CFLAGS += -DPIPELINE_MODE=1
+endif
+
 all: module $(user-progs)
 
 module:
@@ -14,3 +18,4 @@ module:
 clean:
 	$(MAKE) -C $(KDIR) M=`pwd` clean
 	rm -f Module.markers
+
