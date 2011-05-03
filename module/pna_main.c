@@ -322,6 +322,9 @@ int __init pna_init(void)
     dev_add_pack(&pna_packet_type);
 
     pr_info("pna: module is initialized\n");
+#ifdef PIPELINE_MODE
+    pr_info("pna: (in pipeline mode)\n");
+#endif /* PIPELINE_MODE */
 
     return ret;
 }

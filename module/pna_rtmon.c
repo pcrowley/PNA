@@ -74,6 +74,9 @@ int rtmon_pipe(void *data)
     while (!kthread_should_stop()) {
         wait_event_interruptible(self->event, kthread_should_stop() ||
                 !kfifo_is_empty(&self->queue));
+        if (kthread_should_stop()) {
+            break;
+        }
 
         /* fetch data from buffer */
         ret = kfifo_get(&self->queue, &piped);
@@ -108,6 +111,9 @@ int rtmon_pipe_end(void *data)
     while (!kthread_should_stop()) {
         wait_event_interruptible(self->event, kthread_should_stop() ||
                 !kfifo_is_empty(&self->queue));
+        if (kthread_should_stop()) {
+            break;
+        }
 
         /* fetch data from buffer */
         piped.skb = NULL;
@@ -192,7 +198,8 @@ int rtmon_init(void)
     for (monitor = &monitors[0]; monitor->hook != NULL; monitor++) {
         cpu = (cpu - 1) % cpu_count;
 
-        /* ready the FIFO for this stage */
+        /* ready the event queue and FIFO for this stage */
+        init_waitqueue_head(&monitor->event);
         INIT_KFIFO(monitor->queue);
 
         /* create the kernel thread */
