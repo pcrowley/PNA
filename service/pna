@@ -72,6 +72,7 @@ start () {
     RETVAL=$?
 
     # log the current interrupt counts
+    date +%s.%N >> irq_count.start
     grep ${PNA_IFACE} /proc/interrupts >> irq_count.start
 
     # make sure we have some place to save log files
@@ -112,6 +113,7 @@ stop () {
     fi
 
     # log the current interrupt counts
+    date +%s.%N >> irq_count.stop
     grep ${PNA_IFACE} /proc/interrupts >> irq_count.stop
 
     # in theory I should remove entry from cron...

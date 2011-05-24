@@ -19,7 +19,7 @@ struct pna_pipedata {
     struct sk_buff *skb;
     unsigned long data;
 };
-#define PNA_RTMON_FIFO_SZ (16)
+#define PNA_RTMON_FIFO_SZ (32768)
 
 /*
  * @init: initialization routine for a hook
@@ -80,7 +80,7 @@ int rtmon_pipe(void *data)
 
         /* fetch data from buffer */
         ret = kfifo_get(&self->queue, &piped);
-        if (ret != 0) {
+        if (ret == 0) {
             pr_info("fifo underflow (%s)\n", self->name);
         }
 
@@ -89,12 +89,12 @@ int rtmon_pipe(void *data)
 
         /* put new data into buffer */
         ret = kfifo_put(&next->queue, &piped);
-        if (ret != 0) {
+        if (ret == 0) {
             pr_info("fifo overflow (%s)\n", self->name);
         }
 
         /* push to next pipe */
-        wake_up_interruptible_all(&next->event);
+        wake_up_interruptible(&next->event);
     }
 
     return 0;
@@ -118,7 +118,7 @@ int rtmon_pipe_end(void *data)
         /* fetch data from buffer */
         piped.skb = NULL;
         ret = kfifo_get(&self->queue, &piped);
-        if (ret != 0) {
+        if (ret == 0) {
             pr_info("fifo underflow (%s)\n", self->name);
         }
 
@@ -149,7 +149,7 @@ int rtmon_hook(struct pna_flowkey *key, int direction, struct sk_buff *skb,
     int ret;
     struct pna_rtmon *monitor = &monitors[0];
 
-#ifndef PIPELINE_MODE
+#ifdef PIPELINE_MODE
     struct pna_pipedata piped;
     piped.key = key;
     piped.direction = direction;
@@ -159,10 +159,10 @@ int rtmon_hook(struct pna_flowkey *key, int direction, struct sk_buff *skb,
 
     /* start the pipeline */
     ret = kfifo_put(&monitor->queue, &piped);
-    if (ret != 0) {
-        pr_info("fifo overflow\n");
+    if (ret == 0) {
+        pr_info("fifo overflow (start)\n");
     }
-    wake_up_interruptible_all(&monitor->event);
+    wake_up_interruptible(&monitor->event);
 #else 
     for ( ; monitor->hook != NULL; monitor++) {
         ret = monitor->hook(key, direction, skb, &data);
@@ -176,7 +176,7 @@ int rtmon_hook(struct pna_flowkey *key, int direction, struct sk_buff *skb,
 int rtmon_init(void)
 {
 #ifdef PIPELINE_MODE
-    int cpu;
+    int i, cpu;
     struct task_struct *t;
     int cpu_count = num_active_cpus();
 #endif /* PIPELINE_MODE */
@@ -194,9 +194,10 @@ int rtmon_init(void)
 
 #ifdef PIPELINE_MODE
     /* start up the pipe monitors */
-    cpu = (cpu_count - 1) % cpu_count;
-    for (monitor = &monitors[0]; monitor->hook != NULL; monitor++) {
-        cpu = (cpu - 1) % cpu_count;
+    cpu = (cpu_count - 1) % cpu_count; // highest CPU is for flowmon
+    for (i = 0; i < sizeof(monitors)/sizeof(struct pna_rtmon); i++) {
+        monitor = &monitors[i];
+        cpu = (cpu - 2) % cpu_count; // next core, same processor
 
         /* ready the event queue and FIFO for this stage */
         init_waitqueue_head(&monitor->event);

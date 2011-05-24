@@ -205,15 +205,15 @@ int pna_hook(struct sk_buff *skb, struct net_device *dev,
         /* run real-time hooks */
         if (pna_rtmon == true) {
             rtmon_hook(&key, direction, skb, (unsigned long)ret);
+#ifdef PIPELINE_MODE
+            /* if we're running in pipeline mode, don't kill the packet */
+            return NET_RX_DROP;
+#endif /* PIPELINE_MODE */
         }
     }
 
-#ifdef PIPELINE_MODE
-    return NET_RX_DROP;
-#else
     /* free our skb */
     return pna_done(skb);
-#endif /* PIPELINE_MODE */
 }
 
 /**
