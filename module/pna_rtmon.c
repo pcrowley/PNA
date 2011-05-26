@@ -14,11 +14,11 @@
 static void rtmon_clean(unsigned long);
 
 struct pna_pipedata {
-    struct pna_flowkey *key;
-    int direction;
-    struct sk_buff *skb;
-    unsigned long data;
-};
+    struct pna_flowkey *key;    /* 8 */
+    int direction;              /* 4 */
+    struct sk_buff *skb;        /* 8 */
+    unsigned long data;         /* 8 */
+} ____cacheline_internodealigned_in_smp;
 #define PNA_RTMON_FIFO_SZ (32768)
 
 /* PERFORMANCE */
