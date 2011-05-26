@@ -41,6 +41,8 @@ ip2hex () {
 start () {
     PARMS=$1
 
+    service irqbalance stop
+
     echo -n $"Starting $SERVICE: "
 
     if [ ! -z "$PARMS" ] ; then
@@ -83,7 +85,7 @@ start () {
     rm -f verbose.log
     for f in /proc/${SERVICE}/*; do
         ARGS="-v -d $PNA_LOGDIR"
-        nohup ${PNA_MONITOR} $ARGS $f >> verbose.log &
+        nohup ${PNA_MONITOR} $ARGS $f >> verbose.log 2>&1 &
         PID_LIST="$PID_LIST $!"
         RETVAL=$(($RETVAL+$?))
     done
@@ -138,6 +140,8 @@ stop () {
     [ $RETVAL = 0 ] && rm -f /var/run/${SERVICE}.pids
     [ $RETVAL = 0 ] && success || failure
     echo
+
+    service irqbalance start
 
     return $RETVAL
 }

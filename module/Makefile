@@ -15,6 +15,9 @@ all: module $(user-progs)
 module:
 	$(MAKE) -C $(KDIR) M=`pwd` modules
 
+piped:
+	$(MAKE) piped=1
+
 clean:
 	$(MAKE) -C $(KDIR) M=`pwd` clean
 	rm -f Module.markers
