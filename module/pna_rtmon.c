@@ -79,6 +79,34 @@ struct pna_rtmon monitors[] = {
 /* timer for calling clean function */
 DEFINE_TIMER(clean_timer, rtmon_clean, 0, 0);
 
+/* PNA pipeline queue initialization routine */
+int pna_queue_init(struct pna_rtmon *monitor)
+{
+    INIT_KFIFO(monitor->queue);
+    return 0;
+}
+
+/* PNA queue item insertion routine */
+int pna_enqueue(struct pna_rtmon *monitor, struct pna_pipedata *data)
+{
+    return kfifo_put(&monitor->queue, data);
+}
+
+/* PNA queue removal routine */
+int pna_dequeue(struct pna_rtmon *monitor, struct pna_pipedata *data)
+{
+    return kfifo_get(&monitor->queue, data);
+}
+
+/* PNA queue length routine */
+int pna_queue_len(struct pna_rtmon *monitor)
+{
+    if (kfifo_is_empty(&monitor->queue)) {
+        return 0;
+    }
+    return 1;
+}
+
 /* connection monitor pipe wrapper for hook */
 int rtmon_pipe(void *data)
 {
@@ -94,7 +122,7 @@ int rtmon_pipe(void *data)
 
     /* loop until we get a stop signal */
     while (!kthread_should_stop()) {
-        while (kfifo_is_empty(&self->queue) && !kthread_should_stop()) {
+        while (pna_queue_len(self) == 0 && !kthread_should_stop()) {
             /* nice spin */
             schedule();
         }
@@ -103,7 +131,7 @@ int rtmon_pipe(void *data)
         }
 
         /* fetch data from buffer */
-        ret = kfifo_get(&self->queue, &piped);
+        ret = pna_dequeue(self, &piped);
         if (ret == 0) {
             pr_info("fifo underflow (%s)\n", self->name);
         }
@@ -167,12 +195,16 @@ int rtmon_pipe(void *data)
         }
         else {
             /* put new data into buffer */
-            ret = kfifo_put(&next->queue, &piped);
+            ret = pna_enqueue(next, &piped);
             if (ret == 0) {
                 pr_info("fifo overflow (%s)\n", self->name);
             }
         }
     }
+
+    /* dump stats */
+    pr_info("%s inv csw: %ld ; vol csw: %ld\n", self->name, current->nivcsw, current->nvcsw);
+
 
     return 0;
 }
@@ -202,7 +234,7 @@ int rtmon_hook(struct pna_flowkey *key, int direction, struct sk_buff *skb,
         .direction = direction, .skb = skb, .data = data };
 
     /* start the pipeline */
-    ret = kfifo_put(&monitor->queue, &piped);
+    ret = pna_enqueue(monitor, &piped);
     if (ret == 0) {
         pr_info("fifo overflow (start)\n");
     }
@@ -249,8 +281,8 @@ int rtmon_init(void)
         /* assign to next core on same processor */
         cpu = (cpu - 2) % cpu_count;
 
-        /* ready the FIFO for this stage */
-        INIT_KFIFO(monitor->queue);
+        /* ready the queue for this stage */
+        pna_queue_init(monitor);
 
         /* create the kernel thread */
         t = kthread_create(monitor->pipe, monitor, 
