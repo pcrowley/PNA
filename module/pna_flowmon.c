@@ -75,7 +75,7 @@ static int flowtab_open(struct inode *inode, struct file *filep)
     sscanf(filep->f_path.dentry->d_iname, PNA_PROCFILE, &i);
     info = &flowtab_info[i];
 
-    /* make sure the table was written and not in the last second */
+    /* make sure the table was written and not in the last LAG_TIME */
     do_gettimeofday(&now);
     first_sec = info->first_sec + PNA_LAG_TIME;
     if (!info->table_dirty || first_sec >= now.tv_sec ) {

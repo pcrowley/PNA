@@ -9,7 +9,7 @@
 #define PNA_MAX_STR  16
 
 /* a table must have at least PNA_LAG_TIME seconds before dumping */
-#define PNA_LAG_TIME 1
+#define PNA_LAG_TIME 2
 
 /* time interval to call real-time monitor "clean" function (milliseconds) */
 #define RTMON_CLEAN_INTERVAL (10*MSEC_PER_SEC)
