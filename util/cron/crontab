@@ -1,3 +1,3 @@
-#min hour dom month dow cmd
-
-30 */6 * * * $PNA_BASE/archive/s3_watch.sh > $PNA_BASE/archive/.cronout 2> $PNA_BASE/archive/.cronerr
+#format: min hr month-day month dow command
+# push log files to remote host every 10 minutes
+01,11,21,31,41,51 * * * * $HOME/pna/util/cron/pna_pusher.sh
