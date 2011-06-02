@@ -20,7 +20,7 @@
 #define QUEUE_TYPE_CIRC  2
 #define QUEUE_TYPE_MCBUF 3
 
-#define QUEUE_TYPE QUEUE_TYPE_CIRC
+#define QUEUE_TYPE QUEUE_TYPE_MCBUF
 /*****/
 
 /* in-file prototypes */
