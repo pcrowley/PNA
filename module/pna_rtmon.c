@@ -6,9 +6,22 @@
 #include <linux/cpu.h>
 #include <linux/kthread.h>
 #include <linux/wait.h>
+
 #include <linux/kfifo.h>
+#include <linux/prefetch.h>
+#include <linux/circ_buf.h>
 
 #include "pna.h"
+
+/**
+ * Inter-stage queue settings
+ *****/
+#define QUEUE_TYPE_KFIFO 1
+#define QUEUE_TYPE_CIRC  2
+#define QUEUE_TYPE_MCBUF 3
+
+#define QUEUE_TYPE QUEUE_TYPE_CIRC
+/*****/
 
 /* in-file prototypes */
 static void rtmon_clean(unsigned long);
@@ -18,8 +31,8 @@ struct pna_pipedata {
     int direction;              /* 4 */
     struct sk_buff *skb;        /* 8 */
     unsigned long data;         /* 8 */
-} ____cacheline_internodealigned_in_smp;
-#define PNA_RTMON_FIFO_SZ (32768)
+} ____cacheline_aligned;
+#define PNA_RTMON_QUEUE_SZ (2<<8)
 
 /* PERFORMANCE */
 /* taken from linux/jiffies.h in kernel v2.6.21 */
@@ -33,6 +46,14 @@ struct pna_pipedata {
 # define PERF_INTERVAL      10
 /* END PERFORMANCE */
 
+#if QUEUE_TYPE == QUEUE_TYPE_CIRC
+struct pna_queue {
+    int head ____cacheline_aligned;
+    int tail ____cacheline_aligned;
+    struct pna_pipedata data[PNA_RTMON_QUEUE_SZ];
+};
+#endif /* QUEUE_TYPE */
+
 /*
  * @init: initialization routine for a hook
  * @hook: hook function called on every packet
@@ -41,6 +62,14 @@ struct pna_pipedata {
  * @pipe: wrapper to @hook used in pipeline mode
  */
 struct pna_rtmon {
+    /* performance counters */
+    __u64 t_jiffies; /* 8 */
+    struct timeval currtime; /* 8 */
+    struct timeval prevtime; /* 8 */
+    __u32 p_interval[PNA_DIRECTIONS]; /* 8 */
+    __u32 B_interval[PNA_DIRECTIONS]; /* 8 */
+    /* end performance counters */
+
     int (*init)(void);
     int (*hook)(struct pna_flowkey *, int, struct sk_buff *, unsigned long *);
     void (*clean)(void);
@@ -48,14 +77,11 @@ struct pna_rtmon {
     int (*pipe)(void *);
     char *name;
     struct task_struct *thread;
-    DECLARE_KFIFO(queue, struct pna_pipedata, PNA_RTMON_FIFO_SZ);
-
-    /* performance counters */
-    __u64 t_jiffies; /* 8 */
-    struct timeval currtime; /* 8 */
-    struct timeval prevtime; /* 8 */
-    __u32 p_interval[PNA_DIRECTIONS]; /* 8 */
-    __u32 B_interval[PNA_DIRECTIONS]; /* 8 */
+#if QUEUE_TYPE == QUEUE_TYPE_CIRC
+    struct pna_queue queue;
+#elif QUEUE_TYPE == QUEUE_TYPE_KFIFO
+    DECLARE_KFIFO(queue, struct pna_pipedata, PNA_RTMON_QUEUE_SZ);
+#endif /* QUEUE_TYPE */
 };
 
 /* prototypes for pipeline functions */
@@ -82,29 +108,90 @@ DEFINE_TIMER(clean_timer, rtmon_clean, 0, 0);
 /* PNA pipeline queue initialization routine */
 int pna_queue_init(struct pna_rtmon *monitor)
 {
+#if QUEUE_TYPE == QUEUE_TYPE_CIRC
+    monitor->queue.head = monitor->queue.tail = 0;
+    memset(monitor->queue.data, 0,
+           sizeof(struct pna_pipedata)*PNA_RTMON_QUEUE_SZ);
+    return 0;
+#elif QUEUE_TYPE == QUEUE_TYPE_KFIFO
     INIT_KFIFO(monitor->queue);
     return 0;
+#endif /* QUEUE_TYPE */
 }
 
 /* PNA queue item insertion routine */
 int pna_enqueue(struct pna_rtmon *monitor, struct pna_pipedata *data)
 {
+#if QUEUE_TYPE == QUEUE_TYPE_CIRC
+    /* producer */
+    int next;
+    int head = monitor->queue.head;
+    int tail = ACCESS_ONCE(monitor->queue.tail);
+
+    if (CIRC_SPACE(head, tail, PNA_RTMON_QUEUE_SZ) >= 1) {
+        /* insert item into data buffer */
+        memcpy(&monitor->queue.data[head], data, sizeof(struct pna_pipedata));
+
+        next = (head + 1) & (PNA_RTMON_QUEUE_SZ - 1);
+        smp_wmb(); /* commit item before incrementing head */
+        monitor->queue.head = next;
+        prefetchw(&monitor->queue.data[head]);
+    }
+    else {
+        /* nothing could be inserted */
+        return 0;
+    }
+
+    return 1;
+#elif QUEUE_TYPE == QUEUE_TYPE_KFIFO
     return kfifo_put(&monitor->queue, data);
+#endif /* QUEUE_TYPE */
 }
 
 /* PNA queue removal routine */
 int pna_dequeue(struct pna_rtmon *monitor, struct pna_pipedata *data)
 {
+#if QUEUE_TYPE == QUEUE_TYPE_CIRC
+    int head = ACCESS_ONCE(monitor->queue.head);
+    int tail = monitor->queue.tail;
+
+    if (CIRC_CNT(head, tail, PNA_RTMON_QUEUE_SZ) >= 1) {
+        /* make sure we read tail before reading contents at tail */
+        smp_read_barrier_depends();
+
+        /* read the item from tail */
+        memcpy(data, &monitor->queue.data[tail], sizeof(struct pna_pipedata));
+
+        /* make sure tail is read *before* moving tail */
+        smp_mb();
+
+        monitor->queue.tail = (tail + 1 ) & (PNA_RTMON_QUEUE_SZ - 1);
+    }
+    else {
+        /* nothing to be returned */
+        return 0;
+    }
+
+    return 1;
+#elif QUEUE_TYPE == QUEUE_TYPE_KFIFO
     return kfifo_get(&monitor->queue, data);
+#endif /* QUEUE_TYPE */
 }
 
 /* PNA queue length routine */
 int pna_queue_len(struct pna_rtmon *monitor)
 {
+#if QUEUE_TYPE == QUEUE_TYPE_CIRC
+    int head = ACCESS_ONCE(monitor->queue.head);
+    int tail = ACCESS_ONCE(monitor->queue.tail);
+
+    return CIRC_CNT(head, tail, PNA_RTMON_QUEUE_SZ);
+#elif QUEUE_TYPE == QUEUE_TYPE_KFIFO
     if (kfifo_is_empty(&monitor->queue)) {
         return 0;
     }
     return 1;
+#endif /* QUEUE_TYPE */
 }
 
 /* connection monitor pipe wrapper for hook */
@@ -203,7 +290,7 @@ int rtmon_pipe(void *data)
     }
 
     /* dump stats */
-    pr_info("%s inv csw: %ld ; vol csw: %ld\n", self->name, current->nivcsw, current->nvcsw);
+    pr_info("pna_%s {invcsw:%ld,vcsw:%ld}\n", self->name, current->nivcsw, current->nvcsw);
 
 
     return 0;
