@@ -1,4 +1,6 @@
 #!/bin/bash
+# Push complete log files from PNA to remote file store
+# Should run in 10 minute increments
 
 BASE="/home/mjschultz"
 CRON="$BASE/pna/util/cron"
