@@ -38,22 +38,23 @@ char *pna_alert_directions[] = { "none", "in", "out", "bi", };
 
 /* log file format structures */
 struct pna_log_hdr {
-    unsigned int timestamp;
+    unsigned int start_time;
+    unsigned int end_time;
     unsigned int size;
 };
 
 struct pna_log_entry {
-    unsigned int local_ip;
-    unsigned int remote_ip;
-    unsigned short local_port;
-    unsigned short remote_port;
-    unsigned int packets[PNA_DIRECTIONS];
-    unsigned int bytes[PNA_DIRECTIONS];
-    unsigned int first_tstamp;
-	unsigned char l4_protocol;
-    unsigned char first_dir;
-    char pad[2];
-};
+    unsigned int local_ip;                  /* 4 */
+    unsigned int remote_ip;                 /* 4 */
+    unsigned short local_port;              /* 2 */
+    unsigned short remote_port;             /* 2 */
+    unsigned int packets[PNA_DIRECTIONS];   /* 8 */
+    unsigned int bytes[PNA_DIRECTIONS];     /* 8 */
+    unsigned int first_tstamp;              /* 4 */
+	unsigned char l4_protocol;              /* 1 */
+    unsigned char first_dir;                /* 1 */
+    char pad[2];                            /* 2 */
+};                                          /* = 36 */
 
 /* XXX: bad practice, but it gets the job done */
 /* could be trouble if Linux decides to use more netlink links */
@@ -123,6 +124,13 @@ struct flow_entry {
 #define PNA_SZ_FLOW_ENTRIES (PNA_FLOW_ENTRIES * sizeof(struct flow_entry))
 
 #ifdef __KERNEL__
+
+/* Account for Ethernet overheads (stripped by sk_buff) */
+#include <linux/if_ether.h>
+#define ETH_INTERFRAME_GAP 12   /* 9.6ms @ 1Gbps */
+#define ETH_PREAMBLE       8    /* preamble + start-of-frame delimiter */
+#define ETH_OVERHEAD       (ETH_INTERFRAME_GAP + ETH_PREAMBLE + ETH_HLEN + ETH_FCS_LEN)
+
 /* kernel configuration settings */
 extern char *pna_iface;
 extern uint pna_prefix;

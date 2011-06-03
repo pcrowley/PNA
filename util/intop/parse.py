@@ -8,7 +8,7 @@ __version__ = 'parse_0.1.0-py'
 # contained within that file.  It is up to the caller to convert that raw data
 # into useful information
 class PNALogParser :
-    pna_log_hdr_names = ('end-time','size',)
+    pna_log_hdr_names = ('start-time', 'end-time','size',)
     pna_log_data_names = ('local-ip', 'remote-ip',
                           'local-port', 'remote-port',
                           'packets-out', 'packets-in',
@@ -26,8 +26,8 @@ class PNALogParser :
 
         # read the header data first
         pos = 0
-        hdr_data = struct.unpack('II', log_data[pos:pos+8])
-        pos += 8
+        hdr_data = struct.unpack('III', log_data[pos:pos+12])
+        pos += 12
         log = dict(zip(cls.pna_log_hdr_names, hdr_data))
 
         flows = []

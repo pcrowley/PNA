@@ -61,6 +61,7 @@ void dump_table(void *table_base, char *out_file)
 {
     int fd;
     unsigned int nflows;
+    unsigned int start_time;
     uint offset;
 	unsigned int flow_idx;
     struct flow_entry *flow;
@@ -69,6 +70,9 @@ void dump_table(void *table_base, char *out_file)
     struct pna_log_entry *log;
     char buf[BUF_SIZE];
     int buf_idx;
+
+    /* record the current time */
+    start_time = time(NULL);
 
     /* open up the output file */
     fd = open(out_file, O_CREAT|O_RDWR);
@@ -132,7 +136,8 @@ void dump_table(void *table_base, char *out_file)
     /* write out header data */
     lseek(fd, 0, SEEK_SET);
     log_header = (struct pna_log_hdr *)&buf[buf_idx];
-    log_header->timestamp = time(NULL);
+    log_header->start_time = start_time;
+    log_header->end_time = time(NULL);
     log_header->size = nflows * sizeof(struct pna_log_entry);
     write(fd, log_header, sizeof(log_header));
 

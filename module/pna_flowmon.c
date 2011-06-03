@@ -227,10 +227,7 @@ int flowmon_hook(struct pna_flowkey *key, int direction, struct sk_buff *skb)
 
         /* check for match -- update flow entry */
         if (flowkey_match(&flow->key, key)) {
-            if (skb->data_len != 0) {
-                pr_warning("skb is frag'd, recording bad length\n");
-            }
-            flow->data.bytes[direction] += skb->tail-skb->mac_header;
+            flow->data.bytes[direction] += skb->len + ETH_OVERHEAD;
             flow->data.packets[direction] += 1;
             return 0;
         }
@@ -241,10 +238,7 @@ int flowmon_hook(struct pna_flowkey *key, int direction, struct sk_buff *skb)
             memcpy(&flow->key, key, sizeof(*key));
 
             /* port specific information */
-            if (skb->data_len != 0) {
-                pr_warning("skb is frag'd, recording bad length\n");
-            }
-            flow->data.bytes[direction] += skb->tail-skb->mac_header;
+            flow->data.bytes[direction] += skb->len + ETH_OVERHEAD;
             flow->data.packets[direction]++;
             flow->data.first_tstamp = timeval.tv_sec;
             flow->data.first_dir = direction;

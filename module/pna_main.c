@@ -39,10 +39,7 @@ DEFINE_PER_CPU(struct pna_perf, perf_data);
 # define time_after_eq64(a,b) \
    (typecheck(__u64,a) && typecheck(__u64,b) && ((__s64)(a)-(__s64)(b)>=0))
 #endif
-# define ETH_INTERFRAME_GAP 12   /* 9.6ms @ 1Gbps */
-# define ETH_PREAMBLE       8    /* preamble + start-of-frame delimiter */
-# define ETH_OVERHEAD       (ETH_INTERFRAME_GAP + ETH_PREAMBLE)
-# define PERF_INTERVAL      10
+#define PERF_INTERVAL      10
 
 static void pna_perflog(struct sk_buff *skb, int dir, struct net_device *dev);
 static int pna_localize(struct pna_flowkey *key, int *direction);
@@ -154,13 +151,12 @@ int pna_hook(struct sk_buff *skb, struct net_device *dev,
     case ETH_P_IP:
         /* this is a supported type, continue */
         iphdr = ip_hdr(skb);
-        __skb_pull(skb, ip_hdrlen(skb));
         /* assume for now that src is local */
         key.local_ip = ntohl(iphdr->saddr);
         key.remote_ip = ntohl(iphdr->daddr);
         key.l4_protocol = iphdr->protocol;
 
-        skb_reset_transport_header(skb);
+        skb_set_transport_header(skb, ip_hdrlen(skb));
         switch (key.l4_protocol) {
         case IPPROTO_TCP:
             tcphdr = tcp_hdr(skb);
@@ -243,7 +239,8 @@ static void pna_perflog(struct sk_buff *skb, int dir, struct net_device *dev)
         if (perf->p_interval[PNA_DIR_INBOUND] != 0) {
             avg_in = perf->B_interval[PNA_DIR_INBOUND];
             avg_in /= perf->p_interval[PNA_DIR_INBOUND];
-            avg_in -= ETH_OVERHEAD;
+            /* take away non-Ethernet packet measured */
+            avg_in -= (ETH_INTERFRAME_GAP + ETH_PREAMBLE);
         }
 
         fps_out = perf->p_interval[PNA_DIR_OUTBOUND] / t_interval;
@@ -253,7 +250,8 @@ static void pna_perflog(struct sk_buff *skb, int dir, struct net_device *dev)
         if (perf->p_interval[PNA_DIR_OUTBOUND] != 0) {
             avg_out = perf->B_interval[PNA_DIR_OUTBOUND];
             avg_out /= perf->p_interval[PNA_DIR_OUTBOUND];
-            avg_out -= ETH_OVERHEAD;
+            /* take away non-Ethernet packet measured */
+            avg_out -= (ETH_INTERFRAME_GAP + ETH_PREAMBLE);
         }
 
         /* report the numbers */
@@ -285,7 +283,7 @@ static void pna_perflog(struct sk_buff *skb, int dir, struct net_device *dev)
 
     /* increment packets seen in this interval */
     perf->p_interval[dir]++;
-    perf->B_interval[dir] += (skb->tail-skb->mac_header) + ETH_OVERHEAD;
+    perf->B_interval[dir] += skb->len + ETH_OVERHEAD;
 }
 
 /*

@@ -215,7 +215,7 @@ int conmon_hook(struct pna_flowkey *key, int direction, struct sk_buff *skb,
     }
 
     /* update bytes and packets for this entry no matter what */
-    con->bytes[protocol][direction] += skb->tail-skb->mac_header;
+    con->bytes[protocol][direction] += skb->len + ETH_OVERHEAD;
     con->packets[protocol][direction] += 1;
 
     /* if this is a new entry also put in first_dir and add ports */
@@ -351,7 +351,7 @@ int lipmon_hook(struct pna_flowkey *key, int direction, struct sk_buff *skb,
     }
 
     /* otherwise update byte/packet counts */
-    lip->bytes[protocol][direction] += skb->tail-skb->mac_header;
+    lip->bytes[protocol][direction] += skb->len + ETH_OVERHEAD;
     lip->packets[protocol][direction] += 1;
 
     /* check for threshold violations */
