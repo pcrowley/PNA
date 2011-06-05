@@ -111,7 +111,7 @@ class CommandLineInterface :
         print fmt % display
 
         for log in data :
-            end_time = time.localtime(log['end-time'])
+            end_time = time.localtime(log['start-time'])
             end = time.strftime(time_fmt, end_time)
             for f in log['flows'] :
                 src_ip = self.int2ip(f['local-ip'])

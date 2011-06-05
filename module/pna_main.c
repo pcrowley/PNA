@@ -21,6 +21,14 @@
 
 #include "pna.h"
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,37)
+    typedef struct rtnl_link_stats64 pna_link_stats;
+    typedef unsigned long long  pna_stat_uword;
+#elif LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,34)
+    typedef const struct net_device_stats *pna_link_stats;
+    typedef unsigned long pna_stat_uword;
+#endif /* LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,37) */
+
 /* for performance measurement */
 struct pna_perf {
     __u64 t_jiffies; /* 8 */
@@ -28,8 +36,8 @@ struct pna_perf {
     struct timeval prevtime; /* 8 */
     __u32 p_interval[PNA_DIRECTIONS]; /* 8 */
     __u32 B_interval[PNA_DIRECTIONS]; /* 8 */
-    unsigned long dev_last_rx;
-    unsigned long dev_last_fifo;
+    pna_stat_uword dev_last_rx;
+    pna_stat_uword dev_last_fifo;
 };
 
 DEFINE_PER_CPU(struct pna_perf, perf_data);
@@ -216,9 +224,7 @@ static void pna_perflog(struct sk_buff *skb, int dir, struct net_device *dev)
     __u32 t_interval;
     __u32 fps_in, Mbps_in, avg_in;
     __u32 fps_out, Mbps_out, avg_out;
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,37)
-    struct rtnl_link_stats64 stats;
-#endif /* LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,37) */
+    pna_link_stats stats;
     struct pna_perf *perf = &get_cpu_var(perf_data);
 
 
@@ -269,7 +275,15 @@ static void pna_perflog(struct sk_buff *skb, int dir, struct net_device *dev)
                     stats.rx_fifo_errors - perf->dev_last_fifo);
             perf->dev_last_rx = stats.rx_packets;
             perf->dev_last_fifo = stats.rx_fifo_errors;
-#endif /* LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,37) */
+#elif LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,34)
+            /* numbers from the NIC */
+            stats = dev_get_stats(dev);
+            pr_info("pna rx_stats: packets:%lu, fifo_errors:%lu\n",
+                    stats->rx_packets - perf->dev_last_rx,
+                    stats->rx_fifo_errors - perf->dev_last_fifo);
+            perf->dev_last_rx = stats->rx_packets;
+            perf->dev_last_fifo = stats->rx_fifo_errors;
+#endif /* LINUX_VERSION_CODE */
         }
 
         /* set updated counters */
