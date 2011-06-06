@@ -24,6 +24,32 @@ pushd $LOG_DIR > /dev/null
 	tar cf $ARCHIVE pna-$ARCHIVE_TIME*.log
 	sudo rm -f $LOG_DIR/pna-$ARCHIVE_TIME*.log
 	bzip2 $ARCHIVE
+
+	# Check for any log file stragglers
+	for log in * ; do
+		# Make sure the file is a file and exists
+		if [ ! -f $log ] ; then
+			continue
+		fi
+
+		# Figure out what log group it belongs to
+		# (log name, excluding 'pna-' and single digit minute on)
+		LOG_TIME="${log:4:11}"
+		ARCHIVE="$ARCHIVE_DIR/$LOG_TIME-straggle.tar"
+
+		# Make sure the log file isn't brand new
+		if [ $LOG_TIME -ge $ARCHIVE_TIME ] ; then
+			continue
+		fi
+
+		# Create archive of straggler files
+		tar cf $ARCHIVE pna-$LOG_TIME*.log
+		sudo rm -f $LOG_DIR/pna-$LOG_TIME*.log
+		bzip2 $ARCHIVE
+
+		# echo out the name of the stragglers
+		echo "Found stragglers, stored in $ARCHIVE"
+	done
 popd > /dev/null
 
 # Attempt to copy this and any older archives to remote host
@@ -41,5 +67,3 @@ for archive in $ARCHIVE_DIR/* ; do
 		rm -f $archive
 	fi
 done
-
-# TODO: Check for any log file stragglers
