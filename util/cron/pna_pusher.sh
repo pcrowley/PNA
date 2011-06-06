@@ -22,7 +22,7 @@ mkdir -p $ARCHIVE_DIR
 # Archive and cleanup logs matching ARCHIVE_TIME
 pushd $LOG_DIR > /dev/null
 	tar cf $ARCHIVE pna-$ARCHIVE_TIME*.log
-	tar tf $ARCHIVE | xargs rm
+	sudo rm -f $LOG_DIR/pna-$ARCHIVE_TIME*.log
 	bzip2 $ARCHIVE
 popd > /dev/null
 
