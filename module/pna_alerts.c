@@ -1,3 +1,6 @@
+/* netlink alerts system connects to userspace listener */
+/* functions: pna_alert_init, pna_alert_cleanup, pna_alert_warn */
+ 
 #include <linux/module.h>
 #include <net/sock.h>
 #include <linux/netlink.h>

@@ -8,79 +8,93 @@
 #  description: Startup/shutdown script for the Passive Network \
 #               Appliacte (PNA).
 
+# PNA configuration
+BASE="/home/mjschultz/pna" # Base directory for PNA module
+PNA_IFACE="eth0"           # Interface for PNA to listen on
+PNA_PREFIX="192.168.0.0"   # IP Prefix to watch
+PNA_MASK="255.255.0.0"     # Network Mask to watch
+PNA_LOGDIR="${BASE}/logs"  # Directory to store log files
+
+# # # # # # # # # # # # # # # # # # # # # # # # # #
+#  Nothing below this point should need to change #
+# # # # # # # # # # # # # # # # # # # # # # # # # #
+SERVICE=pna
+
 # Source function library
 . /etc/init.d/functions
 
-SERVICE=pna
+PNA_MODULE="${BASE}/module/pna.ko"      # Name of kernel module
+PNA_MONITOR="${BASE}/user/user_monitor" # Name of logging program
+PNA_ALERTS="${BASE}/user/user_alerts"   # Name of alerts program
 
-# PNA configuration
-PNAIF="eth0"            # Interface for PNA
-PNA_AFFINITY="02"       # PNA interface irqs linked to cpu 6
-
-# ONL configuration
-PNAIP="192.168.3.30"    # IP address of PNA
-NETWORK="192.168.1.0"   # Network to monitor
-NETMASK="255.255.255.0" # Netmask of network to monitor
-GATEWAY="192.168.1.46"  # Gateway connecting to control plane
-
-PNAPATH="/home/mjschultz/monitor/module"
-MODULE="nf_ses_watch"
-
-# Programs
+# Program Locations
 IFCONFIG="/sbin/ifconfig"
-ROUTE="/sbin/route"
+INSMOD="/sbin/insmod"
+RMMOD="/sbin/rmmod -w"
+LSMOD="/sbin/lsmod"
+
+ip2hex () {
+    IP=$1
+    printf "0x%02x%02x%02x%02x\n" $(echo "$IP" | sed "s/\./ /g")
+}
 
 start () {
+    PARMS=$1
+
     echo -n $"Starting $SERVICE: "
 
-    # (ONL) configure PNAIF
-    ${IFCONFIG} ${PNAIF} ${PNAIP}
-    ${ROUTE} add -host ${GATEWAY} ${PNAIF}
-    ${ROUTE} add -net ${NETWORK} netmask ${NETMASK} gw ${GATEWAY} ${PNAIF}
+    if [ ! -z "$PARMS" ] ; then
+        echo -n "($PARMS)"
+    fi
 
-	# (Live) configure PNAIF
-	${IFCONFIG} ${PNAIF} up
-	${IFCONFIG} ${PNAIF} promisc
+    # Turn prefix and mask to hex values
+    PNA_PREFIX=$(ip2hex "$PNA_PREFIX")
+    PNA_MASK=$(ip2hex "$PNA_MASK")
 
-    # setup irq affinities
-    AFF_OTHERS=$(printf "%2x\n" $((255-16#$PNA_AFFINITY)))
+    # Make sure PNA interface is up
+    ${IFCONFIG} ${PNA_IFACE} up
+    ${IFCONFIG} ${PNA_IFACE} promisc
 
-    # set them all to ignore PNA_AFFINITY
-    for e in `find /proc/irq -name "eth*"`; do
-        IRQPATH=$(dirname $e)
-		if [ -f ${IRQPATH}/smp_affinity ] ; then
-	        echo ${AFF_OTHERS} > ${IRQPATH}/smp_affinity
-		fi
+    # Set CPU <-> IRQ affinity for PNA_IFACE
+    NPROCS=$(grep processor /proc/cpuinfo | wc -l)
+    AFFINITY=$(printf "%x" $((1 << ($NPROCS - 1))))
+
+    
+    for f in /proc/irq/*/${PNA_IFACE}*/../smp_affinity ; do
+        echo ${AFFINITY} > $f
     done
-
-    # set PNA_AFFINITY
-    for e in `find /proc/irq -name "${PNAIF}*"`; do
-		IRQPATH=$(dirname $e)
-		if [ -f ${IRQPATH}/smp_affinity ] ; then
-			echo ${PNA_AFFINITY} > ${IRQPATH}/smp_affinity
-		fi
-	done
 
     # load the module
-    insmod ${PNAPATH}/kmod/${MODULE}.ko
+    ARGS="pna_iface=$PNA_IFACE"
+    ARGS="$ARGS pna_prefix=$PNA_PREFIX"
+    ARGS="$ARGS pna_mask=$PNA_MASK $PARMS"
+    ${INSMOD} ${PNA_MODULE} $ARGS
     RETVAL=$?
 
+    # log the current interrupt counts
+    grep ${PNA_IFACE} /proc/interrupts >> irq_count.start
+
+    # make sure we have some place to save log files
+    mkdir -p "$PNA_LOGDIR"
+
     # start the logging monitor(s)
-    for i in /proc/$MODULE/*; do
-		i=`basename $i`
-		if [ "$i" == "config" ] ; then
-			continue
-		fi
-		if [ -f /proc/$MODULE/$i ] ; then
-			( cd ${PNAPATH}/user ; ./${MODULE}-user $i & )
-			RETVAL=$(($RETVAL+$?))
-		fi
+    PID_LIST=""
+    rm -f verbose.log
+    for f in /proc/${SERVICE}/*; do
+        ARGS="-v -d $PNA_LOGDIR"
+        nohup ${PNA_MONITOR} $ARGS $f >> verbose.log 2>&1 &
+        PID_LIST="$PID_LIST $!"
+        RETVAL=$(($RETVAL+$?))
     done
+
+    # start the alerts monitor
+    # TODO...
 
     # in theory I should add entry to cron...
     
     # finish up with script-y stuff
     [ $RETVAL = 0 ] && touch /var/lock/subsys/${SERVICE}
+    [ $RETVAL = 0 ] && echo $PID_LIST > /var/run/${SERVICE}.pids
     [ $RETVAL = 0 ] && success || failure
     echo
 
@@ -90,54 +104,55 @@ start () {
 stop () {
     echo -n $"Stopping $SERVICE: "
 
+    # make sure there is something to stop
+    if [ ! -f /var/lock/subsys/${SERVICE} ] ; then
+        failure
+        echo 
+        return
+    fi
+
+    # log the current interrupt counts
+    grep ${PNA_IFACE} /proc/interrupts >> irq_count.stop
+
     # in theory I should remove entry from cron...
 
-    # kill all the logging monitors
-    for pid in `ps auxw | grep ${MODULE} | grep -v grep | awk '{ print $2 }'`
-    do
-        kill $pid
-    done
+    # kill all the monitors and alerts
+    kill $(cat /var/run/${SERVICE}.pids)
 
     # unload the module
-    rmmod ${MODULE}
+    ${RMMOD} ${PNA_MODULE}
     RETVAL=$?
 
     # unset CPU affinities
-    for e in `find /proc/irq -name "eth*"`; do
-        IRQPATH=$(dirname $e)
-			if [ -f ${IRQPATH}/smp_affinity ] ; then
-				echo 'ff' > ${IRQPATH}/smp_affinity
-			fi
+    for f in /proc/irq/*/${PNA_IFACE}*/../smp_affinity ; do
+        cat /proc/irq/default_smp_affinity > $f
     done
 
-    # restart PNAIF (destroys the routes)
-    ${IFCONFIG} ${PNAIF} down
+    # Take down PNA interface
+    ${IFCONFIG} ${PNA_IFACE} down
 
     # End with script-y stuff
     [ $RETVAL = 0 ] && rm -f /var/lock/subsys/${SERVICE}
+    [ $RETVAL = 0 ] && rm -f /var/run/${SERVICE}.pids
     [ $RETVAL = 0 ] && success || failure
     echo
 
     return $RETVAL
 }
 
-restart () {
-    stop
-    start
-}
-
 case $1 in
     start)
-        start
+        start $2
     ;;
     stop)
         stop
     ;;
     restart)
-        restart
+        stop
+        start $2
     ;;
     status)
-        ${LSMOD} | grep ${MODULE} > /dev/null
+        ${LSMOD} | grep ${SERVICE} > /dev/null
         RETVAL=$?
     ;;
     *)

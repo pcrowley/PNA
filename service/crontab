@@ -1,3 +1,0 @@
-#min hour dom month dow cmd
-
-30 */6 * * * $PNA_BASE/archive/s3_watch.sh > $PNA_BASE/archive/.cronout 2> $PNA_BASE/archive/.cronerr
