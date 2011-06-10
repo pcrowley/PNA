@@ -346,5 +346,5 @@ void pna_cleanup(void)
 
 module_init(pna_init);
 module_exit(pna_cleanup);
-MODULE_LICENSE("GPL");
+MODULE_LICENSE("Apache 2.0");
 MODULE_AUTHOR("Michael J. Schultz <mjschultz@gmail.com>");
