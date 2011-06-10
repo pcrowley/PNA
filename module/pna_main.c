@@ -21,6 +21,14 @@
 
 #include "pna.h"
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,37)
+    typedef struct rtnl_link_stats64 pna_link_stats;
+    typedef unsigned long long  pna_stat_uword;
+#elif LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,34)
+    typedef const struct net_device_stats *pna_link_stats;
+    typedef unsigned long pna_stat_uword;
+#endif /* LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,37) */
+
 /* for performance measurement */
 struct pna_perf {
     __u64 t_jiffies; /* 8 */
@@ -28,8 +36,8 @@ struct pna_perf {
     struct timeval prevtime; /* 8 */
     __u32 p_interval[PNA_DIRECTIONS]; /* 8 */
     __u32 B_interval[PNA_DIRECTIONS]; /* 8 */
-    unsigned long dev_last_rx;
-    unsigned long dev_last_fifo;
+    pna_stat_uword dev_last_rx;
+    pna_stat_uword dev_last_fifo;
 };
 
 DEFINE_PER_CPU(struct pna_perf, perf_data);
@@ -39,10 +47,7 @@ DEFINE_PER_CPU(struct pna_perf, perf_data);
 # define time_after_eq64(a,b) \
    (typecheck(__u64,a) && typecheck(__u64,b) && ((__s64)(a)-(__s64)(b)>=0))
 #endif
-# define ETH_INTERFRAME_GAP 12   /* 9.6ms @ 1Gbps */
-# define ETH_PREAMBLE       8    /* preamble + start-of-frame delimiter */
-# define ETH_OVERHEAD       (ETH_INTERFRAME_GAP + ETH_PREAMBLE)
-# define PERF_INTERVAL      10
+#define PERF_INTERVAL      10
 
 static void pna_perflog(struct sk_buff *skb, int dir, struct net_device *dev);
 static int pna_localize(struct pna_flowkey *key, int *direction);
@@ -154,13 +159,12 @@ int pna_hook(struct sk_buff *skb, struct net_device *dev,
     case ETH_P_IP:
         /* this is a supported type, continue */
         iphdr = ip_hdr(skb);
-        __skb_pull(skb, ip_hdrlen(skb));
         /* assume for now that src is local */
         key.local_ip = ntohl(iphdr->saddr);
         key.remote_ip = ntohl(iphdr->daddr);
         key.l4_protocol = iphdr->protocol;
 
-        skb_reset_transport_header(skb);
+        skb_set_transport_header(skb, ip_hdrlen(skb));
         switch (key.l4_protocol) {
         case IPPROTO_TCP:
             tcphdr = tcp_hdr(skb);
@@ -224,9 +228,7 @@ static void pna_perflog(struct sk_buff *skb, int dir, struct net_device *dev)
     __u32 t_interval;
     __u32 fps_in, Mbps_in, avg_in;
     __u32 fps_out, Mbps_out, avg_out;
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,37)
-    struct rtnl_link_stats64 stats;
-#endif /* LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,37) */
+    pna_link_stats stats;
     struct pna_perf *perf = &get_cpu_var(perf_data);
 
 
@@ -247,7 +249,8 @@ static void pna_perflog(struct sk_buff *skb, int dir, struct net_device *dev)
         if (perf->p_interval[PNA_DIR_INBOUND] != 0) {
             avg_in = perf->B_interval[PNA_DIR_INBOUND];
             avg_in /= perf->p_interval[PNA_DIR_INBOUND];
-            avg_in -= ETH_OVERHEAD;
+            /* take away non-Ethernet packet measured */
+            avg_in -= (ETH_INTERFRAME_GAP + ETH_PREAMBLE);
         }
 
         fps_out = perf->p_interval[PNA_DIR_OUTBOUND] / t_interval;
@@ -257,7 +260,8 @@ static void pna_perflog(struct sk_buff *skb, int dir, struct net_device *dev)
         if (perf->p_interval[PNA_DIR_OUTBOUND] != 0) {
             avg_out = perf->B_interval[PNA_DIR_OUTBOUND];
             avg_out /= perf->p_interval[PNA_DIR_OUTBOUND];
-            avg_out -= ETH_OVERHEAD;
+            /* take away non-Ethernet packet measured */
+            avg_out -= (ETH_INTERFRAME_GAP + ETH_PREAMBLE);
         }
 
         /* report the numbers */
@@ -275,7 +279,15 @@ static void pna_perflog(struct sk_buff *skb, int dir, struct net_device *dev)
                     stats.rx_fifo_errors - perf->dev_last_fifo);
             perf->dev_last_rx = stats.rx_packets;
             perf->dev_last_fifo = stats.rx_fifo_errors;
-#endif /* LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,37) */
+#elif LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,34)
+            /* numbers from the NIC */
+            stats = dev_get_stats(dev);
+            pr_info("pna rx_stats: packets:%lu, fifo_errors:%lu\n",
+                    stats->rx_packets - perf->dev_last_rx,
+                    stats->rx_fifo_errors - perf->dev_last_fifo);
+            perf->dev_last_rx = stats->rx_packets;
+            perf->dev_last_fifo = stats->rx_fifo_errors;
+#endif /* LINUX_VERSION_CODE */
         }
 
         /* set updated counters */
@@ -289,7 +301,7 @@ static void pna_perflog(struct sk_buff *skb, int dir, struct net_device *dev)
 
     /* increment packets seen in this interval */
     perf->p_interval[dir]++;
-    perf->B_interval[dir] += (skb->tail-skb->mac_header) + ETH_OVERHEAD;
+    perf->B_interval[dir] += skb->len + ETH_OVERHEAD;
 }
 
 /*
@@ -341,5 +353,5 @@ void pna_cleanup(void)
 
 module_init(pna_init);
 module_exit(pna_cleanup);
-MODULE_LICENSE("GPL");
+MODULE_LICENSE("Apache 2.0");
 MODULE_AUTHOR("Michael J. Schultz <mjschultz@gmail.com>");

@@ -162,6 +162,7 @@ class PNAModel :
 
         # we'll go through all the all_data and filter out items we don't want
         for item in all_data :
+            start_time = item['start-time']
             end_time = item['end-time']
             if self.filter_reject('end-time', end_time) :
                 # skip this entire item (don't add to new_data)
@@ -187,6 +188,7 @@ class PNAModel :
 
             # now combine all the filtered data for a item
             new_item = { }
+            new_item['start-time'] = start_time
             new_item['end-time'] = end_time
             new_item['size'] = item['size']
             new_item['flows'] = new_flows

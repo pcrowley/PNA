@@ -75,7 +75,7 @@ static int flowtab_open(struct inode *inode, struct file *filep)
     sscanf(filep->f_path.dentry->d_iname, PNA_PROCFILE, &i);
     info = &flowtab_info[i];
 
-    /* make sure the table was written and not in the last second */
+    /* make sure the table was written and not in the last LAG_TIME */
     do_gettimeofday(&now);
     first_sec = info->first_sec + PNA_LAG_TIME;
     if (!info->table_dirty || first_sec >= now.tv_sec ) {
@@ -227,10 +227,7 @@ int flowmon_hook(struct pna_flowkey *key, int direction, struct sk_buff *skb)
 
         /* check for match -- update flow entry */
         if (flowkey_match(&flow->key, key)) {
-            if (skb->data_len != 0) {
-                pr_warning("skb is frag'd, recording bad length\n");
-            }
-            flow->data.bytes[direction] += skb->tail-skb->mac_header;
+            flow->data.bytes[direction] += skb->len + ETH_OVERHEAD;
             flow->data.packets[direction] += 1;
             return 0;
         }
@@ -241,10 +238,7 @@ int flowmon_hook(struct pna_flowkey *key, int direction, struct sk_buff *skb)
             memcpy(&flow->key, key, sizeof(*key));
 
             /* port specific information */
-            if (skb->data_len != 0) {
-                pr_warning("skb is frag'd, recording bad length\n");
-            }
-            flow->data.bytes[direction] += skb->tail-skb->mac_header;
+            flow->data.bytes[direction] += skb->len + ETH_OVERHEAD;
             flow->data.packets[direction]++;
             flow->data.first_tstamp = timeval.tv_sec;
             flow->data.first_dir = direction;
