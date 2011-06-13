@@ -1,4 +1,3 @@
-
 MODULE := module/pna.ko
 USER := user/user_monitor user/user_alerts
 
