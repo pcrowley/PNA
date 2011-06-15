@@ -32,7 +32,7 @@ struct pna_pipedata {
     struct sk_buff *skb;        /* 8 */
     unsigned long data;         /* 8 */
 } ____cacheline_aligned;
-#define PNA_QUEUE_SZ (2<<8)
+#define PNA_QUEUE_SZ (1<<14)
 
 #define PNA_QUEUE_BATCH_SZ (PNA_QUEUE_SZ>>2)
 #define PNA_QUEUE_NEXT(x) (((x) + 1) & (PNA_QUEUE_SZ - 1))
@@ -43,9 +43,6 @@ struct pna_pipedata {
 # define time_after_eq64(a,b) \
    (typecheck(__u64,a) && typecheck(__u64,b) && ((__s64)(a)-(__s64)(b)>=0))
 #endif
-# define ETH_INTERFRAME_GAP 12   /* 9.6ms @ 1Gbps */
-# define ETH_PREAMBLE       8    /* preamble + start-of-frame delimiter */
-# define ETH_OVERHEAD       (ETH_INTERFRAME_GAP + ETH_PREAMBLE)
 # define PERF_INTERVAL      10
 /* END PERFORMANCE */
 
@@ -90,6 +87,9 @@ struct pna_rtmon {
     struct timeval prevtime; /* 8 */
     __u32 p_interval[PNA_DIRECTIONS]; /* 8 */
     __u32 B_interval[PNA_DIRECTIONS]; /* 8 */
+    unsigned long long ns_min;
+    unsigned long long ns_max;
+    unsigned long long ns_sum;
     /* end performance counters */
 
     int (*init)(void);
@@ -254,6 +254,9 @@ int rtmon_pipe(void *data)
     struct pna_rtmon *self = data;
     struct pna_rtmon *next = self+1;
 
+    struct timespec start, stop;
+    unsigned long long ns_diff;
+
     /* loop until we get a stop signal */
     while (!kthread_should_stop()) {
         /* try to fetch data from buffer */
@@ -264,7 +267,20 @@ int rtmon_pipe(void *data)
         }
 
         /* process in hook */
+        getnstimeofday(&start);
         ret = self->hook(piped.key, piped.direction, piped.skb, &piped.data);
+        getnstimeofday(&stop);
+        ns_diff = ((stop.tv_sec - start.tv_sec) * 1000000000);
+        ns_diff += (stop.tv_nsec - start.tv_nsec);
+
+        self->ns_sum += ns_diff;
+        if (ns_diff < self->ns_min) {
+            self->ns_min = ns_diff;
+        }
+        if (ns_diff > self->ns_max) {
+            self->ns_max = ns_diff;
+        }
+
 
         /* PERFORMANCE: packet throughput */
         if ( time_after_eq64(get_jiffies_64(), self->t_jiffies) ) {
@@ -300,7 +316,16 @@ int rtmon_pipe(void *data)
                         "out:{fps:%u,Mbps:%u,avg:%u}\n", self->name,
                         smp_processor_id(), fps_in, Mbps_in, avg_in,
                         fps_out, Mbps_out, avg_out);
+                pr_info("pna %s time:{min:%llu,avg:%llu,max:%llu}\n", self->name,
+                        self->ns_min,
+                        self->ns_sum /
+                         (self->p_interval[PNA_DIR_OUTBOUND]+self->p_interval[PNA_DIR_INBOUND]),
+                        self->ns_max);
             }
+
+            self->ns_sum = 0;
+            self->ns_min = -1;
+            self->ns_max = 0;
 
             /* reset updated counters */
             self->p_interval[PNA_DIR_INBOUND] = 0;

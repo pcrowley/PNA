@@ -29,6 +29,12 @@
     typedef unsigned long pna_stat_uword;
 #endif /* LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,37) */
 
+struct pna_nstime {
+    unsigned long long min;
+    unsigned long long max;
+    unsigned long long sum;
+};
+
 /* for performance measurement */
 struct pna_perf {
     __u64 t_jiffies; /* 8 */
@@ -38,6 +44,9 @@ struct pna_perf {
     __u32 B_interval[PNA_DIRECTIONS]; /* 8 */
     pna_stat_uword dev_last_rx;
     pna_stat_uword dev_last_fifo;
+
+    struct pna_nstime flow_ns;
+    struct pna_nstime decode_ns;
 };
 
 DEFINE_PER_CPU(struct pna_perf, perf_data);
@@ -49,6 +58,7 @@ DEFINE_PER_CPU(struct pna_perf, perf_data);
 #endif
 #define PERF_INTERVAL      10
 
+static void pna_nslog(struct timespec *start, struct timespec *stop, struct pna_nstime *ns);
 static void pna_perflog(struct sk_buff *skb, int dir, struct net_device *dev);
 static int pna_localize(struct pna_flowkey *key, int *direction);
 static int pna_done(struct sk_buff *skb);
@@ -132,6 +142,9 @@ int pna_hook(struct sk_buff *skb, struct net_device *dev,
     struct tcphdr *tcphdr;
     struct udphdr *udphdr;
     int ret, direction;
+
+    struct timespec start, stop;
+    struct pna_perf *perf = &get_cpu_var(perf_data);
     
     /* we don't care about outgoing packets */
     if (skb->pkt_type == PACKET_OUTGOING) {
@@ -148,6 +161,7 @@ int pna_hook(struct sk_buff *skb, struct net_device *dev,
         return NET_RX_DROP;
     }
 
+    getnstimeofday(&start);
 	/* make sure the key is all zeros before we start */
 	memset(&key, 0, sizeof(key));
     
@@ -189,22 +203,24 @@ int pna_hook(struct sk_buff *skb, struct net_device *dev,
         /* couldn't localize the IP (neither source nor dest in prefix) */
         return pna_done(skb);
     }
+    getnstimeofday(&stop);
+    pna_nslog(&start, &stop, &perf->decode_ns);
 
     /* log performance data */
     if (pna_perfmon) {
         pna_perflog(skb, direction, dev);
     }
 
-    /* hook actions here */
-    //pr_info("key: {%d/%d, 0x%08x, 0x%08x, 0x%04x, 0x%04x}\n", key.l3_protocol, key.l4_protocol, key.local_ip, key.remote_ip, key.local_port, key.remote_port);
-
     /* insert into flow table */
     if (pna_flowmon == true) {
+        getnstimeofday(&start);
         ret = flowmon_hook(&key, direction, skb);
+        getnstimeofday(&stop);
         if (ret < 0) {
             /* failed to insert -- cleanup */
             return pna_done(skb);
         }
+        pna_nslog(&start, &stop, &perf->flow_ns);
 
         /* run real-time hooks */
         if (pna_rtmon == true) {
@@ -220,6 +236,22 @@ int pna_hook(struct sk_buff *skb, struct net_device *dev,
     return pna_done(skb);
 }
 
+static void pna_nslog(struct timespec *start, struct timespec *stop, struct pna_nstime *ns)
+{
+    unsigned long long ns_diff;
+
+    ns_diff = ((stop->tv_sec - start->tv_sec) * 1000000000);
+    ns_diff += (stop->tv_nsec - start->tv_nsec);
+    ns->sum += ns_diff;
+
+    if (ns_diff < ns->min) {
+        ns->min = ns_diff;
+    }
+    if (ns_diff > ns->max) {
+        ns->max = ns_diff;
+    }
+}
+
 /**
  * Performance Monitoring
  */
@@ -229,6 +261,7 @@ static void pna_perflog(struct sk_buff *skb, int dir, struct net_device *dev)
     __u32 fps_in, Mbps_in, avg_in;
     __u32 fps_out, Mbps_out, avg_out;
     pna_link_stats stats;
+    __u32 frame_count;
     struct pna_perf *perf = &get_cpu_var(perf_data);
 
 
@@ -271,6 +304,15 @@ static void pna_perflog(struct sk_buff *skb, int dir, struct net_device *dev)
                     "out:{fps:%u,Mbps:%u,avg:%u}\n", smp_processor_id(),
                     fps_in, Mbps_in, avg_in, fps_out, Mbps_out, avg_out);
 
+            frame_count = perf->p_interval[PNA_DIR_OUTBOUND];
+            frame_count += perf->p_interval[PNA_DIR_INBOUND];
+            pr_info("pna decode time:{min:%llu,avg:%llu,max:%llu}\n",
+                    perf->decode_ns.min, perf->decode_ns.sum / frame_count,
+                    perf->decode_ns.max);
+            pr_info("pna flow time:{min:%llu,avg:%llu,max:%llu}\n",
+                    perf->flow_ns.min, perf->flow_ns.sum / frame_count,
+                    perf->flow_ns.max);
+
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,37)
             /* numbers from the NIC */
             dev_get_stats(dev, &stats);
@@ -289,6 +331,13 @@ static void pna_perflog(struct sk_buff *skb, int dir, struct net_device *dev)
             perf->dev_last_fifo = stats->rx_fifo_errors;
 #endif /* LINUX_VERSION_CODE */
         }
+
+        perf->flow_ns.min = -1;
+        perf->flow_ns.sum = 0;
+        perf->flow_ns.max = 0;
+        perf->decode_ns.min = -1;
+        perf->decode_ns.sum = 0;
+        perf->decode_ns.max = 0;
 
         /* set updated counters */
         perf->p_interval[PNA_DIR_INBOUND] = 0;
