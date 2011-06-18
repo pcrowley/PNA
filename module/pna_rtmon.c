@@ -13,30 +13,6 @@
 
 #include "pna.h"
 
-/**
- * Inter-stage queue settings
- *****/
-#define QUEUE_TYPE_KFIFO 1
-#define QUEUE_TYPE_CIRC  2
-#define QUEUE_TYPE_MCBUF 3
-
-#define QUEUE_TYPE QUEUE_TYPE_MCBUF
-/*****/
-
-/* in-file prototypes */
-static void rtmon_clean(unsigned long);
-
-struct pna_pipedata {
-    struct pna_flowkey *key;    /* 8 */
-    int direction;              /* 4 */
-    struct sk_buff *skb;        /* 8 */
-    unsigned long data;         /* 8 */
-} ____cacheline_aligned;
-#define PNA_QUEUE_SZ (1<<14)
-
-#define PNA_QUEUE_BATCH_SZ (PNA_QUEUE_SZ>>2)
-#define PNA_QUEUE_NEXT(x) (((x) + 1) & (PNA_QUEUE_SZ - 1))
-
 /* PERFORMANCE */
 /* taken from linux/jiffies.h in kernel v2.6.21 */
 #ifndef time_after_eq64
@@ -46,32 +22,12 @@ struct pna_pipedata {
 # define PERF_INTERVAL      10
 /* END PERFORMANCE */
 
-#if QUEUE_TYPE == QUEUE_TYPE_CIRC
-struct pna_queue {
-    int head ____cacheline_aligned;
-    int tail ____cacheline_aligned;
-    struct pna_pipedata data[PNA_QUEUE_SZ];
-};
-#elif QUEUE_TYPE == QUEUE_TYPE_MCBUF
-struct pna_queue {
-    /* shared control variables */
-    volatile int tail ____cacheline_aligned;
-    volatile int head;
+/* in-file prototypes */
+static void rtmon_clean(unsigned long);
 
-    /* consumer's local variables */
-    int reader_head ____cacheline_aligned;
-    int reader_next;
-    int reader_batch;
-
-    /* producer's local variables */
-    int writer_tail ____cacheline_aligned;
-    int writer_next;
-    int writer_batch;
-
-    /* buffer data */
-    struct pna_pipedata data[PNA_QUEUE_SZ];
-};
-#endif /* QUEUE_TYPE */
+/* external pointers */
+extern struct flowtab_info *flowtab_info;
+DECLARE_PER_CPU(int, flowtab_idx);
 
 /*
  * @init: initialization routine for a hook
@@ -99,14 +55,11 @@ struct pna_rtmon {
     int (*pipe)(void *);
     char *name;
     struct task_struct *thread;
-#if (QUEUE_TYPE == QUEUE_TYPE_CIRC) || (QUEUE_TYPE == QUEUE_TYPE_MCBUF)
     struct pna_queue queue;
-#elif QUEUE_TYPE == QUEUE_TYPE_KFIFO
-    DECLARE_KFIFO(queue, struct pna_pipedata, PNA_QUEUE_SZ);
-#endif /* QUEUE_TYPE */
 };
 
 /* prototypes for pipeline functions */
+int rtmon_pipe_start(void *data);
 int rtmon_pipe(void *data);
 
 /* a NULL .hook signals the end-of-list */
@@ -114,7 +67,7 @@ struct pna_rtmon monitors[] = {
     /* connection monitor */
     { .name = "conmon", .thread = NULL, .init = conmon_init,
       .hook = conmon_hook, .clean = conmon_clean, .release = conmon_release,
-      .pipe = rtmon_pipe },
+      .pipe = rtmon_pipe_start },
     /* local IP monitor */
     { .name = "lipmon", .thread = NULL, .init = lipmon_init,
       .hook = lipmon_hook, .clean = lipmon_clean, .release = lipmon_release,
@@ -130,21 +83,16 @@ DEFINE_TIMER(clean_timer, rtmon_clean, 0, 0);
 /* PNA pipeline queue initialization routine */
 void pna_queue_init(struct pna_rtmon *monitor)
 {
-#if (QUEUE_TYPE == QUEUE_TYPE_CIRC) || (QUEUE_TYPE == QUEUE_TYPE_MCBUF)
     memset(&monitor->queue, 0, sizeof(struct pna_queue));
-#elif QUEUE_TYPE == QUEUE_TYPE_KFIFO
-    INIT_KFIFO(monitor->queue);
-#endif /* QUEUE_TYPE */
 }
 
 /**
  * PNA queue item insertion routine
  * @return 0 if there was no room for insertion
  */
-int pna_enqueue(struct pna_rtmon *monitor, struct pna_pipedata *data)
+int pna_enqueue(struct pna_queue *queue, struct pna_pipedata *data)
 {
 #if QUEUE_TYPE == QUEUE_TYPE_MCBUF
-    struct pna_queue *queue = &monitor->queue;
     int next_writer_tail = PNA_QUEUE_NEXT(queue->writer_next);
 
     if (next_writer_tail == queue->writer_tail) {
@@ -164,7 +112,6 @@ int pna_enqueue(struct pna_rtmon *monitor, struct pna_pipedata *data)
 #elif QUEUE_TYPE == QUEUE_TYPE_CIRC
     /* producer */
     int next;
-    struct pna_queue *queue = &monitor->queue;
     int head = queue->head;
     int tail = ACCESS_ONCE(queue->tail);
 
@@ -183,8 +130,6 @@ int pna_enqueue(struct pna_rtmon *monitor, struct pna_pipedata *data)
     }
 
     return 1;
-#elif QUEUE_TYPE == QUEUE_TYPE_KFIFO
-    return kfifo_put(&monitor->queue, data);
 #endif /* QUEUE_TYPE */
 }
 
@@ -192,11 +137,9 @@ int pna_enqueue(struct pna_rtmon *monitor, struct pna_pipedata *data)
  * PNA queue removal routine 
  * @return 0 if there is nothing to dequeue
  */
-int pna_dequeue(struct pna_rtmon *monitor, struct pna_pipedata *data)
+int pna_dequeue(struct pna_queue *queue, struct pna_pipedata *data)
 {
 #if QUEUE_TYPE == QUEUE_TYPE_MCBUF
-    struct pna_queue *queue = &monitor->queue;
-
     if (queue->reader_next == queue->reader_head) {
         if (queue->reader_next == queue->head) {
             return 0;
@@ -214,7 +157,6 @@ int pna_dequeue(struct pna_rtmon *monitor, struct pna_pipedata *data)
 
     return 1;
 #elif QUEUE_TYPE == QUEUE_TYPE_CIRC
-    struct pna_queue *queue = &monitor->queue;
     int head = ACCESS_ONCE(queue->head);
     int tail = queue->tail;
 
@@ -236,127 +178,190 @@ int pna_dequeue(struct pna_rtmon *monitor, struct pna_pipedata *data)
     }
 
     return 1;
-#elif QUEUE_TYPE == QUEUE_TYPE_KFIFO
-    return kfifo_get(&monitor->queue, data);
 #endif /* QUEUE_TYPE */
 }
 
-/* connection monitor pipe wrapper for hook */
-int rtmon_pipe(void *data)
+int rtmon_pipe_monitor(struct pna_rtmon *self, struct pna_pipedata *data)
 {
+    int ret;
+
     /* PERFORMANCE */
     __u32 t_interval;
     __u32 fps_in, Mbps_in, avg_in;
     __u32 fps_out, Mbps_out, avg_out;
+    struct timespec start, stop;
+    unsigned long long ns_diff;
+    struct sk_buff *skb = data->skb;
     /* END PERFORMANCE */
-    int ret;
+
+    getnstimeofday(&start);
+
+    /* process in hook --- only important thing here... */
+    ret = self->hook(data->key, data->direction, skb, &data->data);
+
+    getnstimeofday(&stop);
+    ns_diff = ((stop.tv_sec - start.tv_sec) * 1000000000);
+    ns_diff += (stop.tv_nsec - start.tv_nsec);
+
+    self->ns_sum += ns_diff;
+    if (ns_diff < self->ns_min) {
+        self->ns_min = ns_diff;
+    }
+    if (ns_diff > self->ns_max) {
+        self->ns_max = ns_diff;
+    }
+
+    /* PERFORMANCE: packet throughput */
+    if ( time_after_eq64(get_jiffies_64(), self->t_jiffies) ) {
+        /* get sampling interval time */
+        do_gettimeofday(&self->currtime);
+        t_interval = self->currtime.tv_sec - self->prevtime.tv_sec;
+        /* update for next round */
+        self->prevtime = self->currtime;
+
+        /* calculate the numbers */
+        fps_in = self->p_interval[PNA_DIR_INBOUND] / t_interval;
+        /* 125000 Mb = (1000 MB/KB * 1000 KB/B) / 8 bits/B */
+        Mbps_in = self->B_interval[PNA_DIR_INBOUND] / 125000 / t_interval;
+        avg_in = 0;
+        if (self->p_interval[PNA_DIR_INBOUND] != 0) {
+            avg_in = self->B_interval[PNA_DIR_INBOUND];
+            avg_in /= self->p_interval[PNA_DIR_INBOUND];
+            avg_in -= ETH_OVERHEAD;
+        }
+
+        fps_out = self->p_interval[PNA_DIR_OUTBOUND] / t_interval;
+        /* 125000 Mb = (1000 MB/KB * 1000 KB/B) / 8 bits/B */
+        Mbps_out = self->B_interval[PNA_DIR_OUTBOUND] / 125000 / t_interval;
+        avg_out = 0;
+        if (self->p_interval[PNA_DIR_OUTBOUND] != 0) {
+            avg_out = self->B_interval[PNA_DIR_OUTBOUND];
+            avg_out /= self->p_interval[PNA_DIR_OUTBOUND];
+            avg_out -= ETH_OVERHEAD;
+        }
+        /* report the numbers */
+        if (fps_in + fps_out > 1000) {
+            pr_info("pna %s smpid:%d, " "in:{fps:%u,Mbps:%u,avg:%u}, "
+                    "out:{fps:%u,Mbps:%u,avg:%u}\n", self->name,
+                    smp_processor_id(), fps_in, Mbps_in, avg_in,
+                    fps_out, Mbps_out, avg_out);
+            pr_info("pna %s time:{min:%llu,avg:%llu,max:%llu}\n", self->name,
+                    self->ns_min,
+                    self->ns_sum /
+                        (self->p_interval[PNA_DIR_OUTBOUND]+self->p_interval[PNA_DIR_INBOUND]),
+                    self->ns_max);
+        }
+
+        self->ns_sum = 0;
+        self->ns_min = -1;
+        self->ns_max = 0;
+
+        /* reset updated counters */
+        self->p_interval[PNA_DIR_INBOUND] = 0;
+        self->B_interval[PNA_DIR_INBOUND] = 0;
+        self->p_interval[PNA_DIR_OUTBOUND] = 0;
+        self->B_interval[PNA_DIR_OUTBOUND] = 0;
+        self->t_jiffies = msecs_to_jiffies(PERF_INTERVAL*MSEC_PER_SEC);
+        self->t_jiffies += get_jiffies_64();
+    }
+
+    /* increment packets seen in this interval */
+    self->p_interval[data->direction]++;
+    self->B_interval[data->direction] += (skb->tail-skb->mac_header) + ETH_OVERHEAD;
+    /* END PERFORMANCE counters */
+
+    return ret;
+}
+
+/* "start" pipeline wrapper to combine multiple queues from flow monitor */
+int rtmon_pipe_start(void *data)
+{
+    int i, ret;
     struct pna_pipedata piped;
+    struct flowtab_info *info;
     struct pna_rtmon *self = data;
     struct pna_rtmon *next = self+1;
 
-    struct timespec start, stop;
-    unsigned long long ns_diff;
-
     /* loop until we get a stop signal */
     while (!kthread_should_stop()) {
+        /* combine data from n flow tables */
+        for (i = 0; i < pna_tables; i++) {
+            info = &flowtab_info[i];
+            while (0 != pna_dequeue(&info->queue, &piped)) {
+                pr_info("dequeued from flowtab%d\n", i);
+                pna_enqueue(&self->queue, &piped);
+                if (kthread_should_stop()) {
+                    break;
+                }
+            }
+            if (kthread_should_stop()) {
+                break;
+            }
+        }
+        if (kthread_should_stop()) {
+            break;
+        }
+
         /* try to fetch data from buffer */
-        if (pna_dequeue(self, &piped) == 0) {
+        if (pna_dequeue(&self->queue, &piped) == 0) {
             /* no work, take a break */
             schedule();
             continue;
         }
 
-        /* process in hook */
-        getnstimeofday(&start);
-        ret = self->hook(piped.key, piped.direction, piped.skb, &piped.data);
-        getnstimeofday(&stop);
-        ns_diff = ((stop.tv_sec - start.tv_sec) * 1000000000);
-        ns_diff += (stop.tv_nsec - start.tv_nsec);
+        /* process the data */
+        rtmon_pipe_monitor(self, &piped);
 
-        self->ns_sum += ns_diff;
-        if (ns_diff < self->ns_min) {
-            self->ns_min = ns_diff;
-        }
-        if (ns_diff > self->ns_max) {
-            self->ns_max = ns_diff;
-        }
-
-
-        /* PERFORMANCE: packet throughput */
-        if ( time_after_eq64(get_jiffies_64(), self->t_jiffies) ) {
-            /* get sampling interval time */
-            do_gettimeofday(&self->currtime);
-            t_interval = self->currtime.tv_sec - self->prevtime.tv_sec;
-            /* update for next round */
-            self->prevtime = self->currtime;
-
-            /* calculate the numbers */
-            fps_in = self->p_interval[PNA_DIR_INBOUND] / t_interval;
-            /* 125000 Mb = (1000 MB/KB * 1000 KB/B) / 8 bits/B */
-            Mbps_in = self->B_interval[PNA_DIR_INBOUND] / 125000 / t_interval;
-            avg_in = 0;
-            if (self->p_interval[PNA_DIR_INBOUND] != 0) {
-                avg_in = self->B_interval[PNA_DIR_INBOUND];
-                avg_in /= self->p_interval[PNA_DIR_INBOUND];
-                avg_in -= ETH_OVERHEAD;
-            }
-
-            fps_out = self->p_interval[PNA_DIR_OUTBOUND] / t_interval;
-            /* 125000 Mb = (1000 MB/KB * 1000 KB/B) / 8 bits/B */
-            Mbps_out = self->B_interval[PNA_DIR_OUTBOUND] / 125000 / t_interval;
-            avg_out = 0;
-            if (self->p_interval[PNA_DIR_OUTBOUND] != 0) {
-                avg_out = self->B_interval[PNA_DIR_OUTBOUND];
-                avg_out /= self->p_interval[PNA_DIR_OUTBOUND];
-                avg_out -= ETH_OVERHEAD;
-            }
-            /* report the numbers */
-            if (fps_in + fps_out > 1000) {
-                pr_info("pna %s smpid:%d, " "in:{fps:%u,Mbps:%u,avg:%u}, "
-                        "out:{fps:%u,Mbps:%u,avg:%u}\n", self->name,
-                        smp_processor_id(), fps_in, Mbps_in, avg_in,
-                        fps_out, Mbps_out, avg_out);
-                pr_info("pna %s time:{min:%llu,avg:%llu,max:%llu}\n", self->name,
-                        self->ns_min,
-                        self->ns_sum /
-                         (self->p_interval[PNA_DIR_OUTBOUND]+self->p_interval[PNA_DIR_INBOUND]),
-                        self->ns_max);
-            }
-
-            self->ns_sum = 0;
-            self->ns_min = -1;
-            self->ns_max = 0;
-
-            /* reset updated counters */
-            self->p_interval[PNA_DIR_INBOUND] = 0;
-            self->B_interval[PNA_DIR_INBOUND] = 0;
-            self->p_interval[PNA_DIR_OUTBOUND] = 0;
-            self->B_interval[PNA_DIR_OUTBOUND] = 0;
-            self->t_jiffies = msecs_to_jiffies(PERF_INTERVAL*MSEC_PER_SEC);
-            self->t_jiffies += get_jiffies_64();
-        }
-
-        /* increment packets seen in this interval */
-        self->p_interval[piped.direction]++;
-        self->B_interval[piped.direction] += (piped.skb->tail-piped.skb->mac_header) + ETH_OVERHEAD;
-        /* END PERFORMANCE counters */
-
+        /* ready the next "stage" */
         if (next->pipe == NULL) {
             /* finish processing */
             kfree_skb(piped.skb);
         }
         else {
             /* put new data into buffer */
-            ret = pna_enqueue(next, &piped);
+            ret = pna_enqueue(&next->queue, &piped);
             if (ret == 0) {
                 pr_info("fifo overflow (%s)\n", self->name);
             }
         }
     }
 
-    /* dump stats */
-    pr_info("pna_%s {invcsw:%ld,vcsw:%ld}\n", self->name, current->nivcsw, current->nvcsw);
+    return 0;
+}
 
+/* connection monitor pipe wrapper for hook */
+int rtmon_pipe(void *data)
+{
+    int ret;
+    struct pna_pipedata piped;
+    struct pna_rtmon *self = data;
+    struct pna_rtmon *next = self+1;
+
+    /* loop until we get a stop signal */
+    while (!kthread_should_stop()) {
+        /* try to fetch data from buffer */
+        if (pna_dequeue(&self->queue, &piped) == 0) {
+            /* no work, take a break */
+            schedule();
+            continue;
+        }
+
+        /* process the data */
+        rtmon_pipe_monitor(self, &piped);
+
+        /* ready the next "stage" */
+        if (next->pipe == NULL) {
+            /* finish processing */
+            kfree_skb(piped.skb);
+        }
+        else {
+            /* put new data into buffer */
+            ret = pna_enqueue(&next->queue, &piped);
+            if (ret == 0) {
+                pr_info("fifo overflow (%s)\n", self->name);
+            }
+        }
+    }
 
     return 0;
 }
@@ -379,18 +384,26 @@ int rtmon_hook(struct pna_flowkey *key, int direction, struct sk_buff *skb,
                unsigned long data)
 {
     int ret;
-    struct pna_rtmon *monitor = &monitors[0];
-
 #ifdef PIPELINE_MODE
+    int idx;
+    struct flowtab_info *info;
     struct pna_pipedata piped = { .key = key, 
         .direction = direction, .skb = skb, .data = data };
 
-    /* start the pipeline */
-    ret = pna_enqueue(monitor, &piped);
+    idx = get_cpu_var(flowtab_idx);
+    info = &flowtab_info[idx];
+
+    /* enqueue data to flow tab, will be dequeued in pipeline */
+    ret = pna_enqueue(&info->queue, &piped);
     if (ret == 0) {
-        pr_info("fifo overflow (start)\n");
+        pr_info("fifo overflow (flowtab%d)\n", idx);
+    }
+    else {
+        pr_info("enqueued onto flowtab%d", idx);
     }
 #else 
+    struct pna_rtmon *monitor = &monitors[0];
+
     for ( ; monitor->hook != NULL; monitor++) {
         ret = monitor->hook(key, direction, skb, &data);
     }

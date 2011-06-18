@@ -155,6 +155,53 @@ extern bool pna_rtmon;
 
 /* table meta-information */
 #ifdef __KERNEL__
+/**
+ * Inter-stage queue settings
+ *****/
+#define QUEUE_TYPE_CIRC  2
+#define QUEUE_TYPE_MCBUF 3
+
+#define QUEUE_TYPE QUEUE_TYPE_MCBUF
+/*****/
+
+struct pna_pipedata {
+    struct pna_flowkey *key;    /* 8 */
+    int direction;              /* 4 */
+    struct sk_buff *skb;        /* 8 */
+    unsigned long data;         /* 8 */
+} ____cacheline_aligned;
+#define PNA_QUEUE_SZ (1<<14)
+
+#define PNA_QUEUE_BATCH_SZ (PNA_QUEUE_SZ>>2)
+#define PNA_QUEUE_NEXT(x) (((x) + 1) & (PNA_QUEUE_SZ - 1))
+
+#if QUEUE_TYPE == QUEUE_TYPE_CIRC
+struct pna_queue {
+    int head ____cacheline_aligned;
+    int tail ____cacheline_aligned;
+    struct pna_pipedata data[PNA_QUEUE_SZ];
+};
+#elif QUEUE_TYPE == QUEUE_TYPE_MCBUF
+struct pna_queue {
+    /* shared control variables */
+    volatile int tail ____cacheline_aligned;
+    volatile int head;
+
+    /* consumer's local variables */
+    int reader_head ____cacheline_aligned;
+    int reader_next;
+    int reader_batch;
+
+    /* producer's local variables */
+    int writer_tail ____cacheline_aligned;
+    int writer_next;
+    int writer_batch;
+
+    /* buffer data */
+    struct pna_pipedata data[PNA_QUEUE_SZ];
+};
+#endif /* QUEUE_TYPE */
+
 /* number of attempts to insert before giving up */
 #define PNA_TABLE_TRIES 32
 
@@ -171,6 +218,8 @@ struct flowtab_info {
     unsigned int nflows;
     unsigned int nflows_missed;
     unsigned int probes[PNA_TABLE_TRIES];
+
+    struct pna_queue queue ____cacheline_aligned;
 };
 #endif /* __KERNEL__ */
 

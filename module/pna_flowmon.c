@@ -32,7 +32,7 @@ int flowmon_init(void);
 void flowmon_cleanup(void);
 
 /* pointer to information about the flow tables */
-static struct flowtab_info *flowtab_info;
+struct flowtab_info *flowtab_info;
 
 /* pointer to the /proc durectiry parent node */
 static struct proc_dir_entry *proc_parent;
