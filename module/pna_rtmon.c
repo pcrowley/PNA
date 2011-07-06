@@ -43,9 +43,11 @@ struct pna_rtmon {
     struct timeval prevtime; /* 8 */
     __u32 p_interval[PNA_DIRECTIONS]; /* 8 */
     __u32 B_interval[PNA_DIRECTIONS]; /* 8 */
+#ifdef NSTIME
     unsigned long long ns_min;
     unsigned long long ns_max;
     unsigned long long ns_sum;
+#endif /* NSTIME */
     /* end performance counters */
 
     int (*init)(void);
@@ -54,6 +56,7 @@ struct pna_rtmon {
     void (*release)(void);
     int (*pipe)(void *);
     char *name;
+    int affinity;
     struct task_struct *thread;
     struct pna_queue queue;
 };
@@ -65,16 +68,16 @@ int rtmon_pipe(void *data);
 /* a NULL .hook signals the end-of-list */
 struct pna_rtmon monitors[] = {
     /* connection monitor */
-    { .name = "conmon", .thread = NULL, .init = conmon_init,
+    { .name = "conmon", .affinity = 3, .thread = NULL, .init = conmon_init,
       .hook = conmon_hook, .clean = conmon_clean, .release = conmon_release,
       .pipe = rtmon_pipe_start },
     /* local IP monitor */
-    { .name = "lipmon", .thread = NULL, .init = lipmon_init,
+    { .name = "lipmon", .affinity = 1, .thread = NULL, .init = lipmon_init,
       .hook = lipmon_hook, .clean = lipmon_clean, .release = lipmon_release,
       .pipe = rtmon_pipe },
     /* NULL hook entry is end of list delimited */
-    { .name = "null", .thread = NULL, .init = NULL, .hook = NULL,
-      .clean = NULL, .release = NULL, .pipe = NULL }
+    { .name = "null", .affinity = 0, .thread = NULL, .init = NULL,
+      .hook = NULL, .clean = NULL, .release = NULL, .pipe = NULL }
 };
 
 /* timer for calling clean function */
@@ -90,7 +93,7 @@ void pna_queue_init(struct pna_rtmon *monitor)
  * PNA queue item insertion routine
  * @return 0 if there was no room for insertion
  */
-int pna_enqueue(struct pna_queue *queue, struct pna_pipedata *data)
+int pna_enqueue(struct pna_queue *queue, struct pna_pipedata *data, struct pna_rtmon *next)
 {
 #if QUEUE_TYPE == QUEUE_TYPE_MCBUF
     int next_writer_tail = PNA_QUEUE_NEXT(queue->writer_next);
@@ -107,6 +110,9 @@ int pna_enqueue(struct pna_queue *queue, struct pna_pipedata *data)
     if (queue->writer_batch >= PNA_QUEUE_BATCH_SZ) {
         queue->head = queue->writer_next;
         queue->writer_batch = 0;
+        if (next != NULL) {
+            wake_up_process(next->thread);
+        }
     }
     return 1;
 #elif QUEUE_TYPE == QUEUE_TYPE_CIRC
@@ -189,16 +195,19 @@ int rtmon_pipe_monitor(struct pna_rtmon *self, struct pna_pipedata *data)
     __u32 t_interval;
     __u32 fps_in, Mbps_in, avg_in;
     __u32 fps_out, Mbps_out, avg_out;
-    struct timespec start, stop;
-    unsigned long long ns_diff;
     struct sk_buff *skb = data->skb;
     /* END PERFORMANCE */
 
+#ifdef NSTIME
+    struct timespec start, stop;
+    unsigned long long ns_diff;
     getnstimeofday(&start);
+#endif /* NSTIME */
 
     /* process in hook --- only important thing here... */
-    ret = self->hook(data->key, data->direction, skb, &data->data);
+    ret = self->hook(&data->key, data->direction, skb, &data->data);
 
+#ifdef NSTIME
     getnstimeofday(&stop);
     ns_diff = ((stop.tv_sec - start.tv_sec) * 1000000000);
     ns_diff += (stop.tv_nsec - start.tv_nsec);
@@ -210,6 +219,7 @@ int rtmon_pipe_monitor(struct pna_rtmon *self, struct pna_pipedata *data)
     if (ns_diff > self->ns_max) {
         self->ns_max = ns_diff;
     }
+#endif /* NSTIME */
 
     /* PERFORMANCE: packet throughput */
     if ( time_after_eq64(get_jiffies_64(), self->t_jiffies) ) {
@@ -227,7 +237,7 @@ int rtmon_pipe_monitor(struct pna_rtmon *self, struct pna_pipedata *data)
         if (self->p_interval[PNA_DIR_INBOUND] != 0) {
             avg_in = self->B_interval[PNA_DIR_INBOUND];
             avg_in /= self->p_interval[PNA_DIR_INBOUND];
-            avg_in -= ETH_OVERHEAD;
+            avg_in -= (ETH_INTERFRAME_GAP + ETH_PREAMBLE);
         }
 
         fps_out = self->p_interval[PNA_DIR_OUTBOUND] / t_interval;
@@ -237,7 +247,7 @@ int rtmon_pipe_monitor(struct pna_rtmon *self, struct pna_pipedata *data)
         if (self->p_interval[PNA_DIR_OUTBOUND] != 0) {
             avg_out = self->B_interval[PNA_DIR_OUTBOUND];
             avg_out /= self->p_interval[PNA_DIR_OUTBOUND];
-            avg_out -= ETH_OVERHEAD;
+            avg_out -= (ETH_INTERFRAME_GAP + ETH_PREAMBLE);
         }
         /* report the numbers */
         if (fps_in + fps_out > 1000) {
@@ -245,16 +255,20 @@ int rtmon_pipe_monitor(struct pna_rtmon *self, struct pna_pipedata *data)
                     "out:{fps:%u,Mbps:%u,avg:%u}\n", self->name,
                     smp_processor_id(), fps_in, Mbps_in, avg_in,
                     fps_out, Mbps_out, avg_out);
+#ifdef NSTIME
             pr_info("pna %s time:{min:%llu,avg:%llu,max:%llu}\n", self->name,
                     self->ns_min,
                     self->ns_sum /
                         (self->p_interval[PNA_DIR_OUTBOUND]+self->p_interval[PNA_DIR_INBOUND]),
                     self->ns_max);
+#endif /* NSTIME */
         }
 
+#ifdef NSTIME
         self->ns_sum = 0;
         self->ns_min = -1;
         self->ns_max = 0;
+#endif /* NSTIME */
 
         /* reset updated counters */
         self->p_interval[PNA_DIR_INBOUND] = 0;
@@ -267,7 +281,7 @@ int rtmon_pipe_monitor(struct pna_rtmon *self, struct pna_pipedata *data)
 
     /* increment packets seen in this interval */
     self->p_interval[data->direction]++;
-    self->B_interval[data->direction] += (skb->tail-skb->mac_header) + ETH_OVERHEAD;
+    self->B_interval[data->direction] += skb->len + ETH_OVERHEAD;
     /* END PERFORMANCE counters */
 
     return ret;
@@ -276,7 +290,7 @@ int rtmon_pipe_monitor(struct pna_rtmon *self, struct pna_pipedata *data)
 /* "start" pipeline wrapper to combine multiple queues from flow monitor */
 int rtmon_pipe_start(void *data)
 {
-    int i, ret;
+    int i, ret, processed;
     struct pna_pipedata piped;
     struct flowtab_info *info;
     struct pna_rtmon *self = data;
@@ -284,46 +298,41 @@ int rtmon_pipe_start(void *data)
 
     /* loop until we get a stop signal */
     while (!kthread_should_stop()) {
+        processed = 0;
+
         /* combine data from n flow tables */
         for (i = 0; i < pna_tables; i++) {
             info = &flowtab_info[i];
             while (0 != pna_dequeue(&info->queue, &piped)) {
-                pr_info("dequeued from flowtab%d\n", i);
-                pna_enqueue(&self->queue, &piped);
                 if (kthread_should_stop()) {
+                    i = pna_tables;
                     break;
                 }
+                /* process the data */
+                rtmon_pipe_monitor(self, &piped);
+                processed++;
+
+                /* ready the next "stage" */
+                if (next->pipe == NULL) {
+                    /* finish processing */
+                    kfree_skb(piped.skb);
+                }
+                else {
+                    /* put new data into buffer */
+                    ret = pna_enqueue(&next->queue, &piped, next);
+                    if (ret == 0) {
+                        pr_info("fifo overflow (%s)\n", self->name);
+                    }
+                }
             }
-            if (kthread_should_stop()) {
-                break;
-            }
-        }
-        if (kthread_should_stop()) {
-            break;
         }
 
-        /* try to fetch data from buffer */
-        if (pna_dequeue(&self->queue, &piped) == 0) {
+        set_current_state(TASK_INTERRUPTIBLE);
+        if (processed == 0 && !kthread_should_stop()) {
             /* no work, take a break */
             schedule();
-            continue;
         }
-
-        /* process the data */
-        rtmon_pipe_monitor(self, &piped);
-
-        /* ready the next "stage" */
-        if (next->pipe == NULL) {
-            /* finish processing */
-            kfree_skb(piped.skb);
-        }
-        else {
-            /* put new data into buffer */
-            ret = pna_enqueue(&next->queue, &piped);
-            if (ret == 0) {
-                pr_info("fifo overflow (%s)\n", self->name);
-            }
-        }
+        __set_current_state(TASK_RUNNING);
     }
 
     return 0;
@@ -340,11 +349,13 @@ int rtmon_pipe(void *data)
     /* loop until we get a stop signal */
     while (!kthread_should_stop()) {
         /* try to fetch data from buffer */
+        set_current_state(TASK_INTERRUPTIBLE);
         if (pna_dequeue(&self->queue, &piped) == 0) {
             /* no work, take a break */
             schedule();
             continue;
         }
+        __set_current_state(TASK_RUNNING);
 
         /* process the data */
         rtmon_pipe_monitor(self, &piped);
@@ -356,7 +367,7 @@ int rtmon_pipe(void *data)
         }
         else {
             /* put new data into buffer */
-            ret = pna_enqueue(&next->queue, &piped);
+            ret = pna_enqueue(&next->queue, &piped, next);
             if (ret == 0) {
                 pr_info("fifo overflow (%s)\n", self->name);
             }
@@ -380,7 +391,7 @@ static void rtmon_clean(unsigned long data)
 }
 
 /* hook from main on packet to start real-time monitoring */
-int rtmon_hook(struct pna_flowkey *key, int direction, struct sk_buff *skb,
+int rtmon_hook(struct pna_flowkey key, int direction, struct sk_buff *skb,
                unsigned long data)
 {
     int ret;
@@ -394,18 +405,15 @@ int rtmon_hook(struct pna_flowkey *key, int direction, struct sk_buff *skb,
     info = &flowtab_info[idx];
 
     /* enqueue data to flow tab, will be dequeued in pipeline */
-    ret = pna_enqueue(&info->queue, &piped);
+    ret = pna_enqueue(&info->queue, &piped, &monitors[0]);
     if (ret == 0) {
         pr_info("fifo overflow (flowtab%d)\n", idx);
-    }
-    else {
-        pr_info("enqueued onto flowtab%d", idx);
     }
 #else 
     struct pna_rtmon *monitor = &monitors[0];
 
     for ( ; monitor->hook != NULL; monitor++) {
-        ret = monitor->hook(key, direction, skb, &data);
+        ret = monitor->hook(&key, direction, skb, &data);
     }
 #endif /* PIPELINE_MODE */
 
@@ -416,9 +424,8 @@ int rtmon_hook(struct pna_flowkey *key, int direction, struct sk_buff *skb,
 int rtmon_init(void)
 {
 #ifdef PIPELINE_MODE
-    int i, cpu;
+    int i;
     struct task_struct *t;
-    int cpu_count = num_active_cpus();
 #endif /* PIPELINE_MODE */
     int ret = 0;
 
@@ -434,7 +441,6 @@ int rtmon_init(void)
 
 #ifdef PIPELINE_MODE
     /* start up the pipe monitors */
-    cpu = (cpu_count - 1) % cpu_count; // highest CPU is for flowmon
     for (i = 0; i < sizeof(monitors)/sizeof(struct pna_rtmon); i++) {
         monitor = &monitors[i];
         /* check if this monitor is pipeline-aware */
@@ -443,21 +449,19 @@ int rtmon_init(void)
             break;
         }
 
-        /* assign to next core on same processor */
-        cpu = (cpu - 2) % cpu_count;
-
         /* ready the queue for this stage */
         pna_queue_init(monitor);
 
         /* create the kernel thread */
         t = kthread_create(monitor->pipe, monitor, 
-                "pna_%s/%d", monitor->name, cpu);
+                "pna_%s/%d", monitor->name, monitor->affinity);
         if (IS_ERR(t)) {
-            pr_err("pna: failed to start rtmon thread on %d\n", cpu);
+            pr_err("pna: failed to start rtmon thread on %d\n",
+                   monitor->affinity);
         }
 
         /* assign to distinct CPU */
-        kthread_bind(t, cpu);
+        kthread_bind(t, monitor->affinity);
         monitor->thread = t;
 
         /* start the kthread */

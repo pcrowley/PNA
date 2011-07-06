@@ -29,11 +29,16 @@
     typedef unsigned long pna_stat_uword;
 #endif /* LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,37) */
 
+#ifdef NSTIME
 struct pna_nstime {
     unsigned long long min;
     unsigned long long max;
     unsigned long long sum;
 };
+# define pna_getnstime(v) getnstimeofday(v)
+#else
+# define pna_getnstime(v)
+#endif /* NSTIME */
 
 /* for performance measurement */
 struct pna_perf {
@@ -44,9 +49,12 @@ struct pna_perf {
     __u32 B_interval[PNA_DIRECTIONS]; /* 8 */
     pna_stat_uword dev_last_rx;
     pna_stat_uword dev_last_fifo;
+    unsigned int contention_miss;
 
+#ifdef NSTIME
     struct pna_nstime flow_ns;
     struct pna_nstime decode_ns;
+#endif /* NSTIME */
 };
 
 DEFINE_PER_CPU(struct pna_perf, perf_data);
@@ -58,7 +66,9 @@ DEFINE_PER_CPU(struct pna_perf, perf_data);
 #endif
 #define PERF_INTERVAL      10
 
+#ifdef NSTIME
 static void pna_nslog(struct timespec *start, struct timespec *stop, struct pna_nstime *ns);
+#endif /* NSTIME */
 static void pna_perflog(struct sk_buff *skb, int dir, struct net_device *dev);
 static int pna_localize(struct pna_flowkey *key, int *direction);
 static int pna_done(struct sk_buff *skb);
@@ -142,9 +152,11 @@ int pna_hook(struct sk_buff *skb, struct net_device *dev,
     struct tcphdr *tcphdr;
     struct udphdr *udphdr;
     int ret, direction;
-
-    struct timespec start, stop;
     struct pna_perf *perf = &get_cpu_var(perf_data);
+
+#ifdef NSTIME
+    struct timespec start, stop;
+#endif /* NSTIME */
     
     /* we don't care about outgoing packets */
     if (skb->pkt_type == PACKET_OUTGOING) {
@@ -161,7 +173,7 @@ int pna_hook(struct sk_buff *skb, struct net_device *dev,
         return NET_RX_DROP;
     }
 
-    getnstimeofday(&start);
+    pna_getnstime(&start);
 	/* make sure the key is all zeros before we start */
 	memset(&key, 0, sizeof(key));
     
@@ -203,8 +215,10 @@ int pna_hook(struct sk_buff *skb, struct net_device *dev,
         /* couldn't localize the IP (neither source nor dest in prefix) */
         return pna_done(skb);
     }
-    getnstimeofday(&stop);
+    pna_getnstime(&stop);
+#ifdef NSTIME
     pna_nslog(&start, &stop, &perf->decode_ns);
+#endif /* NSTIME */
 
     /* log performance data */
     if (pna_perfmon) {
@@ -213,18 +227,21 @@ int pna_hook(struct sk_buff *skb, struct net_device *dev,
 
     /* insert into flow table */
     if (pna_flowmon == true) {
-        getnstimeofday(&start);
+        pna_getnstime(&start);
         ret = flowmon_hook(&key, direction, skb);
-        getnstimeofday(&stop);
+        pna_getnstime(&stop);
         if (ret < 0) {
             /* failed to insert -- cleanup */
+            perf->contention_miss++;
             return pna_done(skb);
         }
+#ifdef NSTIME
         pna_nslog(&start, &stop, &perf->flow_ns);
+#endif /* NSTIME */
 
         /* run real-time hooks */
         if (pna_rtmon == true) {
-            rtmon_hook(&key, direction, skb, (unsigned long)ret);
+            rtmon_hook(key, direction, skb, (unsigned long)ret);
 #ifdef PIPELINE_MODE
             /* if we're running in pipeline mode, don't kill the packet */
             return NET_RX_DROP;
@@ -236,6 +253,7 @@ int pna_hook(struct sk_buff *skb, struct net_device *dev,
     return pna_done(skb);
 }
 
+#ifdef NSTIME
 static void pna_nslog(struct timespec *start, struct timespec *stop, struct pna_nstime *ns)
 {
     unsigned long long ns_diff;
@@ -251,6 +269,7 @@ static void pna_nslog(struct timespec *start, struct timespec *stop, struct pna_
         ns->max = ns_diff;
     }
 }
+#endif /* NSTIME */
 
 /**
  * Performance Monitoring
@@ -299,19 +318,22 @@ static void pna_perflog(struct sk_buff *skb, int dir, struct net_device *dev)
 
         /* report the numbers */
         if (fps_in + fps_out > 1000) {
-            pr_info("pna throughput smpid:%d, "
+            pr_info("pna throughput smpid:%d, contention:%u, "
                     "in:{fps:%u,Mbps:%u,avg:%u}, "
                     "out:{fps:%u,Mbps:%u,avg:%u}\n", smp_processor_id(),
+                    perf->contention_miss,
                     fps_in, Mbps_in, avg_in, fps_out, Mbps_out, avg_out);
 
             frame_count = perf->p_interval[PNA_DIR_OUTBOUND];
             frame_count += perf->p_interval[PNA_DIR_INBOUND];
+#ifdef NSTIME
             pr_info("pna decode time:{min:%llu,avg:%llu,max:%llu}\n",
                     perf->decode_ns.min, perf->decode_ns.sum / frame_count,
                     perf->decode_ns.max);
             pr_info("pna flow time:{min:%llu,avg:%llu,max:%llu}\n",
                     perf->flow_ns.min, perf->flow_ns.sum / frame_count,
                     perf->flow_ns.max);
+#endif /* NSTIME */
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,37)
             /* numbers from the NIC */
@@ -332,12 +354,14 @@ static void pna_perflog(struct sk_buff *skb, int dir, struct net_device *dev)
 #endif /* LINUX_VERSION_CODE */
         }
 
+#ifdef NSTIME
         perf->flow_ns.min = -1;
         perf->flow_ns.sum = 0;
         perf->flow_ns.max = 0;
         perf->decode_ns.min = -1;
         perf->decode_ns.sum = 0;
         perf->decode_ns.max = 0;
+#endif /* NSTIME */
 
         /* set updated counters */
         perf->p_interval[PNA_DIR_INBOUND] = 0;
@@ -346,6 +370,7 @@ static void pna_perflog(struct sk_buff *skb, int dir, struct net_device *dev)
         perf->B_interval[PNA_DIR_OUTBOUND] = 0;
         perf->t_jiffies = msecs_to_jiffies(PERF_INTERVAL*MSEC_PER_SEC);
         perf->t_jiffies += get_jiffies_64();
+        perf->contention_miss = 0;
     }
 
     /* increment packets seen in this interval */

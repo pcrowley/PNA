@@ -165,7 +165,7 @@ extern bool pna_rtmon;
 /*****/
 
 struct pna_pipedata {
-    struct pna_flowkey *key;    /* 8 */
+    struct pna_flowkey key;     /* 16 */
     int direction;              /* 4 */
     struct sk_buff *skb;        /* 8 */
     unsigned long data;         /* 8 */
@@ -211,9 +211,8 @@ struct flowtab_info {
     struct flow_entry *flowtab;
 
     struct mutex read_mutex;
-    int  table_dirty;
     time_t first_sec;
-    int  smp_id;
+    atomic_t  smp_id;
     char iface[PNA_MAX_STR];
     unsigned int nflows;
     unsigned int nflows_missed;
@@ -232,7 +231,7 @@ int flowmon_init(void);
 void flowmon_cleanup(void);
 
 int rtmon_init(void);
-int rtmon_hook(struct pna_flowkey *key, int direction, struct sk_buff *skb,
+int rtmon_hook(struct pna_flowkey key, int direction, struct sk_buff *skb,
                unsigned long data);
 void rtmon_release(void);
 

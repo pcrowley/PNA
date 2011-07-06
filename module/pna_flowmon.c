@@ -78,7 +78,7 @@ static int flowtab_open(struct inode *inode, struct file *filep)
     /* make sure the table was written and not in the last LAG_TIME */
     do_gettimeofday(&now);
     first_sec = info->first_sec + PNA_LAG_TIME;
-    if (!info->table_dirty || first_sec >= now.tv_sec ) {
+    if (atomic_read(&info->smp_id) == -1 || first_sec >= now.tv_sec ) {
         module_put(THIS_MODULE);
         return -EACCES;
     }
@@ -144,9 +144,9 @@ static int flowtab_mmap(struct file *filep, struct vm_area_struct *vma)
 /* clear out all the mflowtable data from a flowtab entry */
 static void flowtab_clean(struct flowtab_info *info)
 {
-    info->table_dirty = 0;
     info->first_sec = 0;
-    info->smp_id = 0;
+    smp_mb();
+    atomic_set(&info->smp_id, -1);
     memset(info->iface, 0, PNA_MAX_STR);
     info->nflows = 0;
     info->nflows_missed = 0;
@@ -155,35 +155,51 @@ static void flowtab_clean(struct flowtab_info *info)
 /* determine which flow table to use */
 static struct flowtab_info *flowtab_get(struct timeval *timeval)
 {
-    int i;
+    int i, tab_idx, smp_id;
     struct flowtab_info *info;
 
-    /* figure out which flow table to use */
-    info = &flowtab_info[get_cpu_var(flowtab_idx)];
+    smp_id = smp_processor_id();
 
-    /* check if table is locked */
+    /* figure out which flow table to use */
+    tab_idx = get_cpu_var(flowtab_idx);
+    info = &flowtab_info[tab_idx];
+
+    /* check if this is our table */
+    smp_mb();
+    if (likely(atomic_read(&info->smp_id) == smp_id &&
+               !mutex_is_locked(&info->read_mutex))) {
+        return info;
+    }
+
+    /* otherwise find a new table */
     i = 0;
-    while (mutex_is_locked(&info->read_mutex) && i < pna_tables) {
+    while (mutex_is_locked(&info->read_mutex) 
+            && atomic_read(&info->smp_id) != -1
+            && i < pna_tables) {
         /* if it is locked try the next table ... */
-        get_cpu_var(flowtab_idx) = (get_cpu_var(flowtab_idx) + 1) % pna_tables;
-        put_cpu_var(flowtab_idx);
-        info = &flowtab_info[get_cpu_var(flowtab_idx)];
+        tab_idx = (tab_idx + 1) % pna_tables;
+        info = &flowtab_info[tab_idx];
         /* don't try a table more than once */
         i++;
     }
     if (i == pna_tables) {
-        pr_warning("pna: all tables are locked\n");
         return NULL;
     }
 
-    /* make sure this table is marked as dirty */
-    // XXX: table_dirty should probably be atomic_t
-    if (info->table_dirty == 0) {
+    /* make sure this table is marked as used (via valid smp_id) */
+    smp_mb();
+    if (atomic_cmpxchg(&info->smp_id, -1, smp_id) == -1) {
         info->first_sec = timeval->tv_sec;
-        info->table_dirty = 1;
-        info->smp_id = smp_processor_id();
         memcpy(info->iface, pna_iface, PNA_MAX_STR);
+        pr_info("smp %d using %d\n", smp_id, tab_idx);
     }
+    else {
+        return NULL;
+    }
+
+    /* set cpu flowtab_idx to the new index */
+    get_cpu_var(flowtab_idx) = tab_idx;
+    put_cpu_var(flowtab_idx);
 
     return info;
 }
@@ -303,6 +319,11 @@ int flowmon_init(void)
         proc_node->uid = 0;
         proc_node->gid = 0;
         proc_node->size = PNA_SZ_FLOW_ENTRIES;
+    }
+
+    /* set first table for each processor */
+    for_each_online_cpu(i) {
+        *per_cpu_ptr(&flowtab_idx, i) = i % pna_tables;
     }
 
     /* get packet arrival timestamps */
