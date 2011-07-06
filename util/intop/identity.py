@@ -72,7 +72,9 @@ def main(args) :
             raw_data = eval(data)
             file_data = PNAParseLogger.unparse(raw_data)
         else :
-            raw_data = PNALogParser.parse(arg)
+            parser = PNALogParser()
+            parser.parse(arg)
+            raw_data = parser.get_flows()
             file_data = PNAParseLogger.unparse(raw_data)
         file = open(arg+'.id', 'w')
         file.write(file_data)

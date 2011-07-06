@@ -15,31 +15,43 @@ class PNALogParser :
                           'bytes-out', 'bytes-in',
                           'begin-time', 'protocol',
                           'first-direction',)
+    record = 'IIHHIIIIIBBxx'
+    record_size = 36
+
+    def __init__(self) :
+        self.clear_log()
+
+    def get_log(self) :
+        return self.log
+
+    def clear_log(self) :
+        self.log = { 'flows': [] }
+
+    def build_flows(self, flow) :
+        self.log['flows'].append(flow)
 
     # read a log file and return the data as a python list
-    @classmethod
-    def parse(cls, file_name) :
-        # read the file into a list
-        file_input = open(file_name, 'r')
-        log_data = file_input.read()
-        file_input.close()
+    def parse(self, file_name, flow_callback=None) :
+        # open the file for reading
+        input = open(file_name, 'r')
+        in_data = input.read()
+        input.close()
+        pos = 0
 
         # read the header data first
-        pos = 0
-        hdr_data = struct.unpack('III', log_data[pos:pos+12])
+        hdr_data = struct.unpack('III', in_data[pos:pos+12])
         pos += 12
-        log = dict(zip(cls.pna_log_hdr_names, hdr_data))
+        self.log = dict(self.log.items() + zip(self.pna_log_hdr_names, hdr_data))
+        if not flow_callback :
+            flow_callback = self.build_flows
 
-        flows = []
-        while pos < len(log_data) :
+        while pos < len(in_data) :
             # read an entry
-            data = struct.unpack('IIHHIIIIIBBxx', log_data[pos:pos+36])
-            pos += 36
-            flow = dict(zip(cls.pna_log_data_names, data))
-            flows.append(flow)
-
-        log['flows'] = flows
-        return log
+            data = struct.unpack(self.record, in_data[pos:pos+self.record_size])
+            pos += self.record_size
+            flow = dict(zip(self.pna_log_data_names, data))
+            flow['end-time'] = self.log['start-time']
+            flow_callback(flow)
 
 def main(argv) :
     if len(argv) < 2 :
@@ -47,8 +59,10 @@ def main(argv) :
         print 'usage: %s <list of files>' % argv[0]
         sys.exit(1)
 
+    parser = PNALogParser()
     for file in argv[1:] :
-        print PNALogParser.parse(file)
+        parser.parse(file)
+    print parser.get_flows()
 
 # start the program
 if __name__ == '__main__' :

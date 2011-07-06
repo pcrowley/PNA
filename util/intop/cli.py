@@ -25,6 +25,9 @@ class CommandLineInterface :
 
         # create the option parser for command line args
         argparse = optparse.OptionParser(usage=usage)
+        argparse.add_option('-s','--stream', dest='stream', action='store_true',
+                            help='stream the flows directly to stdout, forgoes any filtering and formatting',
+                            default=False)
         argparse.add_option('-f','--format', dest='format', metavar='FORMAT',
                             help='set output format to FORMAT',
                             default='python')
@@ -63,6 +66,10 @@ class CommandLineInterface :
             argparse.print_help()
             sys.exit(1)
 
+        if options.stream :
+            self.stream_parser(files)
+            sys.exit(0)
+
         # TODO: configure model with command line args
         # options.sort_key
         # options.threshold
@@ -87,6 +94,29 @@ class CommandLineInterface :
         data = self.model.get_data(raw=True)
         print_format(data)
 
+    def stream_parser(self, files) :
+        parser = PNALogParser()
+        for file in files :
+            parser.parse(file, self.stream_printer)
+
+    def stream_printer(self, flow) :
+        time_fmt = '%Y%m%d.%H:%M:%S'
+        src_ip = self.int2ip(flow['local-ip'])
+        dst_ip = self.int2ip(flow['remote-ip'])
+
+        proto = str(flow['protocol'])
+        start = time.strftime(time_fmt, time.localtime(flow['begin-time']))
+        end = time.strftime(time_fmt, time.localtime(flow['end-time']))
+        src_pt = str(flow['local-port'])
+        dst_pt = str(flow['remote-port'])
+        inpkts = str(flow['packets-in'])
+        outpkts = str(flow['packets-out'])
+        inbytes = str(flow['bytes-in'])
+        outbytes = str(flow['bytes-out'])
+        entry = (start, end, src_ip, src_pt, dst_ip, dst_pt,
+                proto, inpkts, outpkts, inbytes, outbytes)
+        print '\t'.join(entry)
+
     # dump the data in a the raw python format
     def python_format(self, data) :
         print data
@@ -105,7 +135,6 @@ class CommandLineInterface :
 
         display = ('Start', 'End', 'Sif', 'SrcIPaddress', 'SrcP', 'Dif',
                    'DstIPaddress', 'DstP', 'P', 'Fl', 'Pkts', 'Octets')
-        protocols = { 'tcp':'6', 'udp':'17' } 
 
         # header
         print fmt % display

@@ -55,6 +55,7 @@ class PNAModel :
         self.settings = {'sort-key':PNADefaults.sort_key,
                          'threshold':PNADefaults.threshold,
                          'filters':PNADefaults.filters,}
+        self.parser = PNALogParser()
         self.all_data = [ ]
         self.cache = {'key':None,'threshold':None,'filters':None,'valid':False}
 
@@ -79,7 +80,11 @@ class PNAModel :
                 filter_bits = int(f_value[1])
                 mask = 0
                 for i in range(32) :
-                    mask = (mask << 1) + (1 if filter_bits > i else 0)
+                    if filter_bits > i :
+                        mbit = 1
+                    else :
+                        mbit = 0
+                    mask = (mask << 1) + mbit
                 if (value & mask) == (filter_ip & mask) :
                     return False
                 else :
@@ -107,13 +112,21 @@ class PNAModel :
             v_dt = datetime.utcfromtimestamp(value)
 
             if f_name == 'begin-time' :
-                # fill any unset parameters ("rounding down")
-                year = int(year) if year != None else dt_date.min.year
-                month = int(month) if month != None else dt_date.min.month
-                day = int(day) if day != None else dt_date.min.day
-                hour = int(hour) if hour != None else dt_time.min.hour
-                min = int(min) if min != None else dt_time.min.minute
-                sec = int(sec) if sec != None else dt_time.min.second
+                # fill parameters ("rounding down")
+                year = dt_date.min.year
+                month = dt_date.min.month
+                day = dt_date.min.day
+                hour = dt_time.min.hour
+                min = dt_time.min.minute
+                sec = dt_time.min.second
+
+                # fill prarmeters that have been set
+                if year != None : year = int(year)
+                if month != None : month = int(month)
+                if day != None : day = int(day)
+                if hour != None : hour = int(hour)
+                if min != None : min = int(min)
+                if sec != None : sec = int(sec)
                 # datetime-ify the filter value
                 f_dt = datetime(year,month,day,hour,min,sec)
                 # check the values
@@ -121,13 +134,21 @@ class PNAModel :
                     # 'begin-time' is bigger than input value, so drop
                     return True
             elif f_name == 'end-time' :
-                # fill any unset parameters ("rounding up")
-                year = int(year) if year != None else dt_date.max.year
-                month = int(month) if month != None else dt_date.max.month
-                day = int(day) if day != None else dt_date.max.day
-                hour = int(hour) if hour != None else dt_time.max.hour
-                min = int(min) if min != None else dt_time.min.minute
-                sec = int(sec) if sec != None else dt_time.max.second
+                # fill parameters ("rounding up")
+                year = dt_date.max.year
+                month = dt_date.max.month
+                day = dt_date.max.day
+                hour = dt_time.max.hour
+                min = dt_time.min.minute
+                sec = dt_time.max.second
+
+                # fill prarmeters that have been set
+                if year != None : year = int(year)
+                if month != None : month = int(month)
+                if day != None : day = int(day)
+                if hour != None : hour = int(hour)
+                if min != None : min = int(min)
+                if sec != None : sec = int(sec)
                 # datetime-ify the filter value
                 f_dt = datetime(year,month,day,hour,min,sec)
                 # check the values
@@ -197,8 +218,9 @@ class PNAModel :
 
     # should parse a file and add it to the all_data structure
     def add_file(self, file_name) :
-        file_data = PNALogParser.parse(file_name)
-        self.all_data.append(file_data)
+        self.parser.clear_log()
+        self.parser.parse(file_name)
+        self.all_data.append(self.parser.get_log())
         self.cache['valid'] = False
 
     # derives a all_data list to a local->remote list
