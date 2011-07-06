@@ -17,7 +17,7 @@
 #define DEFAULT_INTERVAL 10
 #define LOG_FILE_FORMAT  "%s/pna-%%Y%%m%%d%%H%%M%%S-%s.log"
 #define MAX_STR          1024
-#define BUF_SIZE         (1 * 1024 * 1024)
+#define BUF_SIZE         (2 * 1024 * 1024)
 #define USECS_PER_SEC    1000000
 
 /* simple null key */
@@ -81,14 +81,14 @@ void dump_table(void *table_base, char *out_file)
         return;
     }
     fchmod(fd, S_IRUSR | S_IRGRP | S_IROTH);
-    lseek(fd, sizeof(struct pna_log_hdr), SEEK_SET);
+    lseek(fd, sizeof(*log_header), SEEK_SET);
 
     buf_idx = 0;
     nflows = 0;
 
 	flow_table = (struct flow_entry *)table_base;
 
-    /* now we loop through the tables ... */
+    /* now we loop through the table ... */
     for (flow_idx = 0 ; flow_idx < PNA_FLOW_ENTRIES; flow_idx++ ) {
         /* get the first level entry */
         flow = &flow_table[flow_idx];
@@ -100,7 +100,7 @@ void dump_table(void *table_base, char *out_file)
 
 		/* set up monitor buffer */
 		log = (struct pna_log_entry *)&buf[buf_idx];
-		buf_idx += sizeof(struct pna_log_entry);
+		buf_idx += sizeof(*log);
 
 		/* copy the flow entry */
 		log->local_ip = flow->key.local_ip;
@@ -119,7 +119,7 @@ void dump_table(void *table_base, char *out_file)
 		nflows++;
 
 		/* check if we can fit another entry */
-		if (buf_idx + sizeof(struct pna_log_entry) >= BUF_SIZE) {
+		if (buf_idx + sizeof(*log) >= BUF_SIZE) {
 			/* flush the buffer */
 			buf_idx = buf_flush(fd, buf, buf_idx);
 		}
@@ -168,6 +168,7 @@ int main(int argc, char **argv)
     struct timeval start, stop, diff;
     unsigned int remainder, frac;
     struct tm *start_tm;
+    int sleep_time;
     char *log_dir = DEFAULT_LOG_DIR;
     int interval = DEFAULT_INTERVAL;
 
@@ -214,16 +215,18 @@ int main(int argc, char **argv)
         /* sleep for interval (correct for processing time) */
         gettimeofday(&stop, NULL);
         timersub(&stop, &start, &diff);
+        sleep_time = interval - diff.tv_sec - frac/USECS_PER_SEC;
         /* show processing time if bigger than 100 microseconds */
         if (verbose && diff.tv_usec > 100) {
-            printf("processed in %d.%06d seconds (sleeping for %u seconds)\n",
-                    diff.tv_sec, diff.tv_usec,
-                    interval - diff.tv_sec - frac/USECS_PER_SEC);
+            printf("processed in %d.%06d seconds (sleeping for %d seconds)\n",
+                    diff.tv_sec, diff.tv_usec, sleep_time);
         }
         fflush(stdout); fflush(stderr);
-        remainder = sleep(interval - diff.tv_sec - frac/USECS_PER_SEC);
-        if (remainder != 0) {
-            continue;
+        if (sleep_time > 0) {
+            remainder = sleep(sleep_time);
+            if (remainder != 0) {
+                continue;
+            }
         }
 
         /* detect accumulating slippage */
@@ -247,7 +250,7 @@ int main(int argc, char **argv)
         }
 
         /* mmap() for access */
-        table_base = mmap(NULL, size, PROT_READ, MAP_SHARED, fd, 0);
+        table_base = mmap(NULL, size, PROT_READ, MAP_SHARED | MAP_POPULATE | MAP_NONBLOCK, fd, 0);
         if (table_base == MAP_FAILED) {
             perror("mmap");
             close(fd);
