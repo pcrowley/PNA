@@ -15,6 +15,10 @@ PNA_PREFIX="192.168.0.0"   # IP Prefix to watch
 PNA_MASK="255.255.0.0"     # Network Mask to watch
 PNA_LOGDIR="${BASE}/logs"  # Directory to store log files
 
+# Advanced PNA configuration
+PNA_FLOWPROCS=(7 5)        # Processors for flow processing (not real-time)
+PNA_MONPROCS=(0 2 4 6)     # Processors for userspace routines
+
 # # # # # # # # # # # # # # # # # # # # # # # # # #
 #  Nothing below this point should need to change #
 # # # # # # # # # # # # # # # # # # # # # # # # # #
@@ -41,6 +45,7 @@ ip2hex () {
 start () {
     PARMS=$1
 
+    # don't want irqbalance messing with interrupts
     service irqbalance stop
 
     echo -n $"Starting $SERVICE: "
@@ -57,19 +62,23 @@ start () {
     ${IFCONFIG} ${PNA_IFACE} up
     ${IFCONFIG} ${PNA_IFACE} promisc
 
-    # Set CPU <-> IRQ affinity for PNA_IFACE
-    NPROCS=$(grep processor /proc/cpuinfo | wc -l)
-    AFFINITY=$(printf "%x" $((1 << ($NPROCS - 1))))
+    # Set CPU <-> IRQ affinity for PNA_IFACE for flow monitors
+    IRQS=$(awk -F: '/eth0[^\n]/{ print $1 }' /proc/interrupts)
+    NQUEUES=$(echo $IRQS | wc -l)
 
-    
-    for f in /proc/irq/*/${PNA_IFACE}*/../smp_affinity ; do
-        echo ${AFFINITY} > $f
+    echo
+    for irq in $IRQS ; do
+        affinity=$((1 << ${PNA_FLOWPROCS[$irq%${#PNA_FLOWPROCS[@]}]}))
+        affinity=$(printf "%x" $affinity)
+        name=$(basename  /proc/irq/$irq/${PNA_IFACE}*)
+        echo -e "\t$name ($irq) affinity $affinity"
+        echo $affinity > /proc/irq/$irq/smp_affinity
     done
 
     # load the module
-    ARGS="pna_iface=$PNA_IFACE"
+    ARGS="$PARMS pna_iface=$PNA_IFACE"
     ARGS="$ARGS pna_prefix=$PNA_PREFIX"
-    ARGS="$ARGS pna_mask=$PNA_MASK $PARMS"
+    ARGS="$ARGS pna_mask=$PNA_MASK"
     ${INSMOD} ${PNA_MODULE} $ARGS
     RETVAL=$?
 
@@ -82,11 +91,17 @@ start () {
 
     # start the logging monitor(s)
     PID_LIST=""
-    rm -f verbose.log
+    rm -f verbose-*.log
+    i=0
     for f in /proc/${SERVICE}/*; do
         ARGS="-v -d $PNA_LOGDIR"
-        nohup ${PNA_MONITOR} $ARGS $f >> verbose.log 2>&1 &
-        PID_LIST="$PID_LIST $!"
+        nohup ${PNA_MONITOR} $ARGS $f >> verbose-$(basename $f).log 2>&1 &
+        PID=$!
+        affinity=${PNA_MONPROCS[$i%${#PNA_MONPROCS[@]}]}
+        i=$(($i+1))
+        /bin/taskset -cp $affinity $PID > /dev/null 2>&1
+        echo -e "\tuser_monitor ($PID) affinity $(/bin/taskset -p $PID | awk '{print $6}')"
+        PID_LIST="$PID_LIST $PID"
         RETVAL=$(($RETVAL+$?))
     done
 
