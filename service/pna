@@ -10,7 +10,7 @@
 
 # PNA configuration
 BASE="/home/mjschultz/pna" # Base directory for PNA module
-PNA_IFACE="eth0"           # Interface for PNA to listen on
+PNA_IFACE="eth0,eth1"           # Interface for PNA to listen on
 PNA_PREFIX="192.168.0.0"   # IP Prefix to watch
 PNA_MASK="255.255.0.0"     # Network Mask to watch
 PNA_LOGDIR="${BASE}/logs"  # Directory to store log files
@@ -58,25 +58,29 @@ start () {
     PNA_PREFIX=$(ip2hex "$PNA_PREFIX")
     PNA_MASK=$(ip2hex "$PNA_MASK")
 
-    # Make sure PNA interface is up
-    ${IFCONFIG} ${PNA_IFACE} up
-    ${IFCONFIG} ${PNA_IFACE} promisc
-
-    # Set CPU <-> IRQ affinity for PNA_IFACE for flow monitors
-    IRQS=$(awk -F: '/eth0[^\n]/{ print $1 }' /proc/interrupts)
-    NQUEUES=$(echo $IRQS | wc -l)
-
+    # Make sure PNA interface(s) are up
     echo
-    for irq in $IRQS ; do
-        affinity=$((1 << ${PNA_FLOWPROCS[$irq%${#PNA_FLOWPROCS[@]}]}))
-        affinity=$(printf "%x" $affinity)
-        name=$(basename  /proc/irq/$irq/${PNA_IFACE}*)
-        echo -e "\t$name ($irq) affinity $affinity"
-        echo $affinity > /proc/irq/$irq/smp_affinity
+    for iface in ${PNA_IFACE/,/ } ; do
+        ${IFCONFIG} ${iface} up
+        ${IFCONFIG} ${iface} promisc
+
+        # Set CPU <-> IRQ affinity for iface for flow monitors
+        IRQS=$(awk -F: '/'${iface}'[^\n]/{ print $1 }' /proc/interrupts)
+        if [ -z "$IRQS" ] ; then
+            IRQS=$(awk -F: '/'${iface}'/{ print $1 }' /proc/interrupts)
+        fi
+
+        for irq in $IRQS ; do
+            affinity=$((1 << ${PNA_FLOWPROCS[$irq%${#PNA_FLOWPROCS[@]}]}))
+            affinity=$(printf "%x" $affinity)
+            name=$(basename  /proc/irq/$irq/${iface}*)
+            echo -e "\t$name ($irq) affinity $affinity"
+            echo $affinity > /proc/irq/$irq/smp_affinity
+        done
     done
 
     # load the module
-    ARGS="$PARMS pna_iface=$PNA_IFACE"
+    ARGS="$PARMS pna_iface=\"$PNA_IFACE\""
     ARGS="$ARGS pna_prefix=$PNA_PREFIX"
     ARGS="$ARGS pna_mask=$PNA_MASK"
     ${INSMOD} ${PNA_MODULE} $ARGS
@@ -84,7 +88,7 @@ start () {
 
     # log the current interrupt counts
     date +%s.%N >> irq_count.start
-    grep ${PNA_IFACE} /proc/interrupts >> irq_count.start
+    grep "\(${PNA_IFACE/,/\|}\)" /proc/interrupts >> irq_count.start
 
     # make sure we have some place to save log files
     mkdir -p "$PNA_LOGDIR"
@@ -131,7 +135,7 @@ stop () {
 
     # log the current interrupt counts
     date +%s.%N >> irq_count.stop
-    grep ${PNA_IFACE} /proc/interrupts >> irq_count.stop
+    grep "\(${PNA_IFACE/,/\|}\)" /proc/interrupts >> irq_count.stop
 
     # in theory I should remove entry from cron...
 
@@ -142,13 +146,15 @@ stop () {
     ${RMMOD} ${PNA_MODULE}
     RETVAL=$?
 
-    # unset CPU affinities
-    for f in /proc/irq/*/${PNA_IFACE}*/../smp_affinity ; do
-        cat /proc/irq/default_smp_affinity > $f
-    done
+    for iface in ${PNA_IFACE/,/ } ; do
+        # unset CPU affinities
+        for f in /proc/irq/*/${iface}*/../smp_affinity ; do
+            cat /proc/irq/default_smp_affinity > $f
+        done
 
-    # Take down PNA interface
-    ${IFCONFIG} ${PNA_IFACE} down
+        # Take down PNA interface
+        ${IFCONFIG} ${iface} down
+    done
 
     # End with script-y stuff
     [ $RETVAL = 0 ] && rm -f /var/lock/subsys/${SERVICE}
