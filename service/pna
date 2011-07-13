@@ -10,7 +10,7 @@
 
 # PNA configuration
 BASE="/home/mjschultz/pna" # Base directory for PNA module
-PNA_IFACE="eth0,eth1"           # Interface for PNA to listen on
+PNA_IFACE="eth0"           # Interface for PNA to listen on
 PNA_PREFIX="192.168.0.0"   # IP Prefix to watch
 PNA_MASK="255.255.0.0"     # Network Mask to watch
 PNA_LOGDIR="${BASE}/logs"  # Directory to store log files

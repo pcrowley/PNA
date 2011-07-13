@@ -228,7 +228,6 @@ struct flowtab_info {
     struct mutex read_mutex;
     time_t first_sec;
     atomic_t  smp_id;
-    char iface[PNA_MAX_STR];
     unsigned int nflows;
     unsigned int nflows_missed;
     unsigned int probes[PNA_TABLE_TRIES];

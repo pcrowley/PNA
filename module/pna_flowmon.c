@@ -163,7 +163,6 @@ static void flowtab_clean(struct flowtab_info *info)
     info->first_sec = 0;
     smp_mb();
     atomic_set(&info->smp_id, -1);
-    memset(info->iface, 0, PNA_MAX_STR);
     info->nflows = 0;
     info->nflows_missed = 0;
 }
@@ -206,7 +205,6 @@ static struct flowtab_info *flowtab_get(struct timeval *timeval)
     smp_mb();
     if (atomic_cmpxchg(&info->smp_id, -1, smp_id) == -1) {
         info->first_sec = timeval->tv_sec;
-        memcpy(info->iface, pna_iface, PNA_MAX_STR);
         pr_info("smp %d using %d\n", smp_id, tab_idx);
     }
     else {
