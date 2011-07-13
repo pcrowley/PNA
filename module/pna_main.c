@@ -28,8 +28,7 @@
 #include <linux/mutex.h>
 #include <linux/proc_fs.h>
 #include <linux/netdevice.h>
-#include <linux/netfilter.h>
-#include <linux/netfilter_ipv4.h>
+#include <linux/if.h>
 
 #include <linux/jiffies.h>
 
@@ -75,10 +74,12 @@ static int __init pna_init(void);
 static void pna_cleanup(void);
 
 /* define a new packet type to hook on */
-static struct packet_type pna_packet_type = {
-    .type = htons(ETH_P_ALL),
-    .func = pna_hook,
-    .dev = NULL,
+#define PNA_MAXIF 4
+static struct packet_type pna_packet_type[PNA_MAXIF] = {
+    { .type = htons(ETH_P_ALL), .func = pna_hook, .dev = NULL, },
+    { .type = htons(ETH_P_ALL), .func = pna_hook, .dev = NULL, },
+    { .type = htons(ETH_P_ALL), .func = pna_hook, .dev = NULL, },
+    { .type = htons(ETH_P_ALL), .func = pna_hook, .dev = NULL, },
 };
 
 /* general non-kernel hash function for double hashing */
@@ -323,6 +324,8 @@ static void pna_perflog(struct sk_buff *skb, int dir, struct net_device *dev)
 /* Initialization hook */
 int __init pna_init(void)
 {
+    char *next = pna_iface;
+    int i;
     int ret = 0;
 
     /* set up the flow table(s) */
@@ -343,10 +346,22 @@ int __init pna_init(void)
     }
 
     /* everything is set up, register the packet hook */
-    pna_packet_type.dev = dev_get_by_name(&init_net, pna_iface);
-    dev_add_pack(&pna_packet_type);
+    for (i = 0; (i < PNA_MAXIF) && (next != NULL); i++) {
+        next = strnchr(pna_iface, IFNAMSIZ, ',');
+        if (NULL != next) {
+            *next = '\0';
+        }
+        pr_info("pna: capturing on %s", pna_iface);
+        pna_packet_type[i].dev = dev_get_by_name(&init_net, pna_iface);
+        dev_add_pack(&pna_packet_type[i]);
+        pna_iface = next + 1;
+    }
 
-    pr_info("pna: module is initialized\n");
+#ifdef PIPELINE_MODE
+    next = "(in pipeline mode)";
+#endif /* PIPELINE_MODE */
+
+    pr_info("pna: module is initialized %s\n", next);
 
     return ret;
 }
@@ -354,7 +369,12 @@ int __init pna_init(void)
 /* Destruction hook */
 void pna_cleanup(void)
 {
-    dev_remove_pack(&pna_packet_type);
+    int i;
+
+    for (i = 0 ; (i < PNA_MAXIF) && (pna_packet_type[i].dev != NULL); i++) {
+        dev_remove_pack(&pna_packet_type[i]);
+        pr_info("pna: released %s\n", pna_packet_type[i].dev->name);
+    }
     rtmon_release();
     pna_alert_cleanup();
     flowmon_cleanup();

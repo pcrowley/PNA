@@ -163,7 +163,6 @@ static void flowtab_clean(struct flowtab_info *info)
     info->table_dirty = 0;
     info->first_sec = 0;
     info->smp_id = 0;
-    memset(info->iface, 0, PNA_MAX_STR);
     info->nflows = 0;
     info->nflows_missed = 0;
 }
@@ -198,7 +197,6 @@ static struct flowtab_info *flowtab_get(struct timeval *timeval)
         info->first_sec = timeval->tv_sec;
         info->table_dirty = 1;
         info->smp_id = smp_processor_id();
-        memcpy(info->iface, pna_iface, PNA_MAX_STR);
     }
 
     return info;
