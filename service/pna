@@ -8,28 +8,26 @@
 #  description: Startup/shutdown script for the Passive Network \
 #               Appliacte (PNA).
 
-# PNA configuration
-BASE="/home/mjschultz/pna" # Base directory for PNA module
-PNA_IFACE="eth0,eth1"           # Interface for PNA to listen on
-PNA_PREFIX="192.168.0.0"   # IP Prefix to watch
-PNA_MASK="255.255.0.0"     # Network Mask to watch
-PNA_LOGDIR="${BASE}/logs"  # Directory to store log files
-
-# Advanced PNA configuration
-PNA_FLOWPROCS=(7)        # Processors for flow processing (not real-time)
-#PNA_MONPROCS=(0 2 4 6)     # Processors for userspace routines
+##
+# Configuration settings are in service/config
+##
 
 # # # # # # # # # # # # # # # # # # # # # # # # # #
 #  Nothing below this point should need to change #
 # # # # # # # # # # # # # # # # # # # # # # # # # #
 SERVICE=pna
 
-# Source function library
-. /etc/init.d/functions
+SCRIPT_DIR=$PWD/$(dirname $0)
 
-PNA_MODULE="${BASE}/module/pna.ko"      # Name of kernel module
-PNA_MONITOR="${BASE}/user/user_monitor" # Name of logging program
-PNA_ALERTS="${BASE}/user/user_alerts"   # Name of alerts program
+# Fetch the configuration
+source $SCRIPT_DIR/config
+
+# Source function library
+source /etc/init.d/functions
+
+PNA_MODULE="${PNA_BASE}/module/pna.ko"      # Name of kernel module
+PNA_MONITOR="${PNA_BASE}/user/user_monitor" # Name of logging program
+PNA_ALERTS="${PNA_BASE}/user/user_alerts"   # Name of alerts program
 
 # Program Locations
 IFCONFIG="/sbin/ifconfig"
