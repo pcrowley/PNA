@@ -33,7 +33,7 @@ static void rtmon_clean(unsigned long data);
  */
 struct pna_rtmon {
     int (*init)(void);
-    int (*hook)(struct pna_flowkey *, int, struct sk_buff *, unsigned long *);
+    int (*hook)(struct pna_flow_key *, int, struct sk_buff *, unsigned long *);
     void (*clean)(void);
     void (*release)(void);
 };
@@ -65,7 +65,7 @@ static void rtmon_clean(unsigned long data)
 }
 
 /* hook from main on packet to start real-time monitoring */
-int rtmon_hook(struct pna_flowkey *key, int direction, struct sk_buff *skb,
+int rtmon_hook(struct pna_flow_key *key, int direction, struct sk_buff *skb,
                unsigned long data)
 {
     int ret;

@@ -43,7 +43,7 @@ static void flowtab_clean(struct flowtab_info *info);
 
 /* kernel functions for flow monitoring */
 static struct flowtab_info *flowtab_get(struct timeval *timeval);
-static int flowkey_match(struct pna_flowkey *key_a, struct pna_flowkey *key_b);
+static int flowkey_match(struct pna_flow_key *key_a, struct pna_flow_key *key_b);
 int flowmon_init(void);
 void flowmon_cleanup(void);
 
@@ -62,7 +62,7 @@ static const struct file_operations flowtab_fops = {
 };
 
 /* simple null key */
-static struct pna_flowkey null_key = {
+static struct pna_flow_key null_key = {
     .l3_protocol = 0,
     .l4_protocol = 0,
     .local_ip = 0,
@@ -125,7 +125,7 @@ static int flowtab_release(struct inode *inode, struct file *filep)
     }
 
     /* zero out the table */
-    memset(info->table_base, 0, PNA_SZ_FLOW_ENTRIES);
+    memset(info->table_base, 0, PNA_SZ_KEYDATA_ENTRIES);
 
 #if 0
     for (i = 0; i < PNA_TABLE_TRIES; i++) {
@@ -203,15 +203,16 @@ static struct flowtab_info *flowtab_get(struct timeval *timeval)
 }
 
 /* check if flow keys match */
-static int flowkey_match(struct pna_flowkey *key_a, struct pna_flowkey *key_b)
+static int flowkey_match(struct pna_flow_key *key_a, struct pna_flow_key *key_b)
 {
     return !memcmp(key_a, key_b, sizeof(*key_a));
 }
 
 /* Insert/Update this flow */
-int flowmon_hook(struct pna_flowkey *key, int direction, struct sk_buff *skb)
+int flowmon_hook(struct pna_flow_key *key, int direction, struct sk_buff *skb)
 {
-    struct flow_entry *flow;
+    struct pna_flow_key *data_key;
+    struct pna_flow_data *data;
     struct timeval timeval;
     struct flowtab_info *info;
     unsigned int i, hash_0, hash;
@@ -237,25 +238,27 @@ int flowmon_hook(struct pna_flowkey *key, int direction, struct sk_buff *skb)
         info->probes[i]++;
 
         /* strt testing the waters */
-        flow = &(info->flowtab[hash]);
+        data_key = &(info->flowkeys[hash]);
 
         /* check for match -- update flow entry */
-        if (flowkey_match(&flow->key, key)) {
-            flow->data.bytes[direction] += skb->len + ETH_OVERHEAD;
-            flow->data.packets[direction] += 1;
+        if (flowkey_match(data_key, key)) {
+            data = &(info->flowdata[hash]);
+            data->bytes[direction] += skb->len + ETH_OVERHEAD;
+            data->packets[direction] += 1;
             return 0;
         }
 
         /* check for free spot -- insert flow entry */
-        if (flowkey_match(&flow->key, &null_key)) {
+        if (flowkey_match(data_key, &null_key)) {
             /* copy over the flow key for this entry */
-            memcpy(&flow->key, key, sizeof(*key));
+            memcpy(data_key, key, sizeof(*key));
 
             /* port specific information */
-            flow->data.bytes[direction] += skb->len + ETH_OVERHEAD;
-            flow->data.packets[direction]++;
-            flow->data.first_tstamp = timeval.tv_sec;
-            flow->data.first_dir = direction;
+            data = &(info->flowdata[hash]);
+            data->bytes[direction] += skb->len + ETH_OVERHEAD;
+            data->packets[direction]++;
+            data->first_tstamp = timeval.tv_sec;
+            data->first_dir = direction;
 
             info->nflows++;
             return 1;
@@ -290,15 +293,17 @@ int flowmon_init(void)
     /* configure each table for use */
     for (i = 0; i < pna_tables; i++) {
         info = &flowtab_info[i];
-        info->table_base = vmalloc_user(PNA_SZ_FLOW_ENTRIES);
+        /* allocate for both flowkets and flowdata */
+        info->table_base = vmalloc_user(PNA_SZ_KEYDATA_ENTRIES);
         if (!info->table_base) {
             pr_err("insufficient memory for %d/%d tables (%lu bytes)\n",
-                    i, pna_tables, (pna_tables * PNA_SZ_FLOW_ENTRIES));
+                    i, pna_tables, (pna_tables * PNA_SZ_KEYDATA_ENTRIES));
             flowmon_cleanup();
             return -ENOMEM;
         }
         /* set up table pointers */
-        info->flowtab = info->table_base;
+        info->flowkeys = info->table_base+0;
+        info->flowdata = info->table_base+PNA_SZ_KEY_ENTRIES;
         flowtab_clean(info);
 
         /* initialize the read_mutec */
@@ -316,7 +321,7 @@ int flowmon_init(void)
         proc_node->mode = S_IFREG | S_IRUGO | S_IWUSR | S_IWGRP;
         proc_node->uid = 0;
         proc_node->gid = 0;
-        proc_node->size = PNA_SZ_FLOW_ENTRIES;
+        proc_node->size = PNA_SZ_KEYDATA_ENTRIES;
     }
 
     /* get packet arrival timestamps */

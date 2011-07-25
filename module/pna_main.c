@@ -38,7 +38,7 @@
 #include "pna.h"
 
 static void pna_perflog(struct sk_buff *skb, int dir);
-static int pna_localize(struct pna_flowkey *key, int *direction);
+static int pna_localize(struct pna_flow_key *key, int *direction);
 static int pna_done(struct sk_buff *skb);
 int pna_hook(struct sk_buff *skb, struct net_device *dev,
         struct packet_type *pt, struct net_device *orig_dev);
@@ -100,7 +100,7 @@ unsigned int pna_hash(unsigned int key, int bits)
  * Receive Packet Hook (and helpers)
  */
 /* make sure the local and remote values are correct in the key */
-static int pna_localize(struct pna_flowkey *key, int *direction)
+static int pna_localize(struct pna_flow_key *key, int *direction)
 {
     unsigned int temp;
 
@@ -144,7 +144,7 @@ static int pna_done(struct sk_buff *skb)
 int pna_hook(struct sk_buff *skb, struct net_device *dev,
         struct packet_type *pt, struct net_device *orig_dev)
 {
-    struct pna_flowkey key;
+    struct pna_flow_key key;
     struct ethhdr *ethhdr;
     struct iphdr *iphdr;
     struct tcphdr *tcphdr;
