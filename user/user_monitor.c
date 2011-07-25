@@ -104,8 +104,9 @@ void dump_table(void *table_base, char *out_file)
     buf_idx = 0;
     nflows = 0;
 
-    flowkeys = (struct pna_flow_key *)table_base+0;
-    flowdata = (struct pna_flow_data *)table_base+PNA_SZ_KEY_ENTRIES;
+    flowkeys = (struct pna_flow_key *)(table_base+0);
+    flowdata = (struct pna_flow_data *)(table_base+PNA_SZ_KEY_ENTRIES);
+    printf("base@0x%llx ; keys@0x%llx ; data@0x%llx\n", table_base, flowkeys, flowdata);
 
     /* now we loop through the tables ... */
     for (flow_idx = 0 ; flow_idx < PNA_FLOW_ENTRIES; flow_idx++ ) {
