@@ -17,10 +17,15 @@
 # # # # # # # # # # # # # # # # # # # # # # # # # #
 SERVICE=pna
 
-SCRIPT_DIR=$PWD/$(dirname $0)
+SCRIPT_DIR=$(readlink -m $PWD/$(dirname $0))
 
 # Fetch the configuration
-source $SCRIPT_DIR/config
+if [ -e $SCRIPT_DIR/config ] ; then
+    source $SCRIPT_DIR/config
+else
+    echo "Missing configuration file ($SCRIPT_DIR/config)" >&2
+    exit 1
+fi
 
 # Source function library
 source /etc/init.d/functions
