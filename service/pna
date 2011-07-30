@@ -8,24 +8,31 @@
 #  description: Startup/shutdown script for the Passive Network \
 #               Appliacte (PNA).
 
-# PNA configuration
-BASE="/home/mjschultz/pna" # Base directory for PNA module
-PNA_IFACE="eth0"           # Interface for PNA to listen on
-PNA_PREFIX="192.168.0.0"   # IP Prefix to watch
-PNA_MASK="255.255.0.0"     # Network Mask to watch
-PNA_LOGDIR="${BASE}/logs"  # Directory to store log files
+##
+# Configuration settings are in service/config
+##
 
 # # # # # # # # # # # # # # # # # # # # # # # # # #
 #  Nothing below this point should need to change #
 # # # # # # # # # # # # # # # # # # # # # # # # # #
 SERVICE=pna
 
-# Source function library
-. /etc/init.d/functions
+SCRIPT_DIR=$(readlink -m $PWD/$(dirname $0))
 
-PNA_MODULE="${BASE}/module/pna.ko"      # Name of kernel module
-PNA_MONITOR="${BASE}/user/user_monitor" # Name of logging program
-PNA_ALERTS="${BASE}/user/user_alerts"   # Name of alerts program
+# Fetch the configuration
+if [ -e $SCRIPT_DIR/config ] ; then
+    source $SCRIPT_DIR/config
+else
+    echo "Missing configuration file ($SCRIPT_DIR/config)" >&2
+    exit 1
+fi
+
+# Source function library
+source /etc/init.d/functions
+
+PNA_MODULE="${PNA_BASE}/module/pna.ko"      # Name of kernel module
+PNA_MONITOR="${PNA_BASE}/user/user_monitor" # Name of logging program
+PNA_ALERTS="${PNA_BASE}/user/user_alerts"   # Name of alerts program
 
 # Program Locations
 IFCONFIG="/sbin/ifconfig"
@@ -51,39 +58,57 @@ start () {
     PNA_PREFIX=$(ip2hex "$PNA_PREFIX")
     PNA_MASK=$(ip2hex "$PNA_MASK")
 
-    # Make sure PNA interface is up
-    ${IFCONFIG} ${PNA_IFACE} up
-    ${IFCONFIG} ${PNA_IFACE} promisc
+    # Make sure PNA interface(s) are up
+    echo
+    for iface in ${PNA_IFACE/,/ } ; do
+        ${IFCONFIG} ${iface} up
+        ${IFCONFIG} ${iface} promisc
 
-    # Set CPU <-> IRQ affinity for PNA_IFACE
-    NPROCS=$(grep processor /proc/cpuinfo | wc -l)
-    AFFINITY=$(printf "%x" $((1 << ($NPROCS - 1))))
+        # Set CPU <-> IRQ affinity for iface for flow monitors
+        IRQS=$(awk -F: '/'${iface}'[^\n]/{ print $1 }' /proc/interrupts)
+        if [ -z "$IRQS" ] ; then
+            IRQS=$(awk -F: '/'${iface}'/{ print $1 }' /proc/interrupts)
+        fi
 
-    
-    for f in /proc/irq/*/${PNA_IFACE}*/../smp_affinity ; do
-        echo ${AFFINITY} > $f
+        for irq in $IRQS ; do
+            affinity=$((1 << ${PNA_FLOWPROCS[$irq%${#PNA_FLOWPROCS[@]}]}))
+            affinity=$(printf "%x" $affinity)
+            name=$(basename  /proc/irq/$irq/${iface}*)
+            echo -e "\t$name ($irq) affinity $affinity"
+            echo $affinity > /proc/irq/$irq/smp_affinity
+        done
     done
 
     # load the module
-    ARGS="pna_iface=$PNA_IFACE"
+    ARGS="$PARMS pna_iface=\"$PNA_IFACE\""
     ARGS="$ARGS pna_prefix=$PNA_PREFIX"
-    ARGS="$ARGS pna_mask=$PNA_MASK $PARMS"
+    ARGS="$ARGS pna_mask=$PNA_MASK"
     ${INSMOD} ${PNA_MODULE} $ARGS
     RETVAL=$?
 
     # log the current interrupt counts
-    grep ${PNA_IFACE} /proc/interrupts >> irq_count.start
+    date +%s.%N >> irq_count.start
+    grep "\(${PNA_IFACE/,/\|}\)" /proc/interrupts >> irq_count.start
 
     # make sure we have some place to save log files
     mkdir -p "$PNA_LOGDIR"
 
     # start the logging monitor(s)
     PID_LIST=""
-    rm -f verbose.log
+    rm -f verbose-*.log
+    i=0
     for f in /proc/${SERVICE}/*; do
         ARGS="-v -d $PNA_LOGDIR"
-        nohup ${PNA_MONITOR} $ARGS $f >> verbose.log 2>&1 &
-        PID_LIST="$PID_LIST $!"
+        nohup ${PNA_MONITOR} $ARGS $f >> verbose-$(basename $f).log 2>&1 &
+        PID=$!
+        if [ $PNA_MONPROCS ] ; then
+            affinity=${PNA_MONPROCS[$i%${#PNA_MONPROCS[@]}]}
+            i=$(($i+1))
+            /bin/taskset -cp $affinity $PID > /dev/null 2>&1
+            affinity=$(/bin/taskset -p $PID |    awk '{print $6}')
+            echo -e "\tuser_monitor ($PID) affinity $affinity"
+        fi
+        PID_LIST="$PID_LIST $PID"
         RETVAL=$(($RETVAL+$?))
     done
 
@@ -112,7 +137,8 @@ stop () {
     fi
 
     # log the current interrupt counts
-    grep ${PNA_IFACE} /proc/interrupts >> irq_count.stop
+    date +%s.%N >> irq_count.stop
+    grep "\(${PNA_IFACE/,/\|}\)" /proc/interrupts >> irq_count.stop
 
     # in theory I should remove entry from cron...
 
@@ -123,13 +149,15 @@ stop () {
     ${RMMOD} ${PNA_MODULE}
     RETVAL=$?
 
-    # unset CPU affinities
-    for f in /proc/irq/*/${PNA_IFACE}*/../smp_affinity ; do
-        cat /proc/irq/default_smp_affinity > $f
-    done
+    for iface in ${PNA_IFACE/,/ } ; do
+        # unset CPU affinities
+        for f in /proc/irq/*/${iface}*/../smp_affinity ; do
+            cat /proc/irq/default_smp_affinity > $f
+        done
 
-    # Take down PNA interface
-    ${IFCONFIG} ${PNA_IFACE} down
+        # Take down PNA interface
+        ${IFCONFIG} ${iface} down
+    done
 
     # End with script-y stuff
     [ $RETVAL = 0 ] && rm -f /var/lock/subsys/${SERVICE}

@@ -28,8 +28,7 @@
 #include <linux/mutex.h>
 #include <linux/proc_fs.h>
 #include <linux/netdevice.h>
-#include <linux/netfilter.h>
-#include <linux/netfilter_ipv4.h>
+#include <linux/if.h>
 
 #include <linux/jiffies.h>
 
@@ -38,13 +37,30 @@
 
 #include "pna.h"
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,37)
-    typedef struct rtnl_link_stats64 pna_link_stats;
-    typedef unsigned long long  pna_stat_uword;
-#elif LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,34)
+static void pna_perflog(struct sk_buff *skb, int dir);
+static int pna_localize(struct pna_flowkey *key, int *direction);
+static int pna_done(struct sk_buff *skb);
+int pna_hook(struct sk_buff *skb, struct net_device *dev,
+        struct packet_type *pt, struct net_device *orig_dev);
+static int __init pna_init(void);
+static void pna_cleanup(void);
+
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(2,6,34)
     typedef const struct net_device_stats *pna_link_stats;
     typedef unsigned long pna_stat_uword;
+#else
+    typedef struct rtnl_link_stats64 pna_link_stats;
+    typedef unsigned long long  pna_stat_uword;
 #endif /* LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,37) */
+
+/* define a new packet type to hook on */
+#define PNA_MAXIF 4
+static struct packet_type pna_packet_type[PNA_MAXIF] = {
+    { .type = htons(ETH_P_ALL), .func = pna_hook, .dev = NULL, },
+    { .type = htons(ETH_P_ALL), .func = pna_hook, .dev = NULL, },
+    { .type = htons(ETH_P_ALL), .func = pna_hook, .dev = NULL, },
+    { .type = htons(ETH_P_ALL), .func = pna_hook, .dev = NULL, },
+};
 
 /* for performance measurement */
 struct pna_perf {
@@ -53,8 +69,8 @@ struct pna_perf {
     struct timeval prevtime; /* 8 */
     __u32 p_interval[PNA_DIRECTIONS]; /* 8 */
     __u32 B_interval[PNA_DIRECTIONS]; /* 8 */
-    pna_stat_uword dev_last_rx;
-    pna_stat_uword dev_last_fifo;
+    pna_stat_uword dev_last_rx[PNA_MAXIF];
+    pna_stat_uword dev_last_fifo[PNA_MAXIF];
 };
 
 DEFINE_PER_CPU(struct pna_perf, perf_data);
@@ -65,21 +81,6 @@ DEFINE_PER_CPU(struct pna_perf, perf_data);
    (typecheck(__u64,a) && typecheck(__u64,b) && ((__s64)(a)-(__s64)(b)>=0))
 #endif
 #define PERF_INTERVAL      10
-
-static void pna_perflog(struct sk_buff *skb, int dir, struct net_device *dev);
-static int pna_localize(struct pna_flowkey *key, int *direction);
-static int pna_done(struct sk_buff *skb);
-int pna_hook(struct sk_buff *skb, struct net_device *dev,
-        struct packet_type *pt, struct net_device *orig_dev);
-static int __init pna_init(void);
-static void pna_cleanup(void);
-
-/* define a new packet type to hook on */
-static struct packet_type pna_packet_type = {
-    .type = htons(ETH_P_ALL),
-    .func = pna_hook,
-    .dev = NULL,
-};
 
 /* general non-kernel hash function for double hashing */
 unsigned int pna_hash(unsigned int key, int bits)
@@ -209,7 +210,7 @@ int pna_hook(struct sk_buff *skb, struct net_device *dev,
 
     /* log performance data */
     if (pna_perfmon) {
-        pna_perflog(skb, direction, dev);
+        pna_perflog(skb, direction);
     }
 
     /* hook actions here */
@@ -236,12 +237,14 @@ int pna_hook(struct sk_buff *skb, struct net_device *dev,
 /**
  * Performance Monitoring
  */
-static void pna_perflog(struct sk_buff *skb, int dir, struct net_device *dev)
+static void pna_perflog(struct sk_buff *skb, int dir)
 {
     __u32 t_interval;
     __u32 fps_in, Mbps_in, avg_in;
     __u32 fps_out, Mbps_out, avg_out;
     pna_link_stats stats;
+    int i;
+    struct net_device *dev;
     struct pna_perf *perf = &get_cpu_var(perf_data);
 
 
@@ -284,23 +287,31 @@ static void pna_perflog(struct sk_buff *skb, int dir, struct net_device *dev)
                     "out:{fps:%u,Mbps:%u,avg:%u}\n", smp_processor_id(),
                     fps_in, Mbps_in, avg_in, fps_out, Mbps_out, avg_out);
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,37)
-            /* numbers from the NIC */
-            dev_get_stats(dev, &stats);
-            pr_info("pna rx_stats: packets:%llu, fifo_errors:%llu\n",
-                    stats.rx_packets - perf->dev_last_rx,
-                    stats.rx_fifo_errors - perf->dev_last_fifo);
-            perf->dev_last_rx = stats.rx_packets;
-            perf->dev_last_fifo = stats.rx_fifo_errors;
-#elif LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,34)
-            /* numbers from the NIC */
-            stats = dev_get_stats(dev);
-            pr_info("pna rx_stats: packets:%lu, fifo_errors:%lu\n",
-                    stats->rx_packets - perf->dev_last_rx,
-                    stats->rx_fifo_errors - perf->dev_last_fifo);
-            perf->dev_last_rx = stats->rx_packets;
-            perf->dev_last_fifo = stats->rx_fifo_errors;
+            for (i = 0; i < PNA_MAXIF; i++) {
+                dev = pna_packet_type[i].dev;
+                if (dev == NULL) {
+                    break;
+                }
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(2,6,34)
+                /* numbers from the NIC */
+                stats = dev_get_stats(dev);
+                pr_info("pna %s rx_stats: packets:%lu, fifo_errors:%lu\n",
+                        dev->name,
+                        stats->rx_packets - perf->dev_last_rx[i],
+                        stats->rx_fifo_errors - perf->dev_last_fifo[i]);
+                perf->dev_last_rx[i] = stats->rx_packets;
+                perf->dev_last_fifo[i] = stats->rx_fifo_errors;
+#else
+                /* numbers from the NIC */
+                dev_get_stats(dev, &stats);
+                pr_info("pna %s rx_stats: packets:%llu, fifo_errors:%llu\n",
+                        dev->name,
+                        stats.rx_packets - perf->dev_last_rx[i],
+                        stats.rx_fifo_errors - perf->dev_last_fifo[i]);
+                perf->dev_last_rx[i] = stats.rx_packets;
+                perf->dev_last_fifo[i] = stats.rx_fifo_errors;
 #endif /* LINUX_VERSION_CODE */
+            }
         }
 
         /* set updated counters */
@@ -323,6 +334,8 @@ static void pna_perflog(struct sk_buff *skb, int dir, struct net_device *dev)
 /* Initialization hook */
 int __init pna_init(void)
 {
+    char *next = pna_iface;
+    int i;
     int ret = 0;
 
     /* set up the flow table(s) */
@@ -343,10 +356,24 @@ int __init pna_init(void)
     }
 
     /* everything is set up, register the packet hook */
-    pna_packet_type.dev = dev_get_by_name(&init_net, pna_iface);
-    dev_add_pack(&pna_packet_type);
+    for (i = 0; (i < PNA_MAXIF) && (next != NULL); i++) {
+        next = strnchr(pna_iface, IFNAMSIZ, ',');
+        if (NULL != next) {
+            *next = '\0';
+        }
+        pr_info("pna: capturing on %s", pna_iface);
+        pna_packet_type[i].dev = dev_get_by_name(&init_net, pna_iface);
+        dev_add_pack(&pna_packet_type[i]);
+        pna_iface = next + 1;
+    }
 
-    pr_info("pna: module is initialized\n");
+#ifdef PIPELINE_MODE
+    next = "(in pipeline mode)";
+#else
+    next = "";
+#endif /* PIPELINE_MODE */
+
+    pr_info("pna: module is initialized %s\n", next);
 
     return ret;
 }
@@ -354,7 +381,12 @@ int __init pna_init(void)
 /* Destruction hook */
 void pna_cleanup(void)
 {
-    dev_remove_pack(&pna_packet_type);
+    int i;
+
+    for (i = 0 ; (i < PNA_MAXIF) && (pna_packet_type[i].dev != NULL); i++) {
+        dev_remove_pack(&pna_packet_type[i]);
+        pr_info("pna: released %s\n", pna_packet_type[i].dev->name);
+    }
     rtmon_release();
     pna_alert_cleanup();
     flowmon_cleanup();

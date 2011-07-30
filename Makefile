@@ -35,3 +35,7 @@ status:
 clean:
 	$(MAKE) -C module clean
 	$(MAKE) -C user clean
+
+realclean: clean
+	rm -f irq_count.start irq_count.stop
+	rm -f verbose-*.log

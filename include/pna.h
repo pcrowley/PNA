@@ -182,7 +182,6 @@ struct flowtab_info {
     int  table_dirty;
     time_t first_sec;
     int  smp_id;
-    char iface[PNA_MAX_STR];
     unsigned int nflows;
     unsigned int nflows_missed;
     unsigned int probes[PNA_TABLE_TRIES];
