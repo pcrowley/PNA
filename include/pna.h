@@ -138,6 +138,8 @@ struct pna_flow_data {
 #define PNA_SZ_DATA_ENTRIES (PNA_FLOW_ENTRIES * sizeof(struct pna_flow_data))
 #define PNA_SZ_KEYDATA_ENTRIES (PNA_SZ_KEY_ENTRIES + PNA_SZ_DATA_ENTRIES)
 
+#define PNA_KEYS_PER_LINE (L1_CACHE_BYTES / sizeof(struct pna_flow_key))
+
 #ifdef __KERNEL__
 
 /* Account for Ethernet overheads (stripped by sk_buff) */

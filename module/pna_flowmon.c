@@ -215,7 +215,8 @@ int flowmon_hook(struct pna_flow_key *key, int direction, struct sk_buff *skb)
     struct pna_flow_data *data;
     struct timeval timeval;
     struct flowtab_info *info;
-    unsigned int i, hash_0, hash;
+    unsigned int i, j, hash_0, hash;
+    unsigned int base, pos, index;
 
     /* get the timestamp on the packet */
     skb_get_timestamp(skb, &timeval);
@@ -230,38 +231,45 @@ int flowmon_hook(struct pna_flow_key *key, int direction, struct sk_buff *skb)
     hash_0 = hash_32(hash, PNA_FLOW_BITS);
 
     /* loop through table until we find right entry */
-    for ( i = 0; i < PNA_TABLE_TRIES; i++ ) {
+    for (i = 0; i < PNA_TABLE_TRIES/PNA_KEYS_PER_LINE; i++) {
         /* quadratic probe for next entry */
         hash = (hash_0 + ((i+i*i) >> 1)) & (PNA_FLOW_ENTRIES-1);
 
-        /* increment the number of probe tries for the table */
-        info->probes[i]++;
+        /* check all entries in a cache line first */
+        base = hash & ~(PNA_KEYS_PER_LINE - 1);
+        pos = hash - base;
+        for (j = 0 ; j < PNA_KEYS_PER_LINE; j++) {
+            index = base + ((pos + j) & (PNA_KEYS_PER_LINE - 1));
 
-        /* strt testing the waters */
-        data_key = &(info->flowkeys[hash]);
-
-        /* check for match -- update flow entry */
-        if (flowkey_match(data_key, key)) {
-            data = &(info->flowdata[hash]);
-            data->bytes[direction] += skb->len + ETH_OVERHEAD;
-            data->packets[direction] += 1;
-            return 0;
-        }
-
-        /* check for free spot -- insert flow entry */
-        if (flowkey_match(data_key, &null_key)) {
-            /* copy over the flow key for this entry */
-            memcpy(data_key, key, sizeof(*key));
-
-            /* port specific information */
-            data = &(info->flowdata[hash]);
-            data->bytes[direction] += skb->len + ETH_OVERHEAD;
-            data->packets[direction]++;
-            data->first_tstamp = timeval.tv_sec;
-            data->first_dir = direction;
-
-            info->nflows++;
-            return 1;
+            /* increment the number of probe tries for the table */
+            info->probes[i*PNA_KEYS_PER_LINE+j]++;
+    
+            /* strt testing the waters */
+            data_key = &(info->flowkeys[index]);
+    
+            /* check for match -- update flow entry */
+            if (flowkey_match(data_key, key)) {
+                data = &(info->flowdata[index]);
+                data->bytes[direction] += skb->len + ETH_OVERHEAD;
+                data->packets[direction] += 1;
+                return 0;
+            }
+    
+            /* check for free spot -- insert flow entry */
+            if (flowkey_match(data_key, &null_key)) {
+                /* copy over the flow key for this entry */
+                memcpy(data_key, key, sizeof(*key));
+    
+                /* port specific information */
+                data = &(info->flowdata[index]);
+                data->bytes[direction] += skb->len + ETH_OVERHEAD;
+                data->packets[direction]++;
+                data->first_tstamp = timeval.tv_sec;
+                data->first_dir = direction;
+    
+                info->nflows++;
+                return 1;
+            }
         }
     }
 
