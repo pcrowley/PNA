@@ -90,7 +90,7 @@ int conmon_init(void)
 }
 
 /* insert/update an entry in contab */
-static struct conmon_entry *contab_insert(struct pna_flow_key *key)
+static struct conmon_entry *contab_insert(struct pna_flowkey *key)
 {
     unsigned int i;
     struct conmon_entry *con;
@@ -208,7 +208,7 @@ static void conmon_check(struct conmon_entry *con, int proto, int dir,
     }
 }
 
-int conmon_hook(struct pna_flow_key *key, int direction, struct sk_buff *skb,
+int conmon_hook(struct pna_flowkey *key, int direction, struct sk_buff *skb,
                 unsigned long *data)
 {
     struct conmon_entry *con;
@@ -276,7 +276,7 @@ int lipmon_init(void)
 }
 
 /* insert/update entry for liptab */
-static struct lipmon_entry *liptab_insert(struct pna_flow_key *key)
+static struct lipmon_entry *liptab_insert(struct pna_flowkey *key)
 {
     unsigned int i;
     unsigned int hash, hash_0, hash_1;
@@ -339,7 +339,7 @@ static void lipmon_check(struct lipmon_entry *lip, int proto, int dir,
     }
 }
 
-int lipmon_hook(struct pna_flow_key *key, int direction, struct sk_buff *skb,
+int lipmon_hook(struct pna_flowkey *key, int direction, struct sk_buff *skb,
                 unsigned long *data)
 {
     struct lipmon_entry *lip;

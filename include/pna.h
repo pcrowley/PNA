@@ -114,31 +114,29 @@ struct pna_alert_msg {
 #define PNA_FLOW_ENTRIES (1 << PNA_FLOW_BITS)
 
 /* definition of a flow for PNA */
-struct pna_flow_key {
-    unsigned short l3_protocol; /* 2 */
-    unsigned char l4_protocol;  /* 1 */
-    unsigned char FILL;         /* 1 */
-    unsigned int local_ip;      /* 4 */
-    unsigned int remote_ip;     /* 4 */
-    unsigned short local_port;  /* 2 */
-    unsigned short remote_port; /* 2 = 16 bytes */
+struct pna_flowkey {
+    unsigned short l3_protocol;
+    unsigned char l4_protocol;
+    unsigned int local_ip;
+    unsigned int remote_ip;
+    unsigned short local_port;
+    unsigned short remote_port;
 };
 
 /* flow data we're interested in off-line */
 struct pna_flow_data {
-    unsigned int bytes[PNA_DIRECTIONS];   /* 4*2 */
-    unsigned int packets[PNA_DIRECTIONS]; /* 4*2 */
-    unsigned int timestamp;               /* 4 */
-    unsigned int first_tstamp;            /* 4 */
-    unsigned int first_dir;               /* 4 */
-    unsigned int FILL;                    /* 4 = 32 bytes */
+    unsigned int bytes[PNA_DIRECTIONS];
+    unsigned int packets[PNA_DIRECTIONS];
+    unsigned int timestamp;
+    unsigned int first_tstamp;
+    unsigned int first_dir;
 };
 
-#define PNA_SZ_KEY_ENTRIES (PNA_FLOW_ENTRIES * sizeof(struct pna_flow_key))
-#define PNA_SZ_DATA_ENTRIES (PNA_FLOW_ENTRIES * sizeof(struct pna_flow_data))
-#define PNA_SZ_KEYDATA_ENTRIES (PNA_SZ_KEY_ENTRIES + PNA_SZ_DATA_ENTRIES)
-
-#define PNA_KEYS_PER_LINE (L1_CACHE_BYTES / sizeof(struct pna_flow_key))
+struct flow_entry {
+    struct pna_flowkey key;
+    struct pna_flow_data data;
+};
+#define PNA_SZ_FLOW_ENTRIES (PNA_FLOW_ENTRIES * sizeof(struct flow_entry))
 
 #ifdef __KERNEL__
 
@@ -178,8 +176,7 @@ extern bool pna_rtmon;
 struct flowtab_info {
     void *table_base;
     char table_name[PNA_MAX_STR];
-    struct pna_flow_key *flowkeys;
-    struct pna_flow_data *flowdata;
+    struct flow_entry *flowtab;
 
     struct mutex read_mutex;
     int  table_dirty;
@@ -195,23 +192,23 @@ struct flowtab_info {
 #ifdef __KERNEL__
 unsigned int pna_hash(unsigned int key, int bits);
 
-int flowmon_hook(struct pna_flow_key *key, int direction, struct sk_buff *skb);
+int flowmon_hook(struct pna_flowkey *key, int direction, struct sk_buff *skb);
 int flowmon_init(void);
 void flowmon_cleanup(void);
 
 int rtmon_init(void);
-int rtmon_hook(struct pna_flow_key *key, int direction, struct sk_buff *skb,
+int rtmon_hook(struct pna_flowkey *key, int direction, struct sk_buff *skb,
                unsigned long data);
 void rtmon_release(void);
 
 int conmon_init(void);
-int conmon_hook(struct pna_flow_key *key, int direction, struct sk_buff *skb,
+int conmon_hook(struct pna_flowkey *key, int direction, struct sk_buff *skb,
                unsigned long *data);
 void conmon_clean(void);
 void conmon_release(void);
 
 int lipmon_init(void);
-int lipmon_hook(struct pna_flow_key *key, int direction, struct sk_buff *skb,
+int lipmon_hook(struct pna_flowkey *key, int direction, struct sk_buff *skb,
                unsigned long *data);
 void lipmon_clean(void);
 void lipmon_release(void);
