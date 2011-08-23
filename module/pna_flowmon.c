@@ -203,7 +203,7 @@ static struct flowtab_info *flowtab_get(struct timeval *timeval)
 }
 
 /* check if flow keys match */
-static int flowkey_match(struct pna_flowkey *key_a, struct pna_flowkey *key_b)
+static inline int flowkey_match(struct pna_flowkey *key_a, struct pna_flowkey *key_b)
 {
     /* exploit the fact that keys are 16 bytes = 128 bits wide */
     u64 a_hi, a_lo, b_hi, b_lo;
