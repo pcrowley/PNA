@@ -48,6 +48,9 @@ ip2hex () {
 start () {
     PARMS=$1
 
+    # prevent irqbalance from changing interrupts
+    service irqbalance stop
+
     echo -n $"Starting $SERVICE: "
 
     if [ ! -z "$PARMS" ] ; then
@@ -164,6 +167,9 @@ stop () {
     [ $RETVAL = 0 ] && rm -f /var/run/${SERVICE}.pids
     [ $RETVAL = 0 ] && success || failure
     echo
+
+    # allow irqbalance to change interrupts
+    service irqbalance start
 
     return $RETVAL
 }
