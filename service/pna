@@ -4,7 +4,7 @@
 #
 #  Startup/shutdown script for the Passive Network Appliance (PNA).
 #
-#  chkconfig: 2345 90 10
+#  chkconfig: 2345 95 05
 #  description: Startup/shutdown script for the Passive Network \
 #               Appliacte (PNA).
 
@@ -17,7 +17,7 @@
 # # # # # # # # # # # # # # # # # # # # # # # # # #
 SERVICE=pna
 
-SCRIPT_DIR=$(readlink -m $PWD/$(dirname $0))
+SCRIPT_DIR=$(dirname $(readlink -f $0))
 
 # Fetch the configuration
 if [ -e $SCRIPT_DIR/config ] ; then
