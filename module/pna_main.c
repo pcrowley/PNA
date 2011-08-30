@@ -295,7 +295,7 @@ static void pna_perflog(struct sk_buff *skb, int dir)
 #if LINUX_VERSION_CODE <= KERNEL_VERSION(2,6,34)
                 /* numbers from the NIC */
                 stats = dev_get_stats(dev);
-                pr_info("pna %s rx_stats: packets:%lu, fifo_errors:%lu\n",
+                pr_info("pna %s rx_stats: packets:%lu, fifo_overruns:%lu\n",
                         dev->name,
                         stats->rx_packets - perf->dev_last_rx[i],
                         stats->rx_fifo_errors - perf->dev_last_fifo[i]);
@@ -304,7 +304,7 @@ static void pna_perflog(struct sk_buff *skb, int dir)
 #else
                 /* numbers from the NIC */
                 dev_get_stats(dev, &stats);
-                pr_info("pna %s rx_stats: packets:%llu, fifo_errors:%llu\n",
+                pr_info("pna %s rx_stats: packets:%llu, fifo_overruns:%llu\n",
                         dev->name,
                         stats.rx_packets - perf->dev_last_rx[i],
                         stats.rx_fifo_errors - perf->dev_last_fifo[i]);
