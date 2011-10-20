@@ -24,7 +24,7 @@ __version__ = 'parse_0.1.0-py'
 class PNALogParser :
     pna_log_hdr_names = ('start-time', 'end-time','size',)
     pna_log_data_names = ('local-ip', 'remote-ip',
-                          'local-port', 'remote-port',
+                          'local-port', 'remote-port', 'local-domain', 'remote-domain',
                           'packets-out', 'packets-in',
                           'bytes-out', 'bytes-in',
                           'begin-time', 'protocol',
@@ -47,8 +47,8 @@ class PNALogParser :
         flows = []
         while pos < len(log_data) :
             # read an entry
-            data = struct.unpack('IIHHIIIIIBBxx', log_data[pos:pos+36])
-            pos += 36
+            data = struct.unpack('IIHHHHIIIIIBBxx', log_data[pos:pos+40])
+            pos += 40 
             flow = dict(zip(cls.pna_log_data_names, data))
             flows.append(flow)
 

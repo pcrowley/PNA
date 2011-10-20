@@ -84,8 +84,8 @@ start () {
 
     # load the module
     ARGS="$PARMS pna_iface=\"$PNA_IFACE\""
-    ARGS="$ARGS pna_prefix=$PNA_PREFIX"
-    ARGS="$ARGS pna_mask=$PNA_MASK"
+    #ARGS="$ARGS pna_prefix=$PNA_PREFIX"
+    #ARGS="$ARGS pna_mask=$PNA_MASK"
     ${INSMOD} ${PNA_MODULE} $ARGS
     RETVAL=$?
 

@@ -63,13 +63,15 @@ struct pna_log_entry {
     unsigned int remote_ip;                 /* 4 */
     unsigned short local_port;              /* 2 */
     unsigned short remote_port;             /* 2 */
+    unsigned short local_domain;             /* 2 */
+    unsigned short remote_domain;            /* 2 */
     unsigned int packets[PNA_DIRECTIONS];   /* 8 */
     unsigned int bytes[PNA_DIRECTIONS];     /* 8 */
     unsigned int first_tstamp;              /* 4 */
 	unsigned char l4_protocol;              /* 1 */
     unsigned char first_dir;                /* 1 */
     char pad[2];                            /* 2 */
-};                                          /* = 36 */
+};                                          /* = 40 */
 
 /* XXX: bad practice, but it gets the job done */
 /* could be trouble if Linux decides to use more netlink links */
@@ -121,6 +123,8 @@ struct pna_flowkey {
     unsigned int remote_ip;
     unsigned short local_port;
     unsigned short remote_port;
+    unsigned short local_domain;
+    unsigned short remote_domain;
 };
 
 /* flow data we're interested in off-line */
