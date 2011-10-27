@@ -96,6 +96,20 @@ unsigned int pna_hash(unsigned int key, int bits)
     return hash;
 }
 
+//swap remote and local in the pna_flowkey
+static inline void pna_key_swap(struct pna_flowkey * key)
+{
+    unsigned int temp;
+
+    temp = key->local_ip;
+    key->local_ip = key->remote_ip;
+    key->remote_ip = temp;
+
+    temp = key->local_port;
+    key->local_port = key->remote_port;
+    key->remote_port = temp;
+}
+
 /**
  * Receive Packet Hook (and helpers)
  */
@@ -108,6 +122,17 @@ static int pna_localize(struct pna_flowkey *key, int *direction)
     temp = key->local_ip & pna_mask;
     if (temp == (pna_prefix & pna_mask)) {
         /* local ip is local! */
+        temp = key->remote_ip & pna_mask;
+        if(temp == (pna_prefix & pna_mask)){
+          //remote ip is also local
+          if(key->local_ip > key->remote_ip){
+            //check for canonical ordering
+            *direction = PNA_DIR_INBOUND;
+            pna_key_swap(key);
+            return 1;
+          }
+        } 
+        
         *direction = PNA_DIR_OUTBOUND;
 
         return 1;
@@ -118,17 +143,12 @@ static int pna_localize(struct pna_flowkey *key, int *direction)
     if (temp == (pna_prefix & pna_mask)) {
         /* remote_ip is local, swap! */
         *direction = PNA_DIR_INBOUND;
-
-        temp = key->local_ip;
-        key->local_ip = key->remote_ip;
-        key->remote_ip = temp;
-
-        temp = key->local_port;
-        key->local_port = key->remote_port;
-        key->remote_port = temp;
-
+        pna_key_swap(key);
         return 1;
     }
+    
+    //if we get here, both ips are remote
+    
 
     return 0;
 }
