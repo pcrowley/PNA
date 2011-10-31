@@ -108,8 +108,8 @@ static int pna_localize(struct pna_flowkey *key, int *direction)
 {
     unsigned int temp;
 
-    key->local_domain = pna_dtrie_lookup(htonl(key->local_ip));  //trie stores stuff in network byte order
-    key->remote_domain = pna_dtrie_lookup(htonl(key->remote_ip));
+    key->local_domain = pna_dtrie_lookup((key->local_ip));  //trie stores stuff in network byte order
+    key->remote_domain = pna_dtrie_lookup((key->remote_ip));
 
     /* the lowest domain ID is treated as local */
     if (key->local_domain < key->remote_domain) {
