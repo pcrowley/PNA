@@ -37,6 +37,9 @@
 
 #include "pna.h"
 
+extern unsigned int pna_dtrie_lookup(unsigned int ip);
+extern int pna_dtrie_init();
+
 static void pna_perflog(struct sk_buff *skb, int dir);
 static int pna_localize(struct pna_flowkey *key, int *direction);
 static int pna_done(struct sk_buff *skb);
@@ -97,51 +100,6 @@ unsigned int pna_hash(unsigned int key, int bits)
 }
 
 
-struct pna_domain_entry {
-  unsigned int valid;
-  unsigned int ip;
-  unsigned int mask;
-  unsigned int id;
-};
-
-#define N_PNA_DOMAINS 32
-struct pna_domain_entry pna_domains[N_PNA_DOMAINS];
-
-static void pna_domain_init()
-{
-  int i;
-  for(i=0;i<N_PNA_DOMAINS;i++){
-    pna_domains[i].valid=0;
-  }
-
-  pna_domains[0].valid = 1;
-  pna_domains[0].ip = 0xc0a80000; //192.168.0.0;
-  pna_domains[0].mask = 0xFFFF0000;
-  pna_domains[0].id = 1;
-  pna_domains[1].valid = 1;
-  pna_domains[1].ip = 0xc8a80000; //200.168.0.0;
-  pna_domains[1].mask = 0xFFFF0000;
-  pna_domains[1].id = 2;
-}
-
-//0xFFFF is the default domain id
-static unsigned short domain_lookup(unsigned int ip)
-{
-  struct pna_domain_entry* cur_domain;
-  int i;
-  unsigned int tmp;
-  for(i=0;i<N_PNA_DOMAINS;i++){ 
-    cur_domain = &pna_domains[i];
-    if(!cur_domain->valid)
-      break;  
-    tmp = ip & cur_domain->mask;
-    if(tmp == (cur_domain->ip & cur_domain->mask)){
-      return cur_domain->id;
-    }
-  }
-  return 0xFFFF; 
-}
-
 /**
  * Receive Packet Hook (and helpers)
  */
@@ -150,8 +108,8 @@ static int pna_localize(struct pna_flowkey *key, int *direction)
 {
     unsigned int temp;
 
-    key->local_domain = domain_lookup(key->local_ip);
-    key->remote_domain = domain_lookup(key->remote_ip);
+    key->local_domain = pna_dtrie_lookup(key->local_ip);
+    key->remote_domain = pna_dtrie_lookup(key->remote_ip);
 
     /* the lowest domain ID is treated as local */
     if (key->local_domain < key->remote_domain) {
@@ -394,7 +352,7 @@ int __init pna_init(void)
     }
 
     //init the domain mappings
-    pna_domain_init();
+    pna_dtrie_init();
 
     /* set up the alert system */
     if (pna_alert_init() < 0) {
