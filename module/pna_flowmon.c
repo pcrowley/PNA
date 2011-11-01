@@ -34,6 +34,7 @@
 #include <linux/udp.h>
 
 #include "pna.h"
+#include "pna_mod.h"
 
 /* kernel/user table interaction */
 static int flowtab_open(struct inode *inode, struct file *filep);
@@ -50,8 +51,6 @@ void flowmon_cleanup(void);
 /* pointer to information about the flow tables */
 static struct flowtab_info *flowtab_info;
 
-/* pointer to the /proc durectiry parent node */
-static struct proc_dir_entry *proc_parent;
 
 /* file operations for accessing the flowtab */
 static const struct file_operations flowtab_fops = {

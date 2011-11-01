@@ -351,7 +351,7 @@ int __init pna_init(void)
         return ret;
     }
 
-    //init the domain mappings
+    //init the domain mappings must be called after flowmon_init because of initialization of PNA proc entry
     pna_dtrie_init();
 
     /* set up the alert system */
