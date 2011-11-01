@@ -39,6 +39,7 @@
 
 extern unsigned int pna_dtrie_lookup(unsigned int ip);
 extern int pna_dtrie_init();
+extern int pna_dtrie_deinit();
 
 static void pna_perflog(struct sk_buff *skb, int dir);
 static int pna_localize(struct pna_flowkey *key, int *direction);

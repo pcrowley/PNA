@@ -10,6 +10,9 @@ which it belongs.  All inputs must be in network byte order
 #include <linux/init.h>
 #include <linux/vmalloc.h>
 #include <linux/slab.h>
+#include <linux/proc_fs.h>
+#include <asm/uaccess.h>
+#include "pna_mod.h"
 
 #define DTRIE_PROC_STR "dtrie"
 
@@ -92,6 +95,7 @@ int dtrie_proc_write(struct file* file, const char* buffer, unsigned long count,
   }
   pna_dtrie_add(mybuf[0], mybuf[1], mybuf[2]);
   return count;
+}
 
 int pna_dtrie_deinit()
 {
@@ -142,3 +146,5 @@ int pna_dtrie_init()
 */
   return 0;
 }
+
+
