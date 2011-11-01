@@ -119,7 +119,7 @@ int pna_dtrie_init()
   dtrie_proc_node->gid = 0;
   dtrie_proc_node->gid = 1;
   
-
+/*
   pna_dtrie_add(0x0a0b0000, 16, 1); //10.11.0.0/16
   pna_dtrie_add(0x0a140000, 16, 1); //10.20.0.0 to 10.29.0.0/16
   pna_dtrie_add(0x0a150000, 16, 1);
@@ -139,6 +139,6 @@ int pna_dtrie_init()
 
   pna_dtrie_add(0x80fc0000, 16, 3); //128.252.0.0/16
   pna_dtrie_add(0xac100000, 12, 3); //172.16.0.0/12
-
+*/
   return 0;
 }
