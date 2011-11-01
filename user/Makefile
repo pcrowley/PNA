@@ -15,7 +15,8 @@
 # user-space programs
 user-monitor := user_monitor
 user-alerts := user_alerts
-user-progs := $(user-monitor) $(user-alerts)
+domain-tool := domain_tool
+user-progs := $(user-monitor) $(user-alerts) $(domain-tool)
 
 CFLAGS += -I../include/
 
@@ -25,6 +26,9 @@ $(user-monitor): $(user-monitor).c
 	$(CC) $(CFLAGS) -o $@ $^
 
 $(user-alerts): $(user-alerts).c
+	$(CC) -ggdb $(CFLAGS) -o $@ $^
+
+$(domain_tool): $(domain_tool).c
 	$(CC) -ggdb $(CFLAGS) -o $@ $^
 
 clean:

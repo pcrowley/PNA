@@ -400,6 +400,8 @@ void pna_cleanup(void)
     }
     rtmon_release();
     pna_alert_cleanup();
+    //dtrie deinit should be called before flowmon_cleanup for proc file reasons
+    pna_dtrie_deinit();
     flowmon_cleanup();
     pr_info("pna: module is inactive\n");
 }

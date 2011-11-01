@@ -11,6 +11,8 @@ which it belongs.  All inputs must be in network byte order
 #include <linux/vmalloc.h>
 #include <linux/slab.h>
 
+#define DTRIE_PROC_STR "dtrie"
+
 struct pna_dtrie_entry {
   unsigned int domain_id;
   struct pna_dtrie_entry* children[2];
@@ -77,6 +79,26 @@ unsigned int pna_dtrie_lookup(unsigned int ip)
   return pna_dtrie_getnode(ip, &cur_bit_pos)->domain_id;
 }
 
+
+int dtrie_proc_write(struct file* file, const char* buffer, unsigned long count, void* data)
+{
+  //reads in 3 unsigned ints, in the order prefix, prefix len, domainid
+  unsigned int mybuf[3];
+  if (count != (sizeof(unsigned int) * 3)){
+    return -ENOMEM;
+  }
+  if(copy_from_user(mybuf, buffer, count)){
+    return -EFAULT;
+  }
+  pna_dtrie_add(mybuf[0], mybuf[1], mybuf[2]);
+  return count;
+
+int pna_dtrie_deinit()
+{
+  remove_proc_entry(DTRIE_PROC_STR, proc_parent);
+  return 0;
+}
+
 int pna_dtrie_init()
 {
   pna_dtrie_head = pna_dtrie_entry_alloc(0xFFFFFFFF);
@@ -85,9 +107,9 @@ int pna_dtrie_init()
   } 
 
   struct proc_dir_entry *dtrie_proc_node;
-  dtrie_proc_node = create_proc_entry("dtrie", 0644, proc_parent);
+  dtrie_proc_node = create_proc_entry(DTRIE_PROC_STR, 0644, proc_parent);
   if(!dtrie_proc_node){
-    pr_err("failed to make proc entry for dtrie\n");
+    pr_err("failed to make proc entry for %s\n", DTRIE_PROC_STR);
     return -ENOMEM;
   }
 
