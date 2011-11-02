@@ -51,6 +51,7 @@ void flowmon_cleanup(void);
 /* pointer to information about the flow tables */
 static struct flowtab_info *flowtab_info;
 
+struct proc_dir_entry *proc_parent;
 
 /* file operations for accessing the flowtab */
 static const struct file_operations flowtab_fops = {

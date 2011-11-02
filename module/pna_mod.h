@@ -4,6 +4,6 @@
 
 
 /* pointer to the /proc durectiry parent node */
-static struct proc_dir_entry *proc_parent;
+extern struct proc_dir_entry *proc_parent;
 
 #endif //PNA_MOD_H
