@@ -1,2 +1,5 @@
 .svn
+service/config
+service/domains
+logs/*
 

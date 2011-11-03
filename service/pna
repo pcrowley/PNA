@@ -39,6 +39,8 @@ IFCONFIG="/sbin/ifconfig"
 INSMOD="/sbin/insmod"
 RMMOD="/sbin/rmmod -w"
 LSMOD="/sbin/lsmod"
+DOMAIN_TOOL="${PNA_BASE}/user/domain_tool"
+DOMAIN_FILE="${PNA_BASE}/service/domains"
 
 ip2hex () {
     IP=$1
@@ -88,6 +90,7 @@ start () {
     #ARGS="$ARGS pna_mask=$PNA_MASK"
     ${INSMOD} ${PNA_MODULE} $ARGS
     RETVAL=$?
+    $DOMAIN_TOOL -f $DOMAIN_FILE
 
     # log the current interrupt counts
     date +%s.%N >> irq_count.start
