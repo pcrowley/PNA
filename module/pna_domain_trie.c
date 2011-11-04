@@ -104,9 +104,21 @@ int dtrie_proc_write(struct file* file, const char* buffer, unsigned long count,
   return count;
 }
 
+int pna_dtrie_rm_node(struct pna_dtrie_entry* entry)
+{
+  if(!entry)
+    return 0;
+  pna_dtrie_rm_node(entry->children[0]);
+  pna_dtrie_rm_node(entry->children[1]);
+  kfree(entry);
+  return 0;
+}
+
 int pna_dtrie_deinit()
 {
   remove_proc_entry(DTRIE_PROC_STR, proc_parent);
+  pna_dtrie_rm_node(pna_dtrie_head);
+  printk("pna dtrie freed\n");
   return 0;
 }
 
@@ -131,27 +143,6 @@ int pna_dtrie_init()
   dtrie_proc_node->gid = 0;
   dtrie_proc_node->gid = sizeof(unsigned int)*3;
   
-/*
-  pna_dtrie_add(0x0a0b0000, 16, 1); //10.11.0.0/16
-  pna_dtrie_add(0x0a140000, 16, 1); //10.20.0.0 to 10.29.0.0/16
-  pna_dtrie_add(0x0a150000, 16, 1);
-  pna_dtrie_add(0x0a160000, 16, 1);
-  pna_dtrie_add(0x0a170000, 16, 1);
-  pna_dtrie_add(0x0a180000, 16, 1);
-  pna_dtrie_add(0x0a190000, 16, 1);
-  pna_dtrie_add(0x0a1a0000, 16, 1);
-  pna_dtrie_add(0x0a1b0000, 16, 1);
-  pna_dtrie_add(0x0a1c0000, 16, 1);
-  pna_dtrie_add(0x0a1d0000, 16, 1);
-
-
-  pna_dtrie_add(0x80fc1100, 24, 2); //128.252.17.0/24
-  pna_dtrie_add(0x80fcd900, 24, 2); //128.252.217.0/24
-  pna_dtrie_add(0x80fcda00, 24, 2); //128.252.218.0/24
-
-  pna_dtrie_add(0x80fc0000, 16, 3); //128.252.0.0/16
-  pna_dtrie_add(0xac100000, 12, 3); //172.16.0.0/12
-*/
   return 0;
 }
 
