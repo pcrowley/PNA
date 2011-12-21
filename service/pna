@@ -4,32 +4,35 @@
 #
 #  Startup/shutdown script for the Passive Network Appliance (PNA).
 #
-#  chkconfig: 2345 90 10
+#  chkconfig: 2345 95 05
 #  description: Startup/shutdown script for the Passive Network \
 #               Appliacte (PNA).
 
-# PNA configuration
-BASE="/home/mjschultz/pna" # Base directory for PNA module
-PNA_IFACE="eth0"           # Interface for PNA to listen on
-PNA_PREFIX="192.168.0.0"   # IP Prefix to watch
-PNA_MASK="255.255.0.0"     # Network Mask to watch
-PNA_LOGDIR="${BASE}/logs"  # Directory to store log files
-
-# Advanced PNA configuration
-PNA_FLOWPROCS=(7 5)        # Processors for flow processing (not real-time)
-PNA_MONPROCS=(0 2 4 6)     # Processors for userspace routines
+##
+# Configuration settings are in service/config
+##
 
 # # # # # # # # # # # # # # # # # # # # # # # # # #
 #  Nothing below this point should need to change #
 # # # # # # # # # # # # # # # # # # # # # # # # # #
 SERVICE=pna
 
-# Source function library
-. /etc/init.d/functions
+SCRIPT_DIR=$(dirname $(readlink -f $0))
 
-PNA_MODULE="${BASE}/module/pna.ko"      # Name of kernel module
-PNA_MONITOR="${BASE}/user/user_monitor" # Name of logging program
-PNA_ALERTS="${BASE}/user/user_alerts"   # Name of alerts program
+# Fetch the configuration
+if [ -e $SCRIPT_DIR/config ] ; then
+    source $SCRIPT_DIR/config
+else
+    echo "Missing configuration file ($SCRIPT_DIR/config)" >&2
+    exit 1
+fi
+
+# Source function library
+source /etc/init.d/functions
+
+PNA_MODULE="${PNA_BASE}/module/pna.ko"      # Name of kernel module
+PNA_MONITOR="${PNA_BASE}/user/user_monitor" # Name of logging program
+PNA_ALERTS="${PNA_BASE}/user/user_alerts"   # Name of alerts program
 
 # Program Locations
 IFCONFIG="/sbin/ifconfig"
@@ -45,7 +48,7 @@ ip2hex () {
 start () {
     PARMS=$1
 
-    # don't want irqbalance messing with interrupts
+    # prevent irqbalance from changing interrupts
     service irqbalance stop
 
     echo -n $"Starting $SERVICE: "
@@ -101,10 +104,13 @@ start () {
         ARGS="-v -d $PNA_LOGDIR"
         nohup ${PNA_MONITOR} $ARGS $f >> verbose-$(basename $f).log 2>&1 &
         PID=$!
-        affinity=${PNA_MONPROCS[$i%${#PNA_MONPROCS[@]}]}
-        i=$(($i+1))
-        /bin/taskset -cp $affinity $PID > /dev/null 2>&1
-        echo -e "\tuser_monitor ($PID) affinity $(/bin/taskset -p $PID | awk '{print $6}')"
+        if [ $PNA_MONPROCS ] ; then
+            affinity=${PNA_MONPROCS[$i%${#PNA_MONPROCS[@]}]}
+            i=$(($i+1))
+            /bin/taskset -cp $affinity $PID > /dev/null 2>&1
+            affinity=$(/bin/taskset -p $PID |    awk '{print $6}')
+            echo -e "\tuser_monitor ($PID) affinity $affinity"
+        fi
         PID_LIST="$PID_LIST $PID"
         RETVAL=$(($RETVAL+$?))
     done
@@ -162,6 +168,7 @@ stop () {
     [ $RETVAL = 0 ] && success || failure
     echo
 
+    # allow irqbalance to change interrupts
     service irqbalance start
 
     return $RETVAL
