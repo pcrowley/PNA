@@ -120,8 +120,8 @@ static int flowtab_release(struct inode *inode, struct file *filep)
 
     /* dump a little info about that table */
     if (pna_perfmon) {
-        pr_info("pna table%d: flows_inserted:%u ; flows_dropped:%u\n",
-                i, info->nflows, info->nflows_missed);
+        pr_info("pna table%d_inserts:%u,table%d_drops:%u\n",
+                i, info->nflows, i, info->nflows_missed);
     }
 
     /* zero out the table */

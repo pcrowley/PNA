@@ -302,9 +302,8 @@ static void pna_perflog(struct sk_buff *skb, int dir)
 
         /* report the numbers */
         if (fps_in + fps_out > 1000) {
-            pr_info("pna throughput smpid:%d, "
-                    "in:{fps:%u,Mbps:%u,avg:%u}, "
-                    "out:{fps:%u,Mbps:%u,avg:%u}\n", smp_processor_id(),
+            pr_info("pna throughput smpid:%d,in_fps:%u,in_Mbps:%u,in_avg:%u,"
+                    "out_fps:%u,out_Mbps:%u,out_avg:%u\n", smp_processor_id(),
                     fps_in, Mbps_in, avg_in, fps_out, Mbps_out, avg_out);
 
             for (i = 0; i < PNA_MAXIF; i++) {
@@ -315,19 +314,17 @@ static void pna_perflog(struct sk_buff *skb, int dir)
 #if LINUX_VERSION_CODE <= KERNEL_VERSION(2,6,34)
                 /* numbers from the NIC */
                 stats = dev_get_stats(dev);
-                pr_info("pna %s rx_stats: packets:%lu, fifo_overruns:%lu\n",
-                        dev->name,
-                        stats->rx_packets - perf->dev_last_rx[i],
-                        stats->rx_fifo_errors - perf->dev_last_fifo[i]);
+                pr_info("pna %s_packets:%lu,%s_fifo_overruns:%lu\n",
+                        dev->name, stats->rx_packets - perf->dev_last_rx[i],
+                        dev->name, stats->rx_fifo_errors - perf->dev_last_fifo[i]);
                 perf->dev_last_rx[i] = stats->rx_packets;
                 perf->dev_last_fifo[i] = stats->rx_fifo_errors;
 #else
                 /* numbers from the NIC */
                 dev_get_stats(dev, &stats);
-                pr_info("pna %s rx_stats: packets:%llu, fifo_overruns:%llu\n",
-                        dev->name,
-                        stats.rx_packets - perf->dev_last_rx[i],
-                        stats.rx_fifo_errors - perf->dev_last_fifo[i]);
+                pr_info("pna %s_packets:%llu,%s_fifo_overruns:%llu\n",
+                        dev->name, stats.rx_packets - perf->dev_last_rx[i],
+                        dev->name, stats.rx_fifo_errors - perf->dev_last_fifo[i]);
                 perf->dev_last_rx[i] = stats.rx_packets;
                 perf->dev_last_fifo[i] = stats.rx_fifo_errors;
 #endif /* LINUX_VERSION_CODE */
