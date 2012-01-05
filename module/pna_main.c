@@ -336,9 +336,9 @@ static void pna_perflog(struct sk_buff *skb, int dir, struct net_device *dev)
 
         /* report the numbers */
         if (fps_in + fps_out > 1000) {
-            pr_info("pna throughput smpid:%d, contention:%u, "
-                    "in:{fps:%u,Mbps:%u,avg:%u}, "
-                    "out:{fps:%u,Mbps:%u,avg:%u}\n", smp_processor_id(),
+            pr_info("pna throughput smpid:%d,contention:%u,"
+                    "in_fps:%u,in_Mbps:%u,in_avg:%u,"
+                    "out_fps:%u,out_Mbps:%u,out_avg:%u\n", smp_processor_id(),
                     perf->contention_miss,
                     fps_in, Mbps_in, avg_in, fps_out, Mbps_out, avg_out);
 
@@ -356,17 +356,17 @@ static void pna_perflog(struct sk_buff *skb, int dir, struct net_device *dev)
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,37)
             /* numbers from the NIC */
             dev_get_stats(dev, &stats);
-            pr_info("pna rx_stats: packets:%llu, fifo_errors:%llu\n",
-                    stats.rx_packets - perf->dev_last_rx,
-                    stats.rx_fifo_errors - perf->dev_last_fifo);
+            pr_info("pna %s_packets:%llu,%s_fifo_errors:%llu\n",
+                    dev->name, stats.rx_packets - perf->dev_last_rx,
+                    dev->name, stats.rx_fifo_errors - perf->dev_last_fifo);
             perf->dev_last_rx = stats.rx_packets;
             perf->dev_last_fifo = stats.rx_fifo_errors;
 #elif LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,34)
             /* numbers from the NIC */
             stats = dev_get_stats(dev);
-            pr_info("pna rx_stats: packets:%lu, fifo_errors:%lu\n",
-                    stats->rx_packets - perf->dev_last_rx,
-                    stats->rx_fifo_errors - perf->dev_last_fifo);
+            pr_info("pna %s_packets:%lu,%s_fifo_errors:%lu\n",
+                    dev->name, stats->rx_packets - perf->dev_last_rx,
+                    dev->name, stats->rx_fifo_errors - perf->dev_last_fifo);
             perf->dev_last_rx = stats->rx_packets;
             perf->dev_last_fifo = stats->rx_fifo_errors;
 #endif /* LINUX_VERSION_CODE */

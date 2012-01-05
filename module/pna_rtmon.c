@@ -267,10 +267,11 @@ int rtmon_pipe_monitor(struct pna_rtmon *self, struct pna_pipedata *data)
         }
         /* report the numbers */
         if (fps_in + fps_out > 1000) {
-            pr_info("pna %s smpid:%d, " "in:{fps:%u,Mbps:%u,avg:%u}, "
-                    "out:{fps:%u,Mbps:%u,avg:%u}\n", self->name,
-                    smp_processor_id(), fps_in, Mbps_in, avg_in,
-                    fps_out, Mbps_out, avg_out);
+            pr_info("pna smpid:%d,%s_in_fps:%u,%s_in_Mbps:%u,%s_in_avg:%u,"
+                    "%s_out_fps:%u,%s_out_Mbps:%u,%s_out_avg:%u\n",
+                    smp_processor_id(), self->name,fps_in, self->name, Mbps_in,
+                    self->name, avg_in, self->name, fps_out, self->name,
+                    Mbps_out, self->name, avg_out);
 #ifdef NSTIME
             pr_info("pna %s time:{min:%llu,avg:%llu,max:%llu}\n", self->name,
                     self->ns_min,
