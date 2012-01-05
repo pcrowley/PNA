@@ -120,8 +120,8 @@ static int flowtab_release(struct inode *inode, struct file *filep)
 
     /* dump a little info about that table */
     if (pna_perfmon) {
-        pr_info("pna table%d: flows_inserted:%u ; flows_dropped:%u\n",
-                i, info->nflows, info->nflows_missed);
+        pr_info("pna table%d_inserts:%u,table%d_drops:%u\n",
+                i, info->nflows, i, info->nflows_missed);
     }
 
     /* zero out the table */
@@ -219,9 +219,15 @@ static struct flowtab_info *flowtab_get(struct timeval *timeval)
 }
 
 /* check if flow keys match */
-static int flowkey_match(struct pna_flowkey *key_a, struct pna_flowkey *key_b)
+static inline int flowkey_match(struct pna_flowkey *key_a, struct pna_flowkey *key_b)
 {
-    return !memcmp(key_a, key_b, sizeof(*key_a));
+    /* exploit the fact that keys are 16 bytes = 128 bits wide */
+    u64 a_hi, a_lo, b_hi, b_lo;
+    a_hi = *(u64 *)key_a;
+    a_lo = *((u64 *)key_a+1);
+    b_hi = *(u64 *)key_b;
+    b_lo = *((u64 *)key_b+1);
+    return (a_hi == b_hi) && (a_lo == b_lo);
 }
 
 /* Insert/Update this flow */
