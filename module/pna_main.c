@@ -336,7 +336,7 @@ static void pna_perflog(struct sk_buff *skb, int dir, struct net_device *dev)
 
         /* report the numbers */
         if (fps_in + fps_out > 1000) {
-            pr_info("pna throughput smpid:%d,contention:%u,"
+            pr_info("pna flowmon_smpid:%d,contention:%u,"
                     "in_fps:%u,in_Mbps:%u,in_avg:%u,"
                     "out_fps:%u,out_Mbps:%u,out_avg:%u\n", smp_processor_id(),
                     perf->contention_miss,
