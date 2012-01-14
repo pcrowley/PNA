@@ -1,7 +1,7 @@
 # Configuration for a PNA node
 
 # This file should be a directory below the base dir
-THISDIR=$(dirname $(readlink -f .))
+THISDIR=$(dirname $(readlink -f ${BASH_SOURCE[0]}))
 
 # Assume the first none loopback device
 IPLINE=$(ip -o -f inet addr | grep -v "\<lo\>" | head -n1)
