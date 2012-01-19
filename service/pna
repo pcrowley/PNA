@@ -27,8 +27,8 @@ else
     exit 1
 fi
 
-# Source function library
-source /etc/init.d/functions
+# Source function library for success/failure (if it exists)
+[ -f /etc/init.d/functions ] && source /etc/init.d/functions
 
 PNA_MODULE="${PNA_BASE}/module/pna.ko"      # Name of kernel module
 PNA_MONITOR="${PNA_BASE}/user/user_monitor" # Name of logging program
