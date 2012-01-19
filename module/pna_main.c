@@ -67,8 +67,8 @@ struct pna_perf {
     __u64 t_jiffies; /* 8 */
     struct timeval currtime; /* 8 */
     struct timeval prevtime; /* 8 */
-    __u32 p_interval[PNA_DIRECTIONS]; /* 8 */
-    __u32 B_interval[PNA_DIRECTIONS]; /* 8 */
+    __u64 p_interval[PNA_DIRECTIONS]; /* 16 */
+    __u64 B_interval[PNA_DIRECTIONS]; /* 16 */
     pna_stat_uword dev_last_rx[PNA_MAXIF];
     pna_stat_uword dev_last_fifo[PNA_MAXIF];
 };
@@ -259,9 +259,9 @@ int pna_hook(struct sk_buff *skb, struct net_device *dev,
  */
 static void pna_perflog(struct sk_buff *skb, int dir)
 {
-    __u32 t_interval;
-    __u32 fps_in, Mbps_in, avg_in;
-    __u32 fps_out, Mbps_out, avg_out;
+    __u64 t_interval;
+    __u64 fps_in, Mbps_in, avg_in;
+    __u64 fps_out, Mbps_out, avg_out;
     pna_link_stats stats;
     int i;
     struct net_device *dev;
@@ -302,8 +302,8 @@ static void pna_perflog(struct sk_buff *skb, int dir)
 
         /* report the numbers */
         if (fps_in + fps_out > 1000) {
-            pr_info("pna flowmon_smpid:%d,in_fps:%u,in_Mbps:%u,in_avg:%u,"
-                    "out_fps:%u,out_Mbps:%u,out_avg:%u\n", smp_processor_id(),
+            pr_info("pna flowmon_smpid:%d,in_fps:%llu,in_Mbps:%llu,in_avg:%llu,"
+                    "out_fps:%llu,out_Mbps:%llu,out_avg:%llu\n", smp_processor_id(),
                     fps_in, Mbps_in, avg_in, fps_out, Mbps_out, avg_out);
 
             for (i = 0; i < PNA_MAXIF; i++) {
