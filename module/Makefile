@@ -16,7 +16,9 @@
 
 obj-m += pna.o
 pna-objs := pna_main.o pna_config.o pna_flowmon.o
-pna-objs += pna_rtmon.o pna_rtmon-conlip.o pna_alerts.o
+pna-objs += pna_hashmap.o murmur3.o
+pna-objs += pna_alerts.o pna_rtmon.o
+pna-objs += pna_rtmon-conlip.o
 
 KDIR := /lib/modules/`uname -r`/build
 EXTRA_CFLAGS += -I$(PWD)/../include/
