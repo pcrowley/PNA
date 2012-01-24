@@ -174,9 +174,8 @@ extern bool pna_rtmon;
 #define PNA_TABLE_TRIES 32
 
 struct flowtab_info {
-    void *table_base;
+    struct pna_hashmap *map;
     char table_name[PNA_MAX_STR];
-    struct flow_entry *flowtab;
 
     struct mutex read_mutex;
     int  table_dirty;
