@@ -113,19 +113,20 @@ void hashmap_reset(struct pna_hashmap *map)
  * @param *b pointer to location of bucket return value
  * @param *fp pointer to location of fingerprint return value
  */
-static void hashmap_hashit(struct pna_hashmap *map, void *key, int func, uint32_t *b, uint32_t *fp)
+static void hashmap_hashit(struct pna_hashmap *map, void *key, uint32_t *b0, uint32_t *fp0, uint32_t *b1, uint32_t *fp1)
 {
     uint64_t out[2];
 
     /* main hashing routine */
-#define C0 0xa96347c5
-#define C1 0xe65ac2d3
-    MurmurHash3_x64_128(key, map->key_size, func ? C0 : C1, out);
+    MurmurHash3_x64_128(key, map->key_size, 0xa96347c5, out);
 
-    //printf("hash: 0x%16llx:%16llx\n", out[0], out[1]);
-
-    *b = out[1] & map->bkt_mask;
-    *fp = out[0] & map->fp_mask;
+    /* XXX: Not sure if this is a good idea or bad idea:
+     * we get back 128 bits, but only need 4 <32-bit pieces of data
+     * so split of the return hash in uniqe ways to produce the data */
+    *b0 = (out[1] >> 32) & map->bkt_mask;
+    *fp0 = (out[0]) & map->fp_mask;
+    *b1 = ((out[0] >> 32) & map->bkt_mask) + map->n_buckets;
+    *fp1 = (out[1]) & map->fp_mask;
 }
 
 /**
@@ -138,9 +139,7 @@ void *hashmap_get(struct pna_hashmap *map, void *key)
     uint32_t kvx;
     uint32_t b0, fp0, b1, fp1;
 
-    hashmap_hashit(map, key, 0, &b0, &fp0);
-    hashmap_hashit(map, key, 1, &b1, &fp1);
-    b1 += map->n_buckets;
+    hashmap_hashit(map, key, &b0, &fp0, &b1, &fp1);
     for (i = 0; i < BKT_SIZE; i++) {
         /* scan bucket of the first section */
         if ((map->buckets[b0][i] & map->fp_mask) == fp0) {
@@ -177,9 +176,7 @@ void *hashmap_put(struct pna_hashmap *map, void *key, void *value)
     if (map->next_idx >= map->n_pairs)
         return NULL;
 
-    hashmap_hashit(map, key, 0, &b0, &fp0);
-    hashmap_hashit(map, key, 1, &b1, &fp1);
-    b1 += map->n_buckets;
+    hashmap_hashit(map, key, &b0, &fp0, &b1, &fp1);
     i0 = n0 = i1 = n1 = 0;
     for (i = 0; i < BKT_SIZE; i++) {
         /* count used buckets in left half */
