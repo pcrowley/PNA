@@ -70,6 +70,7 @@ struct pna_perf {
     __u64 p_interval[PNA_DIRECTIONS]; /* 16 */
     __u64 B_interval[PNA_DIRECTIONS]; /* 16 */
     pna_stat_uword dev_last_rx[PNA_MAXIF];
+    pna_stat_uword dev_last_drop[PNA_MAXIF];
     pna_stat_uword dev_last_fifo[PNA_MAXIF];
 };
 
@@ -170,7 +171,7 @@ int pna_hook(struct sk_buff *skb, struct net_device *dev,
     struct tcphdr *tcphdr;
     struct udphdr *udphdr;
     int ret, direction;
-    
+
     /* we don't care about outgoing packets */
     if (skb->pkt_type == PACKET_OUTGOING) {
         return pna_done(skb);
@@ -314,18 +315,22 @@ static void pna_perflog(struct sk_buff *skb, int dir)
 #if LINUX_VERSION_CODE <= KERNEL_VERSION(2,6,34)
                 /* numbers from the NIC */
                 stats = dev_get_stats(dev);
-                pr_info("pna %s_packets:%lu,%s_fifo_overruns:%lu\n",
+                pr_info("pna %s_packets:%lu,%s_fifo_overruns:%lu,%s_missed:%lu\n",
                         dev->name, stats->rx_packets - perf->dev_last_rx[i],
-                        dev->name, stats->rx_fifo_errors - perf->dev_last_fifo[i]);
+                        dev->name, stats->rx_fifo_errors - perf->dev_last_fifo[i],
+                        dev->name, stats->rx_missed_errors - perf->dev_last_drop[i]);
                 perf->dev_last_rx[i] = stats->rx_packets;
+                perf->dev_last_drop[i] = stats->rx_missed_errors;
                 perf->dev_last_fifo[i] = stats->rx_fifo_errors;
 #else
                 /* numbers from the NIC */
                 dev_get_stats(dev, &stats);
-                pr_info("pna %s_packets:%llu,%s_fifo_overruns:%llu\n",
+                pr_info("pna %s_packets:%llu,%s_fifo_overruns:%llu,%s_missed:%lli\n",
                         dev->name, stats.rx_packets - perf->dev_last_rx[i],
-                        dev->name, stats.rx_fifo_errors - perf->dev_last_fifo[i]);
+                        dev->name, stats.rx_fifo_errors - perf->dev_last_fifo[i],
+                        dev->name, stats.rx_missed_errors - perf->dev_last_drop[i]);
                 perf->dev_last_rx[i] = stats.rx_packets;
+                perf->dev_last_drop[i] = stats.rx_missed_errors;
                 perf->dev_last_fifo[i] = stats.rx_fifo_errors;
 #endif /* LINUX_VERSION_CODE */
             }
