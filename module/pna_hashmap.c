@@ -1,6 +1,7 @@
 
 /* Based on Jon Turner's 2011 HashMap.cpp implementation */
 
+#include <linux/vmalloc.h>
 #include <linux/module.h>
 #include <linux/string.h>
 
@@ -67,14 +68,6 @@ struct pna_hashmap *hashmap_create(uint32_t n_pairs, uint32_t key_size, uint32_t
     }
     map->next_idx = 0;
 
-    /* XXX remove debug */
-    //printf("buckets for %d * %d * %d [* %d, %d]\n", 2, map->n_buckets,
-    //        BKT_SIZE, sizeof(*map->buckets), sizeof(**map->buckets));
-    //printf("buckets@0x%llx (%d)\n", map->buckets, BKTS_BYTES(map));
-    //printf("pairs@0x%llx (%d)\n", map->pairs, PAIRS_BYTES(map));
-    //printf("n_pairs: %d\n", map->n_pairs);
-    //printf("n_buckets: %d (0x%08x)\n", map->n_buckets, map->bkt_mask);
-
     hashmap_reset(map);
 
     return map;
@@ -131,8 +124,8 @@ static void hashmap_hashit(struct pna_hashmap *map, void *key, int func, uint32_
 
     //printf("hash: 0x%16llx:%16llx\n", out[0], out[1]);
 
-    *b = out[0] & map->bkt_mask;
-    *fp = out[1] & map->fp_mask;
+    *b = out[1] & map->bkt_mask;
+    *fp = out[0] & map->fp_mask;
 }
 
 /**
@@ -142,29 +135,23 @@ static void hashmap_hashit(struct pna_hashmap *map, void *key, int func, uint32_
 void *hashmap_get(struct pna_hashmap *map, void *key)
 {
     int i;
-    uint32_t bkt, kvx, fp;
+    uint32_t kvx;
+    uint32_t b0, fp0, b1, fp1;
 
-    /* scan bucket of the first section */
-    hashmap_hashit(map, key, 0, &bkt, &fp);
+    hashmap_hashit(map, key, 0, &b0, &fp0);
+    hashmap_hashit(map, key, 1, &b1, &fp1);
+    b1 += map->n_buckets;
     for (i = 0; i < BKT_SIZE; i++) {
-        /* XXX remove debug */
-        //printf("bkt = %d ; i = %d\n", bkt, i);
-        //printf("buckets@0x%llx\n", map->buckets);
-        //printf("buckets[%d]@0x%llx\n", bkt, &map->buckets[bkt]);
-        //printf("buckets[%d][%d]@0x%llx\n", bkt, i, &(map->buckets[bkt][i]));
-        if ((map->buckets[bkt][i] & map->fp_mask) == fp) {
-            kvx = map->buckets[bkt][i] & map->kvx_mask;
+        /* scan bucket of the first section */
+        if ((map->buckets[b0][i] & map->fp_mask) == fp0) {
+            kvx = map->buckets[b0][i] & map->kvx_mask;
             /* check for positive match */
             if (0 == memcmp(&MAP_PAIR(map, kvx), key, map->key_size))
                 return &MAP_PAIR(map, kvx);
         }
-    }
-    /* scan bucket of the second section */
-    hashmap_hashit(map, key, 1, &bkt, &fp);
-    bkt += map->n_buckets;
-    for (i = 0; i < BKT_SIZE; i++) {
-        if ((map->buckets[bkt][i] & map->fp_mask) == fp) {
-            kvx = map->buckets[bkt][i] & map->kvx_mask;
+        /* scan bucket of the second section */
+        if ((map->buckets[b1][i] & map->fp_mask) == fp1) {
+            kvx = map->buckets[b1][i] & map->kvx_mask;
             /* check for positive match */
             if (0 == memcmp(&MAP_PAIR(map, kvx), key, map->key_size))
                 return &MAP_PAIR(map, kvx);
@@ -190,20 +177,17 @@ void *hashmap_put(struct pna_hashmap *map, void *key, void *value)
     if (map->next_idx >= map->n_pairs)
         return NULL;
 
-    /* count used buckets in left half */
     hashmap_hashit(map, key, 0, &b0, &fp0);
-    i0 = n0 = 0;
+    hashmap_hashit(map, key, 1, &b1, &fp1);
+    b1 += map->n_buckets;
+    i0 = n0 = i1 = n1 = 0;
     for (i = 0; i < BKT_SIZE; i++) {
+        /* count used buckets in left half */
         if (map->buckets[b0][i] == 0) {
             n0++;
             i0 = i;
         }
-    }
-    /* count used buckets in right half */
-    hashmap_hashit(map, key, 1, &b1, &fp1);
-    b1 += map->n_buckets;
-    i1 = n1 = 0;
-    for (i = 0; i < BKT_SIZE; i++) {
+        /* count used buckets in right half */
         if (map->buckets[b1][i] == 0) {
             n1++;
             i1 = i;
