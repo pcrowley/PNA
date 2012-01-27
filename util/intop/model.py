@@ -69,6 +69,7 @@ class PNAModel :
         self.settings = {'sort-key':PNADefaults.sort_key,
                          'threshold':PNADefaults.threshold,
                          'filters':PNADefaults.filters,}
+        self.parser = PNALogParser()
         self.all_data = [ ]
         self.cache = {'key':None,'threshold':None,'filters':None,'valid':False}
 
@@ -211,8 +212,9 @@ class PNAModel :
 
     # should parse a file and add it to the all_data structure
     def add_file(self, file_name) :
-        file_data = PNALogParser.parse(file_name)
-        self.all_data.append(file_data)
+        self.parser.clear_log()
+        self.parser.parse(file_name)
+        self.all_data.append(self.parser.get_log())
         self.cache['valid'] = False
 
     # derives a all_data list to a local->remote list
