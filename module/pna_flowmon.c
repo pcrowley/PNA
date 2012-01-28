@@ -224,6 +224,7 @@ int flowmon_hook(struct pna_flowkey *key, int direction, struct sk_buff *skb)
     }
 
     /* no entry, try to put a new key pair (with data) */
+    memset(&data, 0, sizeof(data));
     data.bytes[direction] = skb->len + ETH_OVERHEAD;
     data.packets[direction] = 1;
     data.first_tstamp = timeval.tv_sec;
