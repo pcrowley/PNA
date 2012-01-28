@@ -12,7 +12,8 @@
 #define pna_error pr_err
 
 /* local prototypes */
-static void hashmap_hashit(struct pna_hashmap *map, void *key, int func, uint32_t *b, uint32_t *fp);
+static void hashmap_hashit(struct pna_hashmap *map, void *key, uint32_t *b0,
+                           uint32_t *fp0, uint32_t *b1, uint32_t *fp1);
 
 /* murmur3 prototype */
 void MurmurHash3_x64_128(const void *key, const int len, const uint32_t seed, void *out);
