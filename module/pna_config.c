@@ -21,9 +21,11 @@
 
 /* configuration parameters */
 char *pna_iface = "eth0";
-uint pna_prefix = 0xc0a80000; /* 192.168.0.0    */
-uint pna_mask = 0xffff0000;   /*            /16 */
+uint pna_prefix = 0xc0a80000;      /* 192.168.0.0    */
+uint pna_mask = 0xffff0000;        /*            /16 */
+uint pna_flow_entries = (1 << 23); /* 8,388,608      */
 uint pna_tables = 2;
+
 uint pna_connections = 0xffffffff;
 uint pna_sessions = 0xffffffff;
 uint pna_tcp_ports = 0xffffffff;
@@ -47,6 +49,8 @@ module_param(pna_prefix, uint, S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(pna_prefix, "Network prefix defining 'local' IP addresses");
 module_param(pna_mask, uint, S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(pna_mask, "Network mask for IP addresses");
+module_param(pna_flow_entries, uint, S_IRUGO | S_IWUSR);
+MODULE_PARM_DESC(pna_flow_entries, "Number of flow entries per dump period");
 module_param(pna_tables, uint, S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(pna_tables, "Number of <src,dst,port> tables to use");
 

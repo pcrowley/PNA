@@ -266,11 +266,10 @@ int flowmon_init(void)
     /* configure each table for use */
     for (i = 0; i < pna_tables; i++) {
         info = &flowtab_info[i];
-        /* XXX make PNA_FLOW_ENTRIES runtime param: pna_n_sessions */
-        info->map = hashmap_create(PNA_FLOW_ENTRIES, sizeof(e.key), sizeof(e.data));
+        info->map = hashmap_create(pna_flow_entries, sizeof(e.key), sizeof(e.data));
         if (!info->map) {
             pr_err("Could not allocate hashmap (%d/%d tables, %u sessions)\n",
-                    i, pna_tables, PNA_FLOW_ENTRIES);
+                    i, pna_tables, pna_flow_entries);
             flowmon_cleanup();
             return -ENOMEM;
         }
@@ -291,7 +290,7 @@ int flowmon_init(void)
         proc_node->mode = S_IFREG | S_IRUGO | S_IWUSR | S_IWGRP;
         proc_node->uid = 0;
         proc_node->gid = 0;
-        proc_node->size = PNA_SZ_FLOW_ENTRIES;
+        proc_node->size = PAIRS_BYTES(info->map);
     }
 
     /* get packet arrival timestamps */
