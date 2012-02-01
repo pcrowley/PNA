@@ -24,7 +24,7 @@ char *pna_iface = "eth0";
 uint pna_prefix = 0xc0a80000;      /* 192.168.0.0    */
 uint pna_mask = 0xffff0000;        /*            /16 */
 uint pna_flow_entries = (1 << 23); /* 8,388,608      */
-uint pna_tables = 2;
+uint pna_tables = 4;
 
 uint pna_connections = 0xffffffff;
 uint pna_sessions = 0xffffffff;
