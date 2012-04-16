@@ -1,6 +1,6 @@
 # Configuration for a PNA node
 
-PNA_BASE="/usr/local/pna"      # Base directory for PNA module
+PNA_BASE="/home/pna/pna"       # Base directory for PNA module
 PNA_IFACE="eth0"               # Interface(s) for PNA to listen on
 PNA_PREFIX="192.168.0.0"       # IP Prefix to watch
 PNA_MASK="255.255.0.0"         # Network Mask to watch

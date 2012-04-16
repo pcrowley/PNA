@@ -73,10 +73,11 @@ int buf_flush(int out_fd, char *buffer, int buf_idx)
 }
 
 /* dumps the in-memory table to a file */
-void dump_table(void *table_base, char *out_file)
+void dump_table(void *table_base, unsigned int table_size, char *out_file)
 {
     int fd;
     unsigned int nflows;
+    unsigned int nentries;
     unsigned int start_time;
     uint offset;
 	unsigned int flow_idx;
@@ -89,6 +90,8 @@ void dump_table(void *table_base, char *out_file)
 
     /* record the current time */
     start_time = time(NULL);
+
+    nentries = table_size / sizeof(*flow);
 
     /* open up the output file */
     fd = open(out_file, O_CREAT|O_RDWR);
@@ -104,8 +107,8 @@ void dump_table(void *table_base, char *out_file)
 
 	flow_table = (struct flow_entry *)table_base;
 
-    /* now we loop through the table ... */
-    for (flow_idx = 0 ; flow_idx < PNA_FLOW_ENTRIES; flow_idx++ ) {
+    /* now we loop through the tables ... */
+    for (flow_idx = 0 ; flow_idx < nentries; flow_idx++ ) {
         /* get the first level entry */
         flow = &flow_table[flow_idx];
 
@@ -278,7 +281,7 @@ int main(int argc, char **argv)
         strftime(out_file, MAX_STR, out_base, start_tm);
 
         /* perform dumping ... */
-        dump_table(table_base, out_file);
+        dump_table(table_base, size, out_file);
 
         /* unmmap() for access */
         if (munmap(table_base, size) == -1) {

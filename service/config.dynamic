@@ -1,0 +1,32 @@
+# Configuration for a PNA node
+
+# This file should be a directory below the base dir
+THISDIR=$(dirname $(readlink -f ${BASH_SOURCE[0]}))
+
+# Assume the first none loopback device
+IPLINE=$(ip -o -f inet addr | grep -v "\<lo\>" | head -n1)
+IFACE=$(echo $IPLINE | awk '{print $2}')
+IPMASK=$(echo $IPLINE | awk '{print $4}')
+# IP is the before the / (will be & with mask in PNA)
+IP=${IPMASK/\/*}
+# CIDR is after the /
+SHIFT=$((32 - ${IPMASK/*\/}))
+XMASK=$((0xffffffff >> $SHIFT << $SHIFT))
+O1=$(($XMASK >> 24 & 0xff))
+O2=$(($XMASK >> 16 & 0xff))
+O3=$(($XMASK >> 8 & 0xff))
+O4=$(($XMASK & 0xff))
+MASK=$(printf "%d.%d.%d.%d" $O1 $O2 $O3 $O4)
+
+# Select the last processor
+PROC=$(cat /proc/cpuinfo | grep processor | tail -n1 | awk '{print $3}')
+
+PNA_BASE="$THISDIR/../"        # Base directory for PNA module
+PNA_IFACE="$IFACE"             # Interface(s) for PNA to listen on
+PNA_PREFIX="$IP"               # IP Prefix to watch
+PNA_MASK="$MASK"               # Network Mask to watch
+PNA_LOGDIR="${PNA_BASE}/logs"  # Directory to store log files
+
+# Advanced PNA configuration
+PNA_FLOWPROCS=($PROC)          # Processors for flow processing (not real-time)
+#PNA_MONPROCS=(0 2 4 6)        # Processors for userspace routines

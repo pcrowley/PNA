@@ -18,6 +18,7 @@
 /* functions: flowmon_init, flowmon_cleanup, flowmon_hook */
 
 #include <linux/kernel.h>
+#include <linux/module.h>
 #include <linux/percpu.h>
 #include <linux/hash.h>
 #include <linux/mutex.h>
@@ -33,6 +34,7 @@
 #include <linux/tcp.h>
 #include <linux/udp.h>
 
+#include "pna_hashmap.h"
 #include "pna.h"
 
 /* kernel/user table interaction */
@@ -59,16 +61,6 @@ static const struct file_operations flowtab_fops = {
     .open       = flowtab_open,
     .release    = flowtab_release,
     .mmap       = flowtab_mmap,
-};
-
-/* simple null key */
-static struct pna_flowkey null_key = {
-    .l3_protocol = 0,
-    .l4_protocol = 0,
-    .local_ip = 0,
-    .remote_ip = 0,
-    .local_port = 0,
-    .remote_port = 0,
 };
 
 /* per-cpu data */
@@ -124,15 +116,8 @@ static int flowtab_release(struct inode *inode, struct file *filep)
                 i, info->nflows, i, info->nflows_missed);
     }
 
-    /* zero out the table */
-    memset(info->table_base, 0, PNA_SZ_FLOW_ENTRIES);
-
-#if 0
-    for (i = 0; i < PNA_TABLE_TRIES; i++) {
-        printk("tries\t%d\t%u\n", i, info->probes[i]);
-        info->probes[i] = 0;
-    }
-#endif /* 0 */
+    /* clear out the table */
+    hashmap_reset(info->map);
 
     /* this table is safe to use again */
     flowtab_clean(info);
@@ -149,7 +134,7 @@ static int flowtab_mmap(struct file *filep, struct vm_area_struct *vma)
 {
     struct flowtab_info *info = filep->private_data;
 
-    if (remap_vmalloc_range(vma, info->table_base, 0)) {
+    if (remap_vmalloc_range(vma, info->map->pairs, 0)) {
         pr_warning("remap_vmalloc_range failed\n");
         return -EAGAIN;
     }
@@ -234,9 +219,9 @@ static inline int flowkey_match(struct pna_flowkey *key_a, struct pna_flowkey *k
 int flowmon_hook(struct pna_flowkey *key, int direction, struct sk_buff *skb)
 {
     struct flow_entry *flow;
+    struct pna_flow_data data;
     struct timeval timeval;
     struct flowtab_info *info;
-    unsigned int i, hash_0, hash;
 
     /* get the timestamp on the packet */
     skb_get_timestamp(skb, &timeval);
@@ -245,45 +230,29 @@ int flowmon_hook(struct pna_flowkey *key, int direction, struct sk_buff *skb)
         return -1;
     }
 
-    /* hash */
-    hash = key->local_ip ^ key->remote_ip;
-    hash ^= ((key->remote_port << 16) | key->local_port);
-    hash_0 = hash_32(hash, PNA_FLOW_BITS);
-
-    /* loop through table until we find right entry */
-    for ( i = 0; i < PNA_TABLE_TRIES; i++ ) {
-        /* quadratic probe for next entry */
-        hash = (hash_0 + ((i+i*i) >> 1)) & (PNA_FLOW_ENTRIES-1);
-
-        /* increment the number of probe tries for the table */
-        info->probes[i]++;
-
-        /* strt testing the waters */
-        flow = &(info->flowtab[hash]);
-
-        /* check for match -- update flow entry */
-        if (flowkey_match(&flow->key, key)) {
-            flow->data.bytes[direction] += skb->len + ETH_OVERHEAD;
-            flow->data.packets[direction] += 1;
-            return 0;
-        }
-
-        /* check for free spot -- insert flow entry */
-        if (flowkey_match(&flow->key, &null_key)) {
-            /* copy over the flow key for this entry */
-            memcpy(&flow->key, key, sizeof(*key));
-
-            /* port specific information */
-            flow->data.bytes[direction] += skb->len + ETH_OVERHEAD;
-            flow->data.packets[direction]++;
-            flow->data.first_tstamp = timeval.tv_sec;
-            flow->data.first_dir = direction;
-
-            info->nflows++;
-            return 1;
-        }
+    /* now the action -- try to get the key pair */
+    flow = (struct flow_entry *)hashmap_get(info->map, key);
+    if (flow) {
+        /* success, update packet count */
+        flow->data.bytes[direction] += skb->len + ETH_OVERHEAD;
+        flow->data.packets[direction] += 1;
+        return 0;
     }
 
+    /* no entry, try to put a new key pair (with data) */
+    memset(&data, 0, sizeof(data));
+    data.bytes[direction] = skb->len + ETH_OVERHEAD;
+    data.packets[direction] = 1;
+    data.first_tstamp = timeval.tv_sec;
+    data.first_dir = direction;
+    flow = (struct flow_entry *)hashmap_put(info->map, key, &data);
+    if (flow) {
+        /* successful put */
+        info->nflows++;
+        return 1;
+    }
+
+    /* couldn't get, couldn't put, it's a drop */
     info->nflows_missed++;
     return -1;
 }
@@ -295,6 +264,7 @@ int flowmon_init(void)
     struct flowtab_info *info;
     char table_str[PNA_MAX_STR];
     struct proc_dir_entry *proc_node;
+    struct flow_entry e;
 
     /* create the /proc base dir for pna tables */
     proc_parent = proc_mkdir(PNA_PROCDIR, NULL);
@@ -312,15 +282,13 @@ int flowmon_init(void)
     /* configure each table for use */
     for (i = 0; i < pna_tables; i++) {
         info = &flowtab_info[i];
-        info->table_base = vmalloc_user(PNA_SZ_FLOW_ENTRIES);
-        if (!info->table_base) {
-            pr_err("insufficient memory for %d/%d tables (%lu bytes)\n",
-                    i, pna_tables, (pna_tables * PNA_SZ_FLOW_ENTRIES));
+        info->map = hashmap_create(pna_flow_entries, sizeof(e.key), sizeof(e.data));
+        if (!info->map) {
+            pr_err("Could not allocate hashmap (%d/%d tables, %u sessions)\n",
+                    i, pna_tables, pna_flow_entries);
             flowmon_cleanup();
             return -ENOMEM;
         }
-        /* set up table pointers */
-        info->flowtab = info->table_base;
         flowtab_clean(info);
 
         /* initialize the read_mutec */
@@ -338,7 +306,7 @@ int flowmon_init(void)
         proc_node->mode = S_IFREG | S_IRUGO | S_IWUSR | S_IWGRP;
         proc_node->uid = 0;
         proc_node->gid = 0;
-        proc_node->size = PNA_SZ_FLOW_ENTRIES;
+        proc_node->size = PAIRS_BYTES(info->map);
     }
 
     /* set first table for each processor */
@@ -364,8 +332,8 @@ void flowmon_cleanup(void)
         if (flowtab_info[i].table_name[0] != '\0') {
             remove_proc_entry(flowtab_info[i].table_name, proc_parent);
         }
-        if (flowtab_info[i].table_base != NULL) {
-            vfree(flowtab_info[i].table_base);
+        if (flowtab_info[i].map != NULL) {
+            hashmap_destroy(flowtab_info[i].map);
         }
     }
 

@@ -27,8 +27,8 @@ else
     exit 1
 fi
 
-# Source function library
-source /etc/init.d/functions
+# Source function library for success/failure (if it exists)
+[ -f /etc/init.d/functions ] && source /etc/init.d/functions
 
 PNA_MODULE="${PNA_BASE}/module/pna.ko"      # Name of kernel module
 PNA_MONITOR="${PNA_BASE}/user/user_monitor" # Name of logging program
@@ -86,6 +86,7 @@ start () {
     ARGS="$PARMS pna_iface=\"$PNA_IFACE\""
     ARGS="$ARGS pna_prefix=$PNA_PREFIX"
     ARGS="$ARGS pna_mask=$PNA_MASK"
+    ARGS="$ARGS $PNA_OPTIONS"
     ${INSMOD} ${PNA_MODULE} $ARGS
     RETVAL=$?
 

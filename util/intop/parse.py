@@ -44,13 +44,24 @@ class PNALogParser :
     def build_flows(self, flow) :
         self.log['flows'].append(flow)
 
+    def __init__(self) :
+        self.clear_log()
+
+    def get_log(self) :
+        return self.log
+
+    def clear_log(self) :
+        self.log = { 'flows': [] }
+
+    def build_flows(self, flow) :
+        self.log['flows'].append(flow)
+
     # read a log file and return the data as a python list
     def parse(self, file_name, flow_callback=None) :
-        # open the file for reading
-        input = open(file_name, 'r')
-        in_data = input.read()
-        input.close()
-        pos = 0
+        # read the file into a list
+        file_input = open(file_name, 'r')
+        log_data = file_input.read()
+        file_input.close()
 
         # read the header data first
         hdr_data = struct.unpack('III', in_data[pos:pos+12])
@@ -59,10 +70,10 @@ class PNALogParser :
         if not flow_callback :
             flow_callback = self.build_flows
 
-        while pos < len(in_data) :
+        while pos < len(log_data) :
             # read an entry
-            data = struct.unpack(self.record, in_data[pos:pos+self.record_size])
-            pos += self.record_size
+            data = struct.unpack('IIHHIIIIIBBxx', log_data[pos:pos+36])
+            pos += 36
             flow = dict(zip(self.pna_log_data_names, data))
             flow['end-time'] = self.log['start-time']
             flow_callback(flow)
