@@ -15,13 +15,16 @@
 MODULE := module/pna.ko
 USER := user/user_monitor user/user_alerts
 
-all: $(MODULE) $(USER)
+all: $(MODULE) $(USER) rtmons
 
 $(MODULE):
 	$(MAKE) -C module/
 
 $(USER):
 	$(MAKE) -C user/
+
+rtmons:
+	$(MAKE) -C monitors/ BASE=$(PWD)
 
 start: $(MODULE) $(USER)
 	sudo ./service/pna start "$(PARMS)"
@@ -35,6 +38,7 @@ status:
 clean:
 	$(MAKE) -C module clean
 	$(MAKE) -C user clean
+	$(MAKE) -C monitors clean
 
 realclean: clean
 	rm -f irq_count.start irq_count.stop

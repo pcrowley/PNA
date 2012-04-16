@@ -36,6 +36,7 @@
 #include <net/tcp.h>
 
 #include "pna.h"
+#include "pna_module.h"
 
 static void pna_perflog(struct sk_buff *skb, int dir);
 static int pna_localize(struct pna_flowkey *key, int *direction);
@@ -84,6 +85,7 @@ DEFINE_PER_CPU(struct pna_perf, perf_data);
 #define PERF_INTERVAL      10
 
 /* general non-kernel hash function for double hashing */
+/* XXX: this will be depricated once hashmap is integrated */
 unsigned int pna_hash(unsigned int key, int bits)
 {
     unsigned int hash = key;
@@ -96,6 +98,7 @@ unsigned int pna_hash(unsigned int key, int bits)
 
     return hash;
 }
+EXPORT_SYMBOL(pna_hash);
 
 //swap remote and local in the pna_flowkey
 static inline void pna_key_swap(struct pna_flowkey * key)
@@ -170,7 +173,8 @@ int pna_hook(struct sk_buff *skb, struct net_device *dev,
     struct iphdr *iphdr;
     struct tcphdr *tcphdr;
     struct udphdr *udphdr;
-    int ret, direction;
+    int direction;
+    int ret = 0;
 
     /* we don't care about outgoing packets */
     if (skb->pkt_type == PACKET_OUTGOING) {
@@ -244,12 +248,10 @@ int pna_hook(struct sk_buff *skb, struct net_device *dev,
             /* failed to insert -- cleanup */
             return pna_done(skb);
         }
-
-        /* run real-time hooks */
-        if (pna_rtmon == true) {
-            rtmon_hook(&key, direction, skb, (unsigned long)ret);
-        }
     }
+
+    /* run real-time hooks (if any are loaded.) */
+    rtmon_hook(&key, direction, skb, (unsigned long)ret);
 
     /* free our skb */
     return pna_done(skb);
@@ -365,14 +367,13 @@ int __init pna_init(void)
         return ret;
     }
 
-    /* set up the alert system */
-    if (pna_alert_init() < 0) {
+    if (rtmon_init() < 0) {
         pna_cleanup();
         return -1;
     }
 
-    if (rtmon_init() < 0) {
-        pna_alert_cleanup();
+    /* set up the alert system */
+    if (pna_alert_init() < 0) {
         pna_cleanup();
         return -1;
     }
@@ -409,7 +410,6 @@ void pna_cleanup(void)
         dev_remove_pack(&pna_packet_type[i]);
         pr_info("pna: released %s\n", pna_packet_type[i].dev->name);
     }
-    rtmon_release();
     pna_alert_cleanup();
     flowmon_cleanup();
     pr_info("pna: module is inactive\n");

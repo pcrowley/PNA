@@ -21,90 +21,97 @@
 #include <linux/skbuff.h>
 
 #include "pna.h"
+#include "pna_module.h"
 
 /* in-file prototypes */
 static void rtmon_clean(unsigned long data);
 
-/*
- * @init: initialization routine for a hook
- * @hook: hook function called on every packet
- * @clean: clean function called periodically to reset tables/counters
- * @release: take-down function for table data and cleanup
- */
-struct pna_rtmon {
-    int (*init)(void);
-    int (*hook)(struct pna_flowkey *, int, struct sk_buff *, unsigned long *);
-    void (*clean)(void);
-    void (*release)(void);
-};
-
-/* a NULL .hook signals the end-of-list */
-struct pna_rtmon monitors[] = {
-    { .init = conmon_init, .hook = conmon_hook,
-      .clean = conmon_clean, .release = conmon_release },
-    { .init = lipmon_init, .hook = lipmon_hook,
-      .clean = lipmon_clean, .release = lipmon_release },
-    /* NULL hook entry is end of list delimited */
-    { .init = NULL, .hook = NULL, .clean = NULL, .release = NULL }
-};
-
-/* timer for calling clean function */
-DEFINE_TIMER(clean_timer, rtmon_clean, 0, 0);
+/* real-time monitor list and timer declarations */
+LIST_HEAD(rtmon_list);
+DEFINE_TIMER(timer_copy, rtmon_clean, 0, 0);
 
 /* reset each rtmon for next round of processing -- once per */
 static void rtmon_clean(unsigned long data)
 {
-    struct pna_rtmon *monitor;
+    struct pna_rtmon *m = (struct pna_rtmon *)data;
 
-    for (monitor = &monitors[0]; monitor->hook != NULL; monitor++) {
-        monitor->clean();
-    }
+    m->clean();
 
     /* update the timer for the next round */
-    mod_timer(&clean_timer, jiffies + msecs_to_jiffies(RTMON_CLEAN_INTERVAL));
+    mod_timer(&m->timer, jiffies + msecs_to_jiffies(RTMON_CLEAN_INTERVAL));
 }
 
 /* hook from main on packet to start real-time monitoring */
 int rtmon_hook(struct pna_flowkey *key, int direction, struct sk_buff *skb,
                unsigned long data)
 {
-    int ret;
-
     struct pna_rtmon *monitor;
-    for (monitor = &monitors[0]; monitor->hook != NULL; monitor++) {
-        ret = monitor->hook(key, direction, skb, &data);
-    }
-    return 0;
-}
-
-/* initialize all the resources needed for each rtmon */
-int rtmon_init(void)
-{
     int ret = 0;
 
-    struct pna_rtmon *monitor;
-    for (monitor = &monitors[0]; monitor->hook != NULL; monitor++) {
-        ret += monitor->init();
+    list_for_each_entry(monitor, &rtmon_list, list) {
+        ret += monitor->hook(key, direction, skb, &data);
     }
-
-    /* initialize/correct timer */
-    init_timer(&clean_timer);
-    clean_timer.expires = jiffies + msecs_to_jiffies(RTMON_CLEAN_INTERVAL);
-    add_timer(&clean_timer);
 
     return ret;
 }
 
-/* release the resources each rtmon is using */
-void rtmon_release(void)
+/* simple pna module init routines for dynamic rtmon support */
+int rtmon_init(void)
 {
-    struct pna_rtmon *monitor;
+//    memset(&rtmon_list, 0, sizeof(rtmon_list));
+//    INIT_LIST_HEAD(&rtmon_list.list);
+
+    return 0;
+}
+
+/* initialize all the resources needed for an rtmon */
+int rtmon_load(struct pna_rtmon *monitor)
+{
+    int ret = 0;
+    int idx = 0;
+
+    ret = monitor->init();
+
+    /* initialize/correct timer */
+    memcpy(&monitor->timer, &timer_copy, sizeof(timer_copy));
+    monitor->timer.data = (unsigned long)monitor;
+    init_timer(&monitor->timer);
+    monitor->timer.expires = jiffies + msecs_to_jiffies(RTMON_CLEAN_INTERVAL);
+    add_timer(&monitor->timer);
+
+    /* insert new monitor to tail of monitor list */
+    list_add_tail(&(monitor->list), &rtmon_list);
+    pr_info("rtmon '%s' loaded\n", monitor->name);
+
+    monitor = NULL;
+    list_for_each_entry(monitor, &rtmon_list, list) {
+        pr_info("rtmon%d: %s\n", idx, monitor->name);
+        idx++;
+    }
+
+    return ret;
+}
+EXPORT_SYMBOL(rtmon_load);
+
+/* unload and release the resources for an rtmon */
+void rtmon_unload(struct pna_rtmon *monitor)
+{
+    int idx = 0;
+
+    /* remove the monitor from the table */
+    list_del(&monitor->list);
 
     /* remove the timer */
-    del_timer(&clean_timer);
+    del_timer(&monitor->timer);
 
-    /* clean up each of the monitors */
-    for (monitor = &monitors[0]; monitor->hook != NULL; monitor++) {
-        monitor->release();
+    /* clean up the monitor */
+    monitor->release();
+    pr_info("rtmon '%s' unloaded\n", monitor->name);
+
+    /* shor currently active monitors */
+    list_for_each_entry(monitor, &rtmon_list, list) {
+        pr_info("rtmon%d: %s\n", idx, monitor->name);
+        idx++;
     }
 }
+EXPORT_SYMBOL(rtmon_unload);

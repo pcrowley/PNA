@@ -12,20 +12,24 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# kernel module files
+# real-time monitor files
 
-obj-m += pna.o
-pna-objs := pna_main.o pna_config.o pna_flowmon.o
-pna-objs += pna_hashmap.o murmur3.o
-pna-objs += pna_alerts.o pna_rtmon.o
+obj-m += pna_lipmon.o pna_conmon.o
+
+ifndef BASE
+    BASE = $(PWD)/..
+endif
 
 KDIR := /lib/modules/`uname -r`/build
 EXTRA_CFLAGS += -I$(PWD)/../include/
+PNA_DIR := $(BASE)/module
+PNA_SYMBOLS := $(PNA_DIR)/Module.symvers
 
-all: module
+all: modules
 
-module:
-	$(MAKE) -C $(KDIR) M=`pwd` modules
+modules:
+	$(MAKE) -C $(PNA_DIR)
+	$(MAKE) -C $(KDIR) M=`pwd` KBUILD_EXTRA_SYMBOLS=$(PNA_SYMBOLS) modules
 
 clean:
 	$(MAKE) -C $(KDIR) M=`pwd` clean

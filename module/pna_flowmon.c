@@ -34,8 +34,9 @@
 #include <linux/tcp.h>
 #include <linux/udp.h>
 
-#include "pna_hashmap.h"
 #include "pna.h"
+#include "pna_module.h"
+#include "pna_hashmap.h"
 
 /* kernel/user table interaction */
 static int flowtab_open(struct inode *inode, struct file *filep);

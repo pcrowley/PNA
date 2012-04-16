@@ -16,18 +16,9 @@
 #ifndef __PNA_H
 #define __PNA_H
 
-/* /proc directory PNA tables will be stored in */
-#define PNA_PROCDIR  "pna"
-
-/* name format of PNA table files */
-#define PNA_PROCFILE "table%d"
-#define PNA_MAX_STR  16
-
-/* a table must have at least PNA_LAG_TIME seconds before dumping */
-#define PNA_LAG_TIME 2
-
-/* time interval to call real-time monitor "clean" function (milliseconds) */
-#define RTMON_CLEAN_INTERVAL (10*MSEC_PER_SEC)
+#ifdef __KERNEL__
+# include <linux/time.h>
+#endif /* __KERNEL__ */
 
 /* shared kernel/user space data for alert system */
 #ifndef __KERNEL__
@@ -42,6 +33,10 @@ char *pna_alert_types[] = {
 char *pna_alert_protocols[] = { "none", "tcp", "udp", "both", };
 char *pna_alert_directions[] = { "none", "in", "out", "bi", };
 #endif /* __KERNEL__ */
+
+/* XXX: bad practice, but it gets the job done */
+/* could be trouble if Linux decides to use more netlink links */
+#define NETLINK_PNA 31
 
 /* various constants */
 #define PNA_DIRECTIONS 2 /* out and in */
@@ -70,10 +65,6 @@ struct pna_log_entry {
     unsigned char first_dir;                /* 1 */
     char pad[2];                            /* 2 */
 };                                          /* = 36 */
-
-/* XXX: bad practice, but it gets the job done */
-/* could be trouble if Linux decides to use more netlink links */
-#define NETLINK_PNA 31
 
 /* PNA alert commands */
 #define PNA_ALERT_CMD_REGISTER   0x0001
@@ -134,85 +125,5 @@ struct flow_entry {
     struct pna_flowkey key;
     struct pna_flow_data data;
 };
-
-#ifdef __KERNEL__
-
-/* Account for Ethernet overheads (stripped by sk_buff) */
-#include <linux/if_ether.h>
-#define ETH_INTERFRAME_GAP 12   /* 9.6ms @ 1Gbps */
-#define ETH_PREAMBLE       8    /* preamble + start-of-frame delimiter */
-#define ETH_OVERHEAD       (ETH_INTERFRAME_GAP + ETH_PREAMBLE + ETH_HLEN + ETH_FCS_LEN)
-
-/* kernel configuration settings */
-extern char *pna_iface;
-extern uint pna_prefix;
-extern uint pna_mask;
-extern uint pna_flow_entries;
-extern uint pna_tables;
-extern uint pna_connections;
-extern uint pna_sessions;
-extern uint pna_tcp_ports;
-extern uint pna_tcp_bytes;
-extern uint pna_tcp_packets;
-extern uint pna_udp_ports;
-extern uint pna_udp_bytes;
-extern uint pna_udp_packets;
-extern uint pna_ports;
-extern uint pna_bytes;
-extern uint pna_packets;
-extern bool pna_debug;
-extern bool pna_perfmon;
-extern bool pna_flowmon;
-extern bool pna_rtmon;
-#endif /* __KERNEL__ */
-
-/* table meta-information */
-#ifdef __KERNEL__
-/* number of attempts to insert before giving up */
-#define PNA_TABLE_TRIES 32
-
-struct flowtab_info {
-    struct pna_hashmap *map;
-    char table_name[PNA_MAX_STR];
-
-    struct mutex read_mutex;
-    int  table_dirty;
-    time_t first_sec;
-    int  smp_id;
-    unsigned int nflows;
-    unsigned int nflows_missed;
-    unsigned int probes[PNA_TABLE_TRIES];
-};
-#endif /* __KERNEL__ */
-
-/* some prototypes */
-#ifdef __KERNEL__
-unsigned int pna_hash(unsigned int key, int bits);
-
-int flowmon_hook(struct pna_flowkey *key, int direction, struct sk_buff *skb);
-int flowmon_init(void);
-void flowmon_cleanup(void);
-
-int rtmon_init(void);
-int rtmon_hook(struct pna_flowkey *key, int direction, struct sk_buff *skb,
-               unsigned long data);
-void rtmon_release(void);
-
-int conmon_init(void);
-int conmon_hook(struct pna_flowkey *key, int direction, struct sk_buff *skb,
-               unsigned long *data);
-void conmon_clean(void);
-void conmon_release(void);
-
-int lipmon_init(void);
-int lipmon_hook(struct pna_flowkey *key, int direction, struct sk_buff *skb,
-               unsigned long *data);
-void lipmon_clean(void);
-void lipmon_release(void);
-
-int pna_alert_warn(int reason, int value, struct timeval *time);
-int pna_alert_init(void);
-void pna_alert_cleanup(void);
-#endif /* __KERNEL__ */
 
 #endif /* __PNA_H */

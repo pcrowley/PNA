@@ -23,6 +23,7 @@
 #include <linux/skbuff.h>
 
 #include "pna.h"
+#include "pna_module.h"
 
 /* one user process will talk with one kernel socket */
 static struct sock *pna_alert_sock = NULL;
@@ -44,6 +45,7 @@ int pna_alert_warn(int reason, int value, struct timeval *time)
 
     return pna_alert_send(&alert);
 }
+EXPORT_SYMBOL(pna_alert_warn);
 
 /* receive a message from a user process */
 static void pna_alert_recv(struct sk_buff *skb)
