@@ -28,7 +28,7 @@ MODULE_LICENSE("Apache 2.0");
 MODULE_AUTHOR("Michael J. Schultz <mjschultz@gmail.com>");
 
 int lipmon_init(void);
-int lipmon_hook(struct pna_flowkey *key, int direction, struct sk_buff *skb,
+int lipmon_hook(struct session_key *key, int direction, struct sk_buff *skb,
                 unsigned long *data);
 void lipmon_clean(void);
 void lipmon_release(void);
@@ -60,7 +60,7 @@ struct lipmon_entry *liptab;
 #define PNA_LIPMON_ENTRIES (1 << PNA_LIPMON_BITS)
 #define PNA_LIPMON_TABLE_SZ (PNA_LIPMON_ENTRIES*sizeof(struct lipmon_entry))
 
-#define PNA_NEW_FLOW 0x01
+#define PNA_NEW_SESSION 0x01
 #define PNA_NEW_CON  0x02
 
 /* in-file prototypes */
@@ -101,7 +101,7 @@ int lipmon_init(void)
 }
 
 /* insert/update entry for liptab */
-static struct lipmon_entry *liptab_insert(struct pna_flowkey *key)
+static struct lipmon_entry *liptab_insert(struct session_key *key)
 {
     unsigned int i;
     unsigned int hash, hash_0, hash_1;
@@ -164,7 +164,7 @@ static void lipmon_check(struct lipmon_entry *lip, int proto, int dir,
     }
 }
 
-int lipmon_hook(struct pna_flowkey *key, int direction, struct sk_buff *skb,
+int lipmon_hook(struct session_key *key, int direction, struct sk_buff *skb,
                 unsigned long *data)
 {
     struct lipmon_entry *lip;
@@ -181,8 +181,8 @@ int lipmon_hook(struct pna_flowkey *key, int direction, struct sk_buff *skb,
     /* get the packet arrival time */
     skb_get_timestamp(skb, &tv);
 
-    /* if this is a new flow, update sessions */
-    if (*int_data & PNA_NEW_FLOW) {
+    /* if this is a new session, update sessions */
+    if (*int_data & PNA_NEW_SESSION) {
         lip->sessions[protocol][direction] += 1;
     }
 

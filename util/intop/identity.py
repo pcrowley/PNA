@@ -88,7 +88,7 @@ def main(args) :
         else :
             parser = PNALogParser()
             parser.parse(arg)
-            raw_data = parser.get_flows()
+            raw_data = parser.get_sessions()
             file_data = PNAParseLogger.unparse(raw_data)
         file = open(arg+'.id', 'w')
         file.write(file_data)

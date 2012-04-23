@@ -58,7 +58,7 @@
  */
 struct pna_rtmon {
     int (*init)(void);
-    int (*hook)(struct pna_flowkey *, int, struct sk_buff *, unsigned long *);
+    int (*hook)(struct session_key *, int, struct sk_buff *, unsigned long *);
     void (*clean)(void);
     void (*release)(void);
     char *name;
@@ -77,17 +77,17 @@ struct pna_rtmon {
 extern char *pna_iface;
 extern uint pna_prefix;
 extern uint pna_mask;
-extern uint pna_flow_entries;
+extern uint pna_session_entries;
 extern uint pna_tables;
 extern bool pna_debug;
 extern bool pna_perfmon;
-extern bool pna_flowmon;
+extern bool pna_session_mon;
 
 /* table meta-information */
 /* number of attempts to insert before giving up */
 #define PNA_TABLE_TRIES 32
 
-struct flowtab_info {
+struct sessiontab_info {
     struct pna_hashmap *map;
     char table_name[PNA_MAX_STR];
 
@@ -95,22 +95,22 @@ struct flowtab_info {
     int  table_dirty;
     time_t first_sec;
     int  smp_id;
-    unsigned int nflows;
-    unsigned int nflows_missed;
+    unsigned int nsessions;
+    unsigned int nsessions_missed;
     unsigned int probes[PNA_TABLE_TRIES];
 };
 
 /* some prototypes */
 unsigned int pna_hash(unsigned int key, int bits);
 
-int flowmon_hook(struct pna_flowkey *key, int direction, struct sk_buff *skb);
-int flowmon_init(void);
-void flowmon_cleanup(void);
+int session_hook(struct session_key *key, int direction, struct sk_buff *skb);
+int session_init(void);
+void session_cleanup(void);
 
 int rtmon_init(void);
 int rtmon_load(struct pna_rtmon *monitor);
 void rtmon_unload(struct pna_rtmon *monitor);
-int rtmon_hook(struct pna_flowkey *key, int direction, struct sk_buff *skb,
+int rtmon_hook(struct session_key *key, int direction, struct sk_buff *skb,
                unsigned long data);
 
 int pna_alert_warn(int reason, int value, struct timeval *time);

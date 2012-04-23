@@ -22,18 +22,18 @@
 char *pna_iface = "eth0";
 uint pna_prefix = 0xc0a80000;      /* 192.168.0.0    */
 uint pna_mask = 0xffff0000;        /*            /16 */
-uint pna_flow_entries = (1 << 20); /* 1,048,576      */
+uint pna_session_entries = (1 << 23); /* 8,388,608      */
 uint pna_tables = 4;
 bool pna_debug = false;
 bool pna_perfmon = true;
-bool pna_flowmon = true;
+bool pna_session_mon = true;
 
 PNA_PARAM(charp, pna_iface, "Interface on which we listen to packets");
 PNA_PARAM(uint, pna_prefix, "Network prefix defining 'local' IP addresses");
 PNA_PARAM(uint, pna_mask, "Network mask for IP addresses");
-PNA_PARAM(uint, pna_flow_entries, "Number of flow entries per dump period");
+PNA_PARAM(uint, pna_session_entries, "Number of session entries per dump period");
 PNA_PARAM(uint, pna_tables, "Number of <src,dst,port> tables to use");
 PNA_PARAM(bool, pna_debug, "Enable kernel debug log messages");
 PNA_PARAM(bool, pna_perfmon, "Enable PNA performance monitoring messages");
-PNA_PARAM(bool, pna_flowmon, "Enable PNA flow monitoring");
+PNA_PARAM(bool, pna_session_mon, "Enable PNA session monitoring");
 

@@ -40,7 +40,7 @@ class CommandLineInterface :
         # create the option parser for command line args
         argparse = optparse.OptionParser(usage=usage)
         argparse.add_option('-s','--stream', dest='stream', action='store_true',
-                            help='stream the flows directly to stdout, forgoes any filtering and formatting',
+                            help='stream the sessions directly to stdout, forgoes any filtering and formatting',
                             default=False)
         argparse.add_option('-f','--format', dest='format', metavar='FORMAT',
                             help='set output format to FORMAT',
@@ -61,10 +61,10 @@ class CommandLineInterface :
         #                    help='only display remote ports that match PORT',
         #                    default=None)
         argparse.add_option('-b','--begin-time', dest='begin_time', metavar='TIME',
-                 help='display flows starting after TIME ('+self.model.time_fmt+')',
+                 help='display sessions starting after TIME ('+self.model.time_fmt+')',
                             default=None)
         argparse.add_option('-e','--end-time', dest='end_time', metavar='TIME',
-                 help='display flows ending before TIME ('+self.model.time_fmt+')',
+                 help='display sessions ending before TIME ('+self.model.time_fmt+')',
                             default=None)
         (options, files) = argparse.parse_args(self.arguments)
 
@@ -113,20 +113,20 @@ class CommandLineInterface :
         for file in files :
             parser.parse(file, self.stream_printer)
 
-    def stream_printer(self, flow) :
+    def stream_printer(self, session) :
         time_fmt = '%Y%m%d.%H:%M:%S'
-        src_ip = self.int2ip(flow['local-ip'])
-        dst_ip = self.int2ip(flow['remote-ip'])
+        src_ip = self.int2ip(session['local-ip'])
+        dst_ip = self.int2ip(session['remote-ip'])
 
-        proto = str(flow['protocol'])
-        start = time.strftime(time_fmt, time.localtime(flow['begin-time']))
-        end = time.strftime(time_fmt, time.localtime(flow['end-time']))
-        src_pt = str(flow['local-port'])
-        dst_pt = str(flow['remote-port'])
-        inpkts = str(flow['packets-in'])
-        outpkts = str(flow['packets-out'])
-        inbytes = str(flow['bytes-in'])
-        outbytes = str(flow['bytes-out'])
+        proto = str(session['protocol'])
+        start = time.strftime(time_fmt, time.localtime(session['begin-time']))
+        end = time.strftime(time_fmt, time.localtime(session['end-time']))
+        src_pt = str(session['local-port'])
+        dst_pt = str(session['remote-port'])
+        inpkts = str(session['packets-in'])
+        outpkts = str(session['packets-out'])
+        inbytes = str(session['bytes-in'])
+        outbytes = str(session['bytes-out'])
         entry = (start, end, src_ip, src_pt, dst_ip, dst_pt,
                 proto, inpkts, outpkts, inbytes, outbytes)
         print '\t'.join(entry)
@@ -142,8 +142,8 @@ class CommandLineInterface :
         else :
             print 'json unavailable'
 
-    # dump the data in flow-tools' flow-print -f5 format
-    def flow_format(self, data) :
+    # dump the data in session-tools' session-print -f5 format
+    def session_format(self, data) :
         fmt = '%-17s %-17s %-5s %-15s %-5s %-5s %-15s %-5s %3s %-2s %-10s %-22s'
         time_fmt = '%m%d.%H:%M:%S.000'
 
@@ -156,7 +156,7 @@ class CommandLineInterface :
         for log in data :
             end_time = time.localtime(log['start-time'])
             end = time.strftime(time_fmt, end_time)
-            for f in log['flows'] :
+            for f in log['sessions'] :
                 src_ip = self.int2ip(f['local-ip'])
                 dst_ip = self.int2ip(f['remote-ip'])
                 sif = '0'

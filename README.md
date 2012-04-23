@@ -1,8 +1,8 @@
 # Passive Network Appliance Node Software #
 
 This software is designed to monitor all traffic arriving at a network
-card, extract summary statistics, insert that packet into a flow table, and
-periodically dump that flow table to a file on disk.  The Linux kernel
+card, extract summary statistics, insert that packet into a session table, and
+periodically dump that session table to a file on disk.  The Linux kernel
 module found in `module/` handles the packet reception and table insertion
 routines.  It also allows arbitrary real-time monitors to be executed for
 each packet received.  Every 10 seconds a user-space program (in `user/`)
@@ -52,17 +52,18 @@ this project.
  - `module/` contains the kernel module source code
    - `pna_main.c` is the entry point for the kernel module (initialization
      and hooking
-   - `pna_flowmon.c` has routines to insert the packet into a flow entry
+   - `pna_session.c` has routines to insert the packet into a session entry
      and deals with exporting the summary statistics to user-space
    - `pna_rtmon.c` is the handler for real-time monitors
-   - `pna_rtmon-conlip.c` are two included real-time monitors (connections
-     and local IPs)
    - `pna_alert.c` is code to send messages to a user-space process when a
      real-time monitor detects anomalous behavior
    - `pna_config.c` handles run-time configuration parameters
- - `service/pna` is the script to start and stop all the PNA software
+ - `monitors/` contains existing real-time monitors
+   - `pna_lipmon.c` is a local IP monitor (tracks stats on local IPs)
+   - `pna_conmon.c` is a connection monitor (tracks per-connection stats)
+ - `service/pna` is the script to start, stop, load, or unload any PNA software
  - `user/` has the user-space software
-   - `user_monitor.c` interacts with the flow tables to export them to a
+   - `user_monitor.c` interacts with the session tables to export them to a
      log file
    - `user_alerts.c` is the alert handler for real-time monitors
  - `util/cron/` contains scripts and crontabs that help move files off-site

@@ -37,13 +37,13 @@ class PNALogParser :
         return self.log
 
     def clear_log(self) :
-        self.log = { 'flows': [] }
+        self.log = { 'sessions': [] }
 
-    def build_flows(self, flow) :
-        self.log['flows'].append(flow)
+    def build_sessions(self, session) :
+        self.log['sessions'].append(session)
 
     # read a log file and return the data as a python list
-    def parse(self, file_name, flow_callback=None) :
+    def parse(self, file_name, session_callback=None) :
         # read the file into a list
         file_input = open(file_name, 'r')
         log_data = file_input.read()
@@ -54,16 +54,16 @@ class PNALogParser :
         hdr_data = struct.unpack('III', log_data[pos:pos+12])
         pos += 12
         self.log = dict(self.log.items() + zip(self.pna_log_hdr_names, hdr_data))
-        if not flow_callback :
-            flow_callback = self.build_flows
+        if not session_callback :
+            session_callback = self.build_sessions
 
         while pos < len(log_data) :
             # read an entry
             data = struct.unpack('IIHHIIIIIBBxx', log_data[pos:pos+36])
             pos += 36
-            flow = dict(zip(self.pna_log_data_names, data))
-            flow['end-time'] = self.log['start-time']
-            flow_callback(flow)
+            session = dict(zip(self.pna_log_data_names, data))
+            session['end-time'] = self.log['start-time']
+            session_callback(session)
 
 def main(argv) :
     if len(argv) < 2 :
@@ -74,7 +74,7 @@ def main(argv) :
     parser = PNALogParser()
     for file in argv[1:] :
         parser.parse(file)
-    print parser.get_flows()
+    print parser.get_sessions()
 
 # start the program
 if __name__ == '__main__' :

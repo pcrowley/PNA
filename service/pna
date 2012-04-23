@@ -52,10 +52,10 @@ affinitize () {
     if [ -z "$IRQS" ] ; then
         IRQS=$(awk -F: '/'${iface}'/{ print $1 }' /proc/interrupts)
     fi
-    NPROCS=${#PNA_FLOWPROCS[@]}
+    NPROCS=${#PNA_SESSIONPROCS[@]}
     for irq in $IRQS ; do
-        # XXX: Not a fan of this FLOWPROCS mapping thing
-        affinity=$((1 << ${PNA_FLOWPROCS[$irq % $NPROCS]}))
+        # XXX: Not a fan of this SESSIONPROCS mapping thing
+        affinity=$((1 << ${PNA_SESSIONPROCS[$irq % $NPROCS]}))
         affinity=$(printf "%x" $affinity)
         name=$(basename /proc/irq/$irq/${iface}*)
         echo -e "\t$name ($irq) affinity $affinity"

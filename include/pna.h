@@ -102,8 +102,8 @@ struct pna_alert_msg {
 
 /* settings/structures for storing <src,dst,port> entries */
 
-/* definition of a flow for PNA */
-struct pna_flowkey {
+/* definition of a session for PNA */
+struct session_key {
     unsigned short l3_protocol;
     unsigned char l4_protocol;
     unsigned int local_ip;
@@ -112,8 +112,8 @@ struct pna_flowkey {
     unsigned short remote_port;
 };
 
-/* flow data we're interested in off-line */
-struct pna_flow_data {
+/* session data we're interested in off-line */
+struct session_data {
     unsigned int bytes[PNA_DIRECTIONS];
     unsigned int packets[PNA_DIRECTIONS];
     unsigned int timestamp;
@@ -121,9 +121,9 @@ struct pna_flow_data {
     unsigned int first_dir;
 };
 
-struct flow_entry {
-    struct pna_flowkey key;
-    struct pna_flow_data data;
+struct session_entry {
+    struct session_key key;
+    struct session_data data;
 };
 
 #endif /* __PNA_H */

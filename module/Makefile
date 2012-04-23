@@ -15,7 +15,7 @@
 # kernel module files
 
 obj-m += pna.o
-pna-objs := pna_main.o pna_config.o pna_flowmon.o
+pna-objs := pna_main.o pna_config.o pna_session.o
 pna-objs += pna_hashmap.o murmur3.o
 pna-objs += pna_alerts.o pna_rtmon.o
 

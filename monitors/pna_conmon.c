@@ -25,7 +25,7 @@
 #include "pna_module.h"
 
 int conmon_init(void);
-int conmon_hook(struct pna_flowkey *key, int direction, struct sk_buff *skb,
+int conmon_hook(struct session_key *key, int direction, struct sk_buff *skb,
                 unsigned long *data);
 void conmon_clean(void);
 void conmon_release(void);
@@ -74,7 +74,7 @@ struct conmon_entry *contab;
 #define PNA_CONMON_ENTRIES (1 << PNA_CONMON_BITS)
 #define PNA_CONMON_TABLE_SZ (PNA_CONMON_ENTRIES*sizeof(struct conmon_entry))
 
-#define PNA_NEW_FLOW 0x01
+#define PNA_NEW_SESSION 0x01
 #define PNA_NEW_CON  0x02
 
 /* in-file prototypes */
@@ -115,7 +115,7 @@ int conmon_init(void)
 }
 
 /* insert/update an entry in contab */
-static struct conmon_entry *contab_insert(struct pna_flowkey *key)
+static struct conmon_entry *contab_insert(struct session_key *key)
 {
     unsigned int i;
     struct conmon_entry *con;
@@ -233,7 +233,7 @@ static void conmon_check(struct conmon_entry *con, int proto, int dir,
     }
 }
 
-int conmon_hook(struct pna_flowkey *key, int direction, struct sk_buff *skb,
+int conmon_hook(struct session_key *key, int direction, struct sk_buff *skb,
                 unsigned long *data)
 {
     struct conmon_entry *con;
@@ -250,8 +250,8 @@ int conmon_hook(struct pna_flowkey *key, int direction, struct sk_buff *skb,
     /* get the packet arrival time */
     skb_get_timestamp(skb, &tv);
 
-    /* if this is a new flow, update the port counts */
-    if (*int_data & PNA_NEW_FLOW) {
+    /* if this is a new session, update the port counts */
+    if (*int_data & PNA_NEW_SESSION) {
         con->ports[protocol][direction] += 1;
     }
 

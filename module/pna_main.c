@@ -39,7 +39,7 @@
 #include "pna_module.h"
 
 static void pna_perflog(struct sk_buff *skb, int dir);
-static int pna_localize(struct pna_flowkey *key, int *direction);
+static int pna_localize(struct session_key *key, int *direction);
 static int pna_done(struct sk_buff *skb);
 int pna_hook(struct sk_buff *skb, struct net_device *dev,
         struct packet_type *pt, struct net_device *orig_dev);
@@ -100,8 +100,8 @@ unsigned int pna_hash(unsigned int key, int bits)
 }
 EXPORT_SYMBOL(pna_hash);
 
-//swap remote and local in the pna_flowkey
-static inline void pna_key_swap(struct pna_flowkey * key)
+//swap remote and local in the session_key
+static inline void pna_key_swap(struct session_key *key)
 {
     unsigned int temp;
 
@@ -118,7 +118,7 @@ static inline void pna_key_swap(struct pna_flowkey * key)
  * Receive Packet Hook (and helpers)
  */
 /* make sure the local and remote values are correct in the key */
-static int pna_localize(struct pna_flowkey *key, int *direction)
+static int pna_localize(struct session_key *key, int *direction)
 {
     unsigned int temp;
 
@@ -168,7 +168,7 @@ static int pna_done(struct sk_buff *skb)
 int pna_hook(struct sk_buff *skb, struct net_device *dev,
         struct packet_type *pt, struct net_device *orig_dev)
 {
-    struct pna_flowkey key;
+    struct session_key key;
     struct ethhdr *ethhdr;
     struct iphdr *iphdr;
     struct tcphdr *tcphdr;
@@ -227,7 +227,7 @@ int pna_hook(struct sk_buff *skb, struct net_device *dev,
         return pna_done(skb);
     }
 
-    /* entire key should now be filled in and we have a flow, localize it */
+    /* entire key should now be filled in and we have a session, localize it */
     if (!pna_localize(&key, &direction)) {
         /* couldn't localize the IP (neither source nor dest in prefix) */
         return pna_done(skb);
@@ -241,9 +241,9 @@ int pna_hook(struct sk_buff *skb, struct net_device *dev,
     /* hook actions here */
     //pr_info("key: {%d/%d, 0x%08x, 0x%08x, 0x%04x, 0x%04x}\n", key.l3_protocol, key.l4_protocol, key.local_ip, key.remote_ip, key.local_port, key.remote_port);
 
-    /* insert into flow table */
-    if (pna_flowmon == true) {
-        ret = flowmon_hook(&key, direction, skb);
+    /* insert into session table */
+    if (pna_session_mon == true) {
+        ret = session_hook(&key, direction, skb);
         if (ret < 0) {
             /* failed to insert -- cleanup */
             return pna_done(skb);
@@ -305,7 +305,7 @@ static void pna_perflog(struct sk_buff *skb, int dir)
 
         /* report the numbers */
         if (fps_in + fps_out > 1000) {
-            pr_info("pna flowmon_smpid:%d,in_fps:%llu,in_Mbps:%llu,in_avg:%llu,"
+            pr_info("pna session_smpid:%d,in_fps:%llu,in_Mbps:%llu,in_avg:%llu,"
                     "out_fps:%llu,out_Mbps:%llu,out_avg:%llu\n", smp_processor_id(),
                     fps_in, Mbps_in, avg_in, fps_out, Mbps_out, avg_out);
 
@@ -362,8 +362,8 @@ int __init pna_init(void)
     int i;
     int ret = 0;
 
-    /* set up the flow table(s) */
-    if ((ret = flowmon_init()) < 0) {
+    /* set up the session table(s) */
+    if ((ret = session_init()) < 0) {
         return ret;
     }
 
@@ -411,7 +411,7 @@ void pna_cleanup(void)
         pr_info("pna: released %s\n", pna_packet_type[i].dev->name);
     }
     pna_alert_cleanup();
-    flowmon_cleanup();
+    session_cleanup();
     pr_info("pna: module is inactive\n");
 }
 

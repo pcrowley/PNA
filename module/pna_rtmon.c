@@ -42,7 +42,7 @@ static void rtmon_clean(unsigned long data)
 }
 
 /* hook from main on packet to start real-time monitoring */
-int rtmon_hook(struct pna_flowkey *key, int direction, struct sk_buff *skb,
+int rtmon_hook(struct session_key *key, int direction, struct sk_buff *skb,
                unsigned long data)
 {
     struct pna_rtmon *monitor;

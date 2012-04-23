@@ -37,7 +37,7 @@
 #define USECS_PER_SEC    1000000
 
 /* simple null key */
-static struct pna_flowkey null_key = {
+static struct session_key null_key = {
 	.l3_protocol = 0,
 	.l4_protocol = 0,
 	.local_ip = 0,
@@ -51,7 +51,7 @@ static struct pna_flowkey null_key = {
 int verbose = 0;
 char *prog_name;
 
-int flowkey_match(struct pna_flowkey *key_a, struct pna_flowkey *key_b)
+int sessionkey_match(struct session_key *key_a, struct session_key *key_b)
 {
 	return !memcmp(key_a, key_b, sizeof(*key_a));
 }
@@ -76,13 +76,13 @@ int buf_flush(int out_fd, char *buffer, int buf_idx)
 void dump_table(void *table_base, unsigned int table_size, char *out_file)
 {
     int fd;
-    unsigned int nflows;
+    unsigned int nsessions;
     unsigned int nentries;
     unsigned int start_time;
     uint offset;
-	unsigned int flow_idx;
-    struct flow_entry *flow;
-    struct flow_entry *flow_table;
+	unsigned int session_idx;
+    struct session_entry *session;
+    struct session_entry *session_table;
     struct pna_log_hdr *log_header;
     struct pna_log_entry *log;
     char buf[BUF_SIZE];
@@ -91,7 +91,7 @@ void dump_table(void *table_base, unsigned int table_size, char *out_file)
     /* record the current time */
     start_time = time(NULL);
 
-    nentries = table_size / sizeof(*flow);
+    nentries = table_size / sizeof(*session);
 
     /* open up the output file */
     fd = open(out_file, O_CREAT|O_RDWR);
@@ -103,17 +103,17 @@ void dump_table(void *table_base, unsigned int table_size, char *out_file)
     lseek(fd, sizeof(struct pna_log_hdr), SEEK_SET);
 
     buf_idx = 0;
-    nflows = 0;
+    nsessions = 0;
 
-	flow_table = (struct flow_entry *)table_base;
+	session_table = (struct session_entry *)table_base;
 
     /* now we loop through the tables ... */
-    for (flow_idx = 0 ; flow_idx < nentries; flow_idx++ ) {
+    for (session_idx = 0 ; session_idx < nentries; session_idx++ ) {
         /* get the first level entry */
-        flow = &flow_table[flow_idx];
+        session = &session_table[session_idx];
 
         /* make sure it is active */
-        if (flowkey_match(&flow->key, &null_key)) {
+        if (sessionkey_match(&session->key, &null_key)) {
             continue;
         }
 
@@ -121,21 +121,21 @@ void dump_table(void *table_base, unsigned int table_size, char *out_file)
 		log = (struct pna_log_entry *)&buf[buf_idx];
 		buf_idx += sizeof(struct pna_log_entry);
 
-		/* copy the flow entry */
-		log->local_ip = flow->key.local_ip;
-		log->remote_ip = flow->key.remote_ip;
-		log->local_port = flow->key.local_port;
-		log->remote_port = flow->key.remote_port;
-		log->packets[PNA_DIR_OUTBOUND] = flow->data.packets[PNA_DIR_OUTBOUND];
-		log->packets[PNA_DIR_INBOUND] = flow->data.packets[PNA_DIR_INBOUND];
-		log->bytes[PNA_DIR_OUTBOUND] = flow->data.bytes[PNA_DIR_OUTBOUND];
-		log->bytes[PNA_DIR_INBOUND] = flow->data.bytes[PNA_DIR_INBOUND];
-		log->first_tstamp = flow->data.first_tstamp;
-		log->l4_protocol = flow->key.l4_protocol;
-		log->first_dir = flow->data.first_dir;
+		/* copy the session entry */
+		log->local_ip = session->key.local_ip;
+		log->remote_ip = session->key.remote_ip;
+		log->local_port = session->key.local_port;
+		log->remote_port = session->key.remote_port;
+		log->packets[PNA_DIR_OUTBOUND] = session->data.packets[PNA_DIR_OUTBOUND];
+		log->packets[PNA_DIR_INBOUND] = session->data.packets[PNA_DIR_INBOUND];
+		log->bytes[PNA_DIR_OUTBOUND] = session->data.bytes[PNA_DIR_OUTBOUND];
+		log->bytes[PNA_DIR_INBOUND] = session->data.bytes[PNA_DIR_INBOUND];
+		log->first_tstamp = session->data.first_tstamp;
+		log->l4_protocol = session->key.l4_protocol;
+		log->first_dir = session->data.first_dir;
 		log->pad[0] = 0x00;
 		log->pad[1] = 0x00;
-		nflows++;
+		nsessions++;
 
 		/* check if we can fit another entry */
 		if (buf_idx + sizeof(struct pna_log_entry) >= BUF_SIZE) {
@@ -149,7 +149,7 @@ void dump_table(void *table_base, unsigned int table_size, char *out_file)
 
     /* display the number of entries we got */
     if (verbose) {
-        printf("%d flows to '%s' ", nflows, out_file);
+        printf("%d sessions to '%s' ", nsessions, out_file);
     }
 
     /* write out header data */
@@ -157,7 +157,7 @@ void dump_table(void *table_base, unsigned int table_size, char *out_file)
     log_header = (struct pna_log_hdr *)&buf[buf_idx];
     log_header->start_time = start_time;
     log_header->end_time = time(NULL);
-    log_header->size = nflows * sizeof(struct pna_log_entry);
+    log_header->size = nsessions * sizeof(struct pna_log_entry);
     write(fd, log_header, sizeof(log_header));
 
     close(fd);
