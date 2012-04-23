@@ -1,198 +1,254 @@
 #!/bin/bash
 #
-# "$Id$"
+# Startup/shutdown script for the Passive Network Appliance (PNA).
+# 
+# This script can be used to start/stop the main PNA module, any
+# additional real-time monitors needed (on-demand), and associated
+# user-space helper routines.
 #
-#  Startup/shutdown script for the Passive Network Appliance (PNA).
+# Configuration settings are in "config"
+# 
+# No changes need to be made to this file.
 #
-#  chkconfig: 2345 95 05
-#  description: Startup/shutdown script for the Passive Network \
-#               Appliacte (PNA).
 
-##
-# Configuration settings are in service/config
-##
-
-# # # # # # # # # # # # # # # # # # # # # # # # # #
-#  Nothing below this point should need to change #
-# # # # # # # # # # # # # # # # # # # # # # # # # #
 SERVICE=pna
-
 SCRIPT_DIR=$(dirname $(readlink -f $0))
+CONFIG=$SCRIPT_DIR/config
 
-# Fetch the configuration
-if [ -e $SCRIPT_DIR/config ] ; then
-    source $SCRIPT_DIR/config
+# Load the configuration
+if [ -e $CONFIG ] ; then
+    source $CONFIG
 else
-    echo "Missing configuration file ($SCRIPT_DIR/config)" >&2
+    echo "Configuration file missing: $CONFIG" >&2
     exit 1
 fi
 
-# Source function library for success/failure (if it exists)
-[ -f /etc/init.d/functions ] && source /etc/init.d/functions
+# PNA programs
+PNA_MODULE="$PNA_BASE/module/pna.ko"
+USER_MONITOR="$PNA_BASE/user/user_monitor"
+USER_ALERTS="$PNA_BASE/user/user_alerts"
 
-PNA_MODULE="${PNA_BASE}/module/pna.ko"      # Name of kernel module
-PNA_MONITOR="${PNA_BASE}/user/user_monitor" # Name of logging program
-PNA_ALERTS="${PNA_BASE}/user/user_alerts"   # Name of alerts program
-
-# Program Locations
+# System programs
 IFCONFIG="/sbin/ifconfig"
 INSMOD="/sbin/insmod"
 RMMOD="/sbin/rmmod -w"
 LSMOD="/sbin/lsmod"
 
+##
+# Helper routine to convert a dotted quad IP into a hex word
+##
 ip2hex () {
     IP=$1
     printf "0x%02x%02x%02x%02x\n" $(echo "$IP" | sed "s/\./ /g")
 }
 
-start () {
-    PARMS=$1
-
-    # prevent irqbalance from changing interrupts
-    service irqbalance stop
-
-    echo -n $"Starting $SERVICE: "
-
-    if [ ! -z "$PARMS" ] ; then
-        echo -n "($PARMS)"
+##
+# Helper routine to set affinities on interface(s)
+##
+affinitize () {
+    iface=$1
+    # Find IRQs for iface
+    IRQS=$(awk -F: '/'${iface}'[^\n]/{ print $1 }' /proc/interrupts)
+    if [ -z "$IRQS" ] ; then
+        IRQS=$(awk -F: '/'${iface}'/{ print $1 }' /proc/interrupts)
     fi
+    NPROCS=${#PNA_FLOWPROCS[@]}
+    for irq in $IRQS ; do
+        # XXX: Not a fan of this FLOWPROCS mapping thing
+        affinity=$((1 << ${PNA_FLOWPROCS[$irq % $NPROCS]}))
+        affinity=$(printf "%x" $affinity)
+        name=$(basename /proc/irq/$irq/${iface}*)
+        echo -e "\t$name ($irq) affinity $affinity"
+        echo $affinity > /proc/irq/$irq/smp_affinity
+    done
+}
 
-    # Turn prefix and mask to hex values
-    PNA_PREFIX=$(ip2hex "$PNA_PREFIX")
-    PNA_MASK=$(ip2hex "$PNA_MASK")
+##
+# Check for and disable any known conflicting services
+##
+conflicts () {
+    action=$1
+    service irqbalance status > /dev/null 2>&1
+    [ $? -eq 0 -o $? -eq 3 ] && service irqbalance $action
+}
 
-    # Make sure PNA interface(s) are up
+##
+# Simple routine to error out of the script
+##
+error () {
     echo
+    echo "Error loading module and services ($1)"
+    exit $1
+}
+
+##
+# Prepare and load the PNA module
+##
+start () {
+    PARAMS=$*
+
+    echo "Starting $SERVICE ..."
+
+    [ -f $PNA_MODULE ] || error 1
+    [ -f $USER_MONITOR ] || error 1
+
+    # Disable conflicting services
+    conflicts "stop"
+
+    # Bring up and set affinity on PNA interfaces
     for iface in ${PNA_IFACE/,/ } ; do
-        ${IFCONFIG} ${iface} up
-        ${IFCONFIG} ${iface} promisc
-
-        # Set CPU <-> IRQ affinity for iface for flow monitors
-        IRQS=$(awk -F: '/'${iface}'[^\n]/{ print $1 }' /proc/interrupts)
-        if [ -z "$IRQS" ] ; then
-            IRQS=$(awk -F: '/'${iface}'/{ print $1 }' /proc/interrupts)
-        fi
-
-        for irq in $IRQS ; do
-            affinity=$((1 << ${PNA_FLOWPROCS[$irq%${#PNA_FLOWPROCS[@]}]}))
-            affinity=$(printf "%x" $affinity)
-            name=$(basename  /proc/irq/$irq/${iface}*)
-            echo -e "\t$name ($irq) affinity $affinity"
-            echo $affinity > /proc/irq/$irq/smp_affinity
-        done
+        $IFCONFIG $iface up promisc
+        affinitize $iface
     done
 
-    # load the module
-    ARGS="$PARMS pna_iface=\"$PNA_IFACE\""
-    ARGS="$ARGS pna_prefix=$PNA_PREFIX"
-    ARGS="$ARGS pna_mask=$PNA_MASK"
-    ARGS="$ARGS $PNA_OPTIONS"
-    ${INSMOD} ${PNA_MODULE} $ARGS
-    RETVAL=$?
+    # Set up parameters for kernel modules
+    PNA_PREFIX=$(ip2hex "$PNA_PREFIX")
+    PNA_MASK=$(ip2hex "$PNA_MASK")
+    PNA_ARGS="pna_iface=\"$PNA_IFACE\""
+    PNA_ARGS="$PNA_ARGS pna_prefix=$PNA_PREFIX"
+    PNA_ARGS="$PNA_ARGS pna_mask=$PNA_MASK"
+    PNA_ARGS="$PNA_ARGS $PNA_OPTIONS"
+    PNA_ARGS="$PNA_ARGS $PARAMS"
+    # Load the kernel module
+    $INSMOD $PNA_MODULE $PNA_ARGS
+    [ $? -eq 0 ] && touch /var/lock/subsys/$SERVICE || error 2
 
-    # log the current interrupt counts
-    date +%s.%N >> irq_count.start
-    grep "\(${PNA_IFACE/,/\|}\)" /proc/interrupts >> irq_count.start
-
-    # make sure we have some place to save log files
-    mkdir -p "$PNA_LOGDIR"
-
-    # start the logging monitor(s)
-    PID_LIST=""
-    rm -f verbose-*.log
+    # Set up and start the user-space logging monitor(s)
     i=0
+    mkdir -p "$PNA_LOGDIR"
     for f in /proc/${SERVICE}/*; do
         ARGS="-v -d $PNA_LOGDIR"
-        nohup ${PNA_MONITOR} $ARGS $f >> verbose-$(basename $f).log 2>&1 &
+        nohup ${USER_MONITOR} $ARGS $f > monitor-$(basename $f).log 2>&1 &
         PID=$!
+        [ $? -eq 0 ] && echo $PID >> /var/run/$SERVICE.pids
+
+        # Set processor affinity if desired
         if [ $PNA_MONPROCS ] ; then
             affinity=${PNA_MONPROCS[$i%${#PNA_MONPROCS[@]}]}
             i=$(($i+1))
             /bin/taskset -cp $affinity $PID > /dev/null 2>&1
-            affinity=$(/bin/taskset -p $PID |    awk '{print $6}')
+            affinity=$(/bin/taskset -p $PID | awk '{print $6}')
             echo -e "\tuser_monitor ($PID) affinity $affinity"
         fi
-        PID_LIST="$PID_LIST $PID"
-        RETVAL=$(($RETVAL+$?))
     done
 
-    # start the alerts monitor
-    # TODO...
+    # Set up and start the user-space alert monitor
+    # TODO
 
-    # in theory I should add entry to cron...
-    
-    # finish up with script-y stuff
-    [ $RETVAL = 0 ] && touch /var/lock/subsys/${SERVICE}
-    [ $RETVAL = 0 ] && echo $PID_LIST > /var/run/${SERVICE}.pids
-    [ $RETVAL = 0 ] && success || failure
-    echo
+    # Record and log any useful data (as needed)
+    date +%s.%N >> irq_count.start
+    grep "\(${PNA_IFACE/,/\|}\)" /proc/interrupts >> irq_count.start
 
-    return $RETVAL
+
+    echo "$SERVICE started successfully"
 }
 
+##
+# Routine to bring down all the services for the PNA
+##
 stop () {
-    echo -n $"Stopping $SERVICE: "
+    echo "Stopping $SERVICE ..."
 
-    # make sure there is something to stop
-    if [ ! -f /var/lock/subsys/${SERVICE} ] ; then
-        failure
-        echo 
-        return
-    fi
-
-    # log the current interrupt counts
+    # Conclude and logging of useful data
     date +%s.%N >> irq_count.stop
     grep "\(${PNA_IFACE/,/\|}\)" /proc/interrupts >> irq_count.stop
 
-    # in theory I should remove entry from cron...
-
-    # kill all the monitors and alerts
-    kill $(cat /var/run/${SERVICE}.pids)
-
-    # unload the module
-    ${RMMOD} ${PNA_MODULE}
-    RETVAL=$?
-
-    for iface in ${PNA_IFACE/,/ } ; do
-        # unset CPU affinities
-        for f in /proc/irq/*/${iface}*/../smp_affinity ; do
-            cat /proc/irq/default_smp_affinity > $f
+    # Take down any user-space processes
+    if [ -f /var/run/$SERVICE.pids ] ; then
+        for pid in $(cat /var/run/$SERVICE.pids) ; do
+            kill $pid
         done
+        rm -f /var/run/$SERVICE.pids
+    fi
 
-        # Take down PNA interface
-        ${IFCONFIG} ${iface} down
+    # Determine if any rtmons are loaded (and unload them)
+    RTMONS=$($LSMOD | grep "\<$SERVICE\>" | awk '{print $4}')
+    for mon in ${RTMONS/,/ } ; do
+        unload $mon
     done
 
-    # End with script-y stuff
-    [ $RETVAL = 0 ] && rm -f /var/lock/subsys/${SERVICE}
-    [ $RETVAL = 0 ] && rm -f /var/run/${SERVICE}.pids
-    [ $RETVAL = 0 ] && success || failure
-    echo
+    # Unload the main PNA module
+    if [ -f /var/lock/subsys/$SERVICE ] ; then
+        $RMMOD $PNA_MODULE
+        rm -f /var/lock/subsys/$SERVICE
+    fi
 
-    # allow irqbalance to change interrupts
-    service irqbalance start
+    # De-affinitize the interface(s) and take them down
+    for iface in ${PNA_IFACE/,/ } ; do
+        # unset CPU affinities
+        for f in /proc/irq/*/$iface*/../smp_affinity ; do
+            [ -f $f ] && cat /proc/irq/default_smp_affinity > $f
+        done
+        # Take down PNA interface
+        $IFCONFIG $iface down
+    done
 
-    return $RETVAL
+    # Re-load any services that were stopped
+    conflicts "start"
+
+    echo "$SERVICE stopped successfully"
 }
 
-case $1 in
+##
+# Load a real-time monitor into the kernel.
+##
+load () {
+    module=$1
+    name=$(basename $module .ko)
+
+    # Make sure the PNA module is loaded (error if not)
+    [ -f /var/lock/subsys/$SERVICE ] || error 3
+
+    # Try to find the path for the monitor
+    [ -f $module ] || module=$module.ko
+    [ -f $module ] || module=monitors/$module
+    [ -f $module ] || error 4
+
+    # Insert the monitor
+    $INSMOD $module
+    [ $? -eq 0 ] && touch /var/lock/subsys/$name || error 5
+    echo "PNA monitor $name loaded"
+}
+
+##
+# Unload a real-time monitor from the kernel
+##
+unload () {
+    module=$1
+    name=$(basename $module .ko)
+    [ -f /var/lock/subsys/$name ] && $RMMOD $name
+    echo "PNA monitor $name unloaded"
+}
+
+command=$1
+shift 1
+case $command in
     start)
-        start $2
+        start $*
     ;;
     stop)
         stop
     ;;
+    load)
+        load $*
+    ;;
+    unload)
+        unload $*
+    ;;
     restart)
         stop
-        start $2
+        start $*
     ;;
     status)
-        ${LSMOD} | grep ${SERVICE} > /dev/null
-        RETVAL=$?
+        RTMONS=$($LSMOD | grep "\<$SERVICE\>" | awk '{print $4}')
+        [ $? -eq 0 ] || exit 1
+        echo "PNA is loaded"
+        for mon in ${RTMONS/,/ } ; do
+            echo " \`- rtmon: $mon is loaded"
+        done
+        exit 0
     ;;
     *)
-        echo $"Usage: $SERVICE {start|stop|restart|status}"
+        echo $"Usage: $SERVICE {start|stop|restart|status|load|unload}"
         exit 3
 esac
-
-exit $RETVAL

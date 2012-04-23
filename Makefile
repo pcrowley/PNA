@@ -42,4 +42,4 @@ clean:
 
 realclean: clean
 	rm -f irq_count.start irq_count.stop
-	rm -f verbose-*.log
+	rm -f monitor-*.log
