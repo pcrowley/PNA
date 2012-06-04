@@ -22,7 +22,7 @@
 char *pna_iface = "eth0";
 uint pna_prefix = 0xc0a80000;      /* 192.168.0.0    */
 uint pna_mask = 0xffff0000;        /*            /16 */
-uint pna_session_entries = (1 << 23); /* 8,388,608      */
+uint pna_session_entries = (1 << 21); /* 2,097,152      */
 uint pna_tables = 4;
 bool pna_debug = false;
 bool pna_perfmon = true;
