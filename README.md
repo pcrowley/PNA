@@ -61,7 +61,10 @@ this project.
  - `monitors/` contains existing real-time monitors
    - `pna_lipmon.c` is a local IP monitor (tracks stats on local IPs)
    - `pna_conmon.c` is a connection monitor (tracks per-connection stats)
- - `service/pna` is the script to start, stop, load, or unload any PNA software
+ - `service/` contains configuration and start/stop scripts
+   - `pna` is the script to start, stop, load, or unload any PNA software
+   - `config` MUST be created. Included is an example configuration and a 
+     "best guess" dynamic configuration (can be symlinked)
  - `user/` has the user-space software
    - `user_monitor.c` interacts with the session tables to export them to a
      log file
