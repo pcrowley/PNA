@@ -27,6 +27,16 @@ PNA_PREFIX="$IP"               # IP Prefix to watch
 PNA_MASK="$MASK"               # Network Mask to watch
 PNA_LOGDIR="${PNA_BASE}/logs"  # Directory to store log files
 
+# Output the dynamic choices
+echo "Base directory: $PNA_BASE"
+echo "Log directory: $PNA_LOGDIR"
+echo "Listening interface: $IFACE"
+echo "IP Prefix/netmask: $PNA_PREFIX/$PNA_MASK"
+echo "PNA Affinity: $PROC"
+echo "===="
+echo "If all the settings above are acceptable, press enter; otherwise Ctrl-C"
+read
+
 # Advanced PNA configuration
 PNA_SESSIONPROCS=($PROC)       # Processors for session monitors (not real-time)
 #PNA_MONPROCS=(0 2 4 6)        # Processors for userspace routines
