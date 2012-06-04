@@ -111,7 +111,7 @@ start () {
     PNA_ARGS="$PNA_ARGS $PARAMS"
     # Load the kernel module
     $INSMOD $PNA_MODULE $PNA_ARGS
-    [ $? -eq 0 ] && touch /var/lock/subsys/$SERVICE || error 2
+    [ $? -eq 0 ] && touch /var/run/$SERVICE.kmod || error 2
 
     # Set up and start the user-space logging monitor(s)
     i=0
@@ -168,9 +168,9 @@ stop () {
     done
 
     # Unload the main PNA module
-    if [ -f /var/lock/subsys/$SERVICE ] ; then
+    if [ -f /var/run/$SERVICE.kmod ] ; then
         $RMMOD $PNA_MODULE
-        rm -f /var/lock/subsys/$SERVICE
+        rm -f /var/run/$SERVICE.kmod
     fi
 
     # De-affinitize the interface(s) and take them down
@@ -197,7 +197,7 @@ load () {
     name=$(basename $module .ko)
 
     # Make sure the PNA module is loaded (error if not)
-    [ -f /var/lock/subsys/$SERVICE ] || error 3
+    [ -f /var/run/$SERVICE.kmod ] || error 3
 
     # Try to find the path for the monitor
     [ -f $module ] || module=$module.ko
@@ -206,7 +206,7 @@ load () {
 
     # Insert the monitor
     $INSMOD $module
-    [ $? -eq 0 ] && touch /var/lock/subsys/$name || error 5
+    [ $? -eq 0 ] && touch /var/run/$name.kmod || error 5
     echo "PNA monitor $name loaded"
 }
 
@@ -216,7 +216,7 @@ load () {
 unload () {
     module=$1
     name=$(basename $module .ko)
-    [ -f /var/lock/subsys/$name ] && $RMMOD $name
+    [ -f /var/run/$name.kmod ] && $RMMOD $name
     echo "PNA monitor $name unloaded"
 }
 
