@@ -23,7 +23,7 @@ Loading the kernel module and user-space programs is done with a script
 (`service/pna`).  This script has a few configuration parameters that should
 be set:
 
- - `BASE` sets the base directory of the PNA software (i.e. `pwd` of this file)
+ - `PNA_BASE` sets the base directory of the PNA software (i.e. `pwd` of this file)
  - `PNA_IFACE` sets the interface on which traffic will be monitored
  - `PNA_PREFIX` sets the IP prefix of the monitored network (local network)
  - `PNA_MASK` sets the subnet mask of the monitored network
