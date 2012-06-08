@@ -1,11 +1,8 @@
-
 PROGRAM = pcap_wrap
-FILES = pcap_wrap.c
 
-CFLAGS = -lpcap
+LDLIBS = -lpcap
 
-all:
-	gcc ${CFLAGS} ${FILES} -o ${PROGRAM}
+all: ${PROGRAM}
 
 clean:
 	rm -f ${PROGRAM}

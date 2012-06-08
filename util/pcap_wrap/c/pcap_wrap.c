@@ -35,7 +35,7 @@ void monitor_hook(struct session_key *key, int direction,
            key->remote_ip);
     printf("local_port: %d, remote_port: %d}\n", key->local_port,
            key->remote_port);
-    printf("length: %d\n", pkt->length);
+    printf("length: %lu\n", pkt->length);
 }
 
 /*
