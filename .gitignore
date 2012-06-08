@@ -1,2 +1,15 @@
 .svn
 *.o
+*.ko
+*.log
+irq_count.*
+*.pyc
+*.ko.cmd
+*.o.cmd
+*.mod.c
+service/config
+.tmp_versions/
+Module.symvers
+modules.order
+user/user_alerts
+user/user_monitor
