@@ -233,8 +233,8 @@ int main(int argc, char **argv)
         /* show processing time if bigger than 100 microseconds */
         if (verbose && diff.tv_usec > 100) {
             printf("processed in %d.%06d seconds (sleeping for %u seconds)\n",
-                    diff.tv_sec, diff.tv_usec,
-                    interval - diff.tv_sec - frac/USECS_PER_SEC);
+                    (int)diff.tv_sec, (int)diff.tv_usec,
+                    (unsigned)(interval - diff.tv_sec - frac/USECS_PER_SEC));
         }
         fflush(stdout); fflush(stderr);
         remainder = sleep(interval - diff.tv_sec - frac/USECS_PER_SEC);
