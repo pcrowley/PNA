@@ -20,7 +20,7 @@ struct session_key {
 
 struct packet {
     const unsigned long length;
-    const u_char *data;
+    const unsigned char *data;
 };
 
 #endif /* _PNA_H_ */

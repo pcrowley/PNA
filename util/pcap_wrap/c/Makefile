@@ -1,8 +1,12 @@
-PROGRAM = pcap_wrap
+PROGRAM := pna_pcap
 
-LDLIBS = -lpcap
+HASHMAP_DEPS := pna_hashmap.o murmur3.o monitor.o
+
+LDLIBS := -lpcap
 
 all: ${PROGRAM}
 
+${PROGRAM}: ${HASHMAP_DEPS}
+
 clean:
-	rm -f ${PROGRAM}
+	rm -f ${PROGRAM} *.o

@@ -21,26 +21,14 @@
 
 #include "pna.h"
 
-/* local prototypes */
+/* monitor prototypes */
+void monitor_init(void);
 void monitor_hook(struct session_key *, int, struct packet *, unsigned long *);
+void monitor_release(void);
+
+/* local prototypes */
 void pna_callback(u_char *, const struct pcap_pkthdr *, const u_char *);
 void sigint_handler(int);
-
-void monitor_hook(struct session_key *key, int direction,
-                  struct packet *pkt, unsigned long *data)
-{
-    printf("{l3_protocol: %d, l4_protocol: %d, ", key->l3_protocol,
-           key->l4_protocol);
-    printf("local_ip: 0x%08x, remote_ip: 0x%08x, ", key->local_ip,
-           key->remote_ip);
-    printf("local_port: %d, remote_port: %d}\n", key->local_port,
-           key->remote_port);
-    printf("length: %lu\n", pkt->length);
-}
-
-/*
- * You shouldn't need to mess with anything below this point.
- */
 
 uint pkt_count = 0;
 
@@ -109,7 +97,7 @@ void pna_callback(u_char *user, const struct pcap_pkthdr *h,
         temp = key.local_port;
         key.local_port = key.remote_port;
         key.remote_port = temp;
-        dir = PNA_DIR_OUTBOUND;
+        dir = PNA_DIR_INBOUND;
     }
 
     monitor_hook(&key, dir, &pkt, &pipe_data);
@@ -144,6 +132,8 @@ int main(int argc, char **argv)
         exit(1);
     }
 
+    monitor_init();
+
     /* set up PCAP file */
     signal(SIGINT, &sigint_handler);
     pcap = pcap_open_offline(datafile, errbuf);
@@ -154,6 +144,8 @@ int main(int argc, char **argv)
             break;
         }
     }
+
+    monitor_release();
     printf("Processed %d packets\n", pkt_count);
 }
 
