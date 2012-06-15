@@ -14,7 +14,7 @@
 
 # real-time monitor files
 
-obj-m += pna_lipmon.o pna_conmon.o
+obj-m += pna_lipmon.o pna_conmon.o pna_example.o
 
 ifndef BASE
     BASE = $(PWD)/..
