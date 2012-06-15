@@ -46,7 +46,7 @@ int pna_hook(struct sk_buff *skb, struct net_device *dev,
 static int __init pna_init(void);
 static void pna_cleanup(void);
 
-#if LINUX_VERSION_CODE <= KERNEL_VERSION(2,6,34)
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(2,6,32)
     typedef const struct net_device_stats *pna_link_stats;
     typedef unsigned long pna_stat_uword;
 #else
@@ -314,7 +314,7 @@ static void pna_perflog(struct sk_buff *skb, int dir)
                 if (dev == NULL) {
                     break;
                 }
-#if LINUX_VERSION_CODE <= KERNEL_VERSION(2,6,34)
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(2,6,32)
                 /* numbers from the NIC */
                 stats = dev_get_stats(dev);
                 pr_info("pna %s_packets:%lu,%s_fifo_overruns:%lu,%s_missed:%lu\n",
@@ -372,8 +372,8 @@ int __init pna_init(void)
         return -1;
     }
 
-    /* set up the alert system */
-    if (pna_alert_init() < 0) {
+    /* set up the message system */
+    if (pna_message_init() < 0) {
         pna_cleanup();
         return -1;
     }
@@ -410,7 +410,7 @@ void pna_cleanup(void)
         dev_remove_pack(&pna_packet_type[i]);
         pr_info("pna: released %s\n", pna_packet_type[i].dev->name);
     }
-    pna_alert_cleanup();
+    pna_message_cleanup();
     session_cleanup();
     pr_info("pna: module is inactive\n");
 }

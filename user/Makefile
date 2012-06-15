@@ -12,20 +12,30 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# user-space programs
-user-monitor := user_monitor
-user-alerts := user_alerts
-user-progs := $(user-monitor) $(user-alerts)
+# standard user-space programs
+progs := user_message
+prog-deps := pna_message.o session_dump.o proc_dump.o
+
+# special-purpose user-space programs
+special-progs := session
+special-deps := session_dump.o proc_dump.o
 
 CFLAGS += -I../include/
+LDLIBS := -lpthread
 
-all: $(user-progs)
+all: $(progs)
 
-$(user-monitor): $(user-monitor).c
-	$(CC) $(CFLAGS) -o $@ $^
+debug: CFLAGS += -ggdb
+debug: $(progs)
 
-$(user-alerts): $(user-alerts).c
-	$(CC) -ggdb $(CFLAGS) -o $@ $^
+debug-special: CFLAGS += -ggdb
+debug-special: $(special-progs)
+
+special: $(special-progs)
+
+$(progs): $(prog-deps)
+
+$(special-progs): $(special-deps)
 
 clean:
-	rm -f $(user-progs)
+	rm -f $(progs) $(prog-deps) $(special-progs) $(special-deps)

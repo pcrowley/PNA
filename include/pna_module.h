@@ -30,11 +30,13 @@
 #define PNA_PROCDIR  "pna"
 
 /* name format of PNA table files */
-#define PNA_PROCFILE "table%d"
-#define PNA_MAX_STR  16
+#define PNA_SESSIONFILE "session-%d"
 
 /* a table must have at least PNA_LAG_TIME seconds before dumping */
 #define PNA_LAG_TIME 2
+
+/* frequency at which to dump the periodic session data */
+#define SESSION_INTERVAL (10*MSEC_PER_SEC)
 
 /* time interval to call real-time monitor "clean" function (milliseconds) */
 #define RTMON_CLEAN_INTERVAL (10*MSEC_PER_SEC)
@@ -89,12 +91,11 @@ extern bool pna_session_mon;
 
 struct sessiontab_info {
     struct pna_hashmap *map;
-    char table_name[PNA_MAX_STR];
+    char table_name[MAX_STR];
 
     struct mutex read_mutex;
-    int  table_dirty;
-    time_t first_sec;
-    int  smp_id;
+    int          table_dirty;
+    atomic_t     smp_id;
     unsigned int nsessions;
     unsigned int nsessions_missed;
     unsigned int probes[PNA_TABLE_TRIES];
@@ -113,8 +114,8 @@ void rtmon_unload(struct pna_rtmon *monitor);
 int rtmon_hook(struct session_key *key, int direction, struct sk_buff *skb,
                unsigned long data);
 
-int pna_alert_warn(int reason, int value, struct timeval *time);
-int pna_alert_init(void);
-void pna_alert_cleanup(void);
+int pna_message_init(void);
+void pna_message_cleanup(void);
+int pna_message_signal(int, struct timeval *, char *, uint);
 
 #endif /* __PNA_H */

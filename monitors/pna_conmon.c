@@ -150,87 +150,74 @@ static struct conmon_entry *contab_insert(struct session_key *key)
     return NULL;
 }
 
+static void alert(char *type, char *proto, uint lip, uint rip, uint amount,
+                  uint threshold, struct timeval *tv)
+{
+    size_t len;
+    char reason[MAX_STR];
+#define FMT "in+out %s on %s for 0x%08x<->0x%08x exceed threshold (%d > %d)"
+    snprintf(reason, MAX_STR, FMT, type, proto, lip, rip, amount, threshold);
+    len = strnlen(reason, MAX_STR);
+    pna_message_signal(PNA_MSG_METH_ALERT, tv, reason, len);
+#undef FMT
+}
+
 /* check a conmon entry for threshold violations */
 static void conmon_check(struct conmon_entry *con, int proto, int dir,
                          struct timeval *tv)
 {
-    int reason;
     unsigned int tcp_value, udp_value;
+    unsigned int lip, rip;
+    lip = con->local_ip;
+    rip = con->remote_ip;
 
     /* check if connection has too many tcp ports */
     tcp_value = con->ports[PNA_PROTO_TCP][PNA_DIR_OUTBOUND];
     tcp_value += con->ports[PNA_PROTO_TCP][PNA_DIR_INBOUND];
-    if (tcp_value > pna_tcp_ports) {
-        reason = PNA_ALERT_PROTO_TCP | PNA_ALERT_TYPE_PORTS;
-        reason |= PNA_ALERT_DIR_INOUT;
-        pna_alert_warn(reason, con->local_ip, tv);
-    }
+    if (tcp_value > pna_tcp_ports)
+        alert("ports", "tcp", lip, rip, tcp_value, pna_tcp_ports, tv);
 
     /* check if connection has too many tcp ports */
     udp_value = con->ports[PNA_PROTO_UDP][PNA_DIR_OUTBOUND];
     udp_value += con->ports[PNA_PROTO_UDP][PNA_DIR_INBOUND];
-    if (udp_value > pna_udp_ports) {
-        reason = PNA_ALERT_PROTO_UDP | PNA_ALERT_TYPE_PORTS;
-        reason |= PNA_ALERT_DIR_INOUT;
-        pna_alert_warn(reason, con->local_ip, tv);
-    }
+    if (udp_value > pna_udp_ports)
+        alert("ports", "udp", lip, rip, udp_value, pna_udp_ports, tv);
 
     /* check if connection has too many tcp+udp ports */
-    if (tcp_value+udp_value > pna_ports) {
-        reason = PNA_ALERT_PROTO_ALL | PNA_ALERT_TYPE_PORTS;
-        reason |= PNA_ALERT_DIR_INOUT;
-        pna_alert_warn(reason, con->local_ip, tv);
-    }
+    if (tcp_value+udp_value > pna_ports)
+        alert("ports", "all protocols", lip, rip, tcp_value+udp_value, pna_ports, tv);
 
     /* check if connection has too many tcp bytes */
     tcp_value = con->bytes[PNA_PROTO_TCP][PNA_DIR_OUTBOUND];
     tcp_value += con->bytes[PNA_PROTO_TCP][PNA_DIR_INBOUND];
-    if (tcp_value > pna_tcp_bytes) {
-        reason = PNA_ALERT_PROTO_TCP | PNA_ALERT_TYPE_BYTES;
-        reason |= PNA_ALERT_DIR_INOUT;
-        pna_alert_warn(reason, con->local_ip, tv);
-    }
+    if (tcp_value > pna_tcp_bytes)
+        alert("bytes", "tcp", lip, rip, tcp_value, pna_tcp_bytes, tv);
 
     /* check if connection has too many udp bytes */
     udp_value = con->bytes[PNA_PROTO_UDP][PNA_DIR_OUTBOUND];
     udp_value += con->bytes[PNA_PROTO_UDP][PNA_DIR_INBOUND];
-    if (udp_value > pna_udp_bytes) {
-        reason = PNA_ALERT_PROTO_UDP | PNA_ALERT_TYPE_BYTES;
-        reason |= PNA_ALERT_DIR_INOUT;
-        pna_alert_warn(reason, con->local_ip, tv);
-    }
+    if (udp_value > pna_udp_bytes)
+        alert("bytes", "udp", lip, rip, udp_value, pna_udp_bytes, tv);
 
     /* check if connection has too many tcp+udp bytes */
-    if (tcp_value+udp_value > pna_bytes) {
-        reason = PNA_ALERT_PROTO_ALL | PNA_ALERT_TYPE_BYTES;
-        reason |= PNA_ALERT_DIR_INOUT;
-        pna_alert_warn(reason, con->local_ip, tv);
-    }
+    if (tcp_value+udp_value > pna_bytes)
+        alert("bytes", "all protocols", lip, rip, tcp_value+udp_value, pna_bytes, tv);
 
     /* check if connection has too many tcp packets */
     tcp_value = con->packets[PNA_PROTO_TCP][PNA_DIR_OUTBOUND];
     tcp_value += con->packets[PNA_PROTO_TCP][PNA_DIR_INBOUND];
-    if (tcp_value > pna_tcp_packets) {
-        reason = PNA_ALERT_PROTO_TCP | PNA_ALERT_TYPE_PACKETS;
-        reason |= PNA_ALERT_DIR_INOUT;
-        pna_alert_warn(reason, con->local_ip, tv);
-    }
+    if (tcp_value > pna_tcp_packets)
+        alert("packets", "tcp", lip, rip, tcp_value, pna_tcp_packets, tv);
 
     /* check if connection has too many udp packets */
     udp_value = con->packets[PNA_PROTO_UDP][PNA_DIR_OUTBOUND];
     udp_value += con->packets[PNA_PROTO_UDP][PNA_DIR_INBOUND];
-    if (udp_value > pna_udp_packets) {
-        reason = PNA_ALERT_PROTO_UDP | PNA_ALERT_TYPE_PACKETS;
-        reason |= PNA_ALERT_DIR_INOUT;
-        pna_alert_warn(reason, con->local_ip, tv);
-    }
+    if (udp_value > pna_udp_packets)
+        alert("packets", "udp", lip, rip, udp_value, pna_udp_packets, tv);
 
     /* check if connection has too many tcp+udp packets */
-    if (tcp_value+udp_value > pna_packets) {
-        reason = PNA_ALERT_PROTO_ALL | PNA_ALERT_TYPE_PACKETS;
-        reason |= PNA_ALERT_DIR_INOUT;
-        pna_alert_warn(reason, con->local_ip, tv);
-    }
+    if (tcp_value+udp_value > pna_packets)
+        alert("packets", "all protocols", lip, rip, tcp_value+udp_value, pna_packets, tv);
 }
 
 int conmon_hook(struct session_key *key, int direction, struct sk_buff *skb,

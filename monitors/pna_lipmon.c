@@ -134,11 +134,22 @@ static struct lipmon_entry *liptab_insert(struct session_key *key)
     return NULL;
 }
 
+static void alert(char *type, uint lip, uint amount, uint threshold,
+                  struct timeval *tv)
+{
+    size_t len;
+    char reason[MAX_STR];
+#define FMT "in+out %s on all protocols for 0x%08x exceed threshold (%d > %d)"
+    snprintf(reason, MAX_STR, FMT, type, lip, amount, threshold);
+    len = strnlen(reason, MAX_STR);
+    pna_message_signal(PNA_MSG_METH_ALERT, tv, reason, len);
+#undef FMT
+}
+
 /* check a lipmon entry for threshold violations */
 static void lipmon_check(struct lipmon_entry *lip, int proto, int dir,
                          struct timeval *tv)
 {
-    int reason;
     unsigned int value;
 
     /* check if the local ip has connected to too many hosts */
@@ -146,22 +157,16 @@ static void lipmon_check(struct lipmon_entry *lip, int proto, int dir,
     value += lip->connections[PNA_PROTO_TCP][PNA_DIR_INBOUND];
     value += lip->connections[PNA_PROTO_UDP][PNA_DIR_OUTBOUND];
     value += lip->connections[PNA_PROTO_UDP][PNA_DIR_INBOUND];
-    if (value > pna_connections) {
-        reason = PNA_ALERT_PROTO_ALL | PNA_ALERT_TYPE_CONNECTIONS;
-        reason |= PNA_ALERT_DIR_INOUT;
-        pna_alert_warn(reason, lip->local_ip, tv);
-    }
+    if (value > pna_connections)
+        alert("connections", lip->local_ip, value, pna_connections, tv);
 
     /* check if the local ip is having too many conversations */
     value = lip->sessions[PNA_PROTO_TCP][PNA_DIR_OUTBOUND];
     value += lip->sessions[PNA_PROTO_TCP][PNA_DIR_INBOUND];
     value += lip->sessions[PNA_PROTO_UDP][PNA_DIR_OUTBOUND];
     value += lip->sessions[PNA_PROTO_UDP][PNA_DIR_INBOUND];
-    if (value > pna_sessions) {
-        reason = PNA_ALERT_PROTO_ALL | PNA_ALERT_TYPE_SESSIONS;
-        reason |= PNA_ALERT_DIR_INOUT;
-        pna_alert_warn(reason, lip->local_ip, tv);
-    }
+    if (value > pna_sessions)
+        alert("sessions", lip->local_ip, value, pna_sessions, tv);
 }
 
 int lipmon_hook(struct session_key *key, int direction, struct sk_buff *skb,

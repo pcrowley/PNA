@@ -25,8 +25,7 @@ fi
 
 # PNA programs
 PNA_MODULE="$PNA_BASE/module/pna.ko"
-USER_MONITOR="$PNA_BASE/user/user_monitor"
-USER_ALERTS="$PNA_BASE/user/user_alerts"
+USER_MESSAGE="$PNA_BASE/user/user_message"
 
 # System programs
 IFCONFIG="/sbin/ifconfig"
@@ -90,7 +89,7 @@ start () {
     echo "Starting $SERVICE ..."
 
     [ -f $PNA_MODULE ] || error 1
-    [ -f $USER_MONITOR ] || error 1
+    [ -f $USER_MESSAGE ] || error 1
 
     # Disable conflicting services
     conflicts "stop"
@@ -114,26 +113,18 @@ start () {
     [ $? -eq 0 ] && touch /var/run/$SERVICE.kmod || error 2
 
     # Set up and start the user-space logging monitor(s)
-    i=0
     mkdir -p "$PNA_LOGDIR"
-    for f in /proc/${SERVICE}/*; do
-        ARGS="-v -d $PNA_LOGDIR"
-        nohup ${USER_MONITOR} $ARGS $f > monitor-$(basename $f).log 2>&1 &
-        PID=$!
-        [ $? -eq 0 ] && echo $PID >> /var/run/$SERVICE.pids
+    ARGS="-v -d $PNA_LOGDIR"
+    nohup ${USER_MESSAGE} $ARGS > user_message.log 2>&1 &
+    PID=$!
+    [ $? -eq 0 ] && echo $PID >> /var/run/$SERVICE.pid
 
-        # Set processor affinity if desired
-        if [ $PNA_MONPROCS ] ; then
-            affinity=${PNA_MONPROCS[$i%${#PNA_MONPROCS[@]}]}
-            i=$(($i+1))
-            /bin/taskset -cp $affinity $PID > /dev/null 2>&1
-            affinity=$(/bin/taskset -p $PID | awk '{print $6}')
-            echo -e "\tuser_monitor ($PID) affinity $affinity"
-        fi
-    done
-
-    # Set up and start the user-space alert monitor
-    # TODO
+    # Set processor affinity if desired
+    if [ $PNA_MONPROCS ] ; then
+        /bin/taskset -cp $PNA_MONPROCS $PID > /dev/null 2>&1
+        affinity=$(/bin/taskset -p $PID | awk '{print $6}')
+        echo -e "\tuser_message ($PID) affinity $affinity"
+    fi
 
     # Record and log any useful data (as needed)
     date +%s.%N >> irq_count.start
@@ -153,13 +144,9 @@ stop () {
     date +%s.%N >> irq_count.stop
     grep "\(${PNA_IFACE/,/\|}\)" /proc/interrupts >> irq_count.stop
 
-    # Take down any user-space processes
-    if [ -f /var/run/$SERVICE.pids ] ; then
-        for pid in $(cat /var/run/$SERVICE.pids) ; do
-            kill $pid
-        done
-        rm -f /var/run/$SERVICE.pids
-    fi
+    # Take the user-space process
+    [ -f /var/run/$SERVICE.pid ] && kill $(cat /var/run/$SERVICE.pid)
+    rm -f /var/run/$SERVICE.pid
 
     # Determine if any rtmons are loaded (and unload them)
     RTMONS=$($LSMOD | grep "\<$SERVICE\>" | awk '{print $4}')

@@ -13,5 +13,5 @@ service/config
 .tmp_versions/
 Module.symvers
 modules.order
-user/user_alerts
-user/user_monitor
+user/user_message
+user/session
