@@ -1,10 +1,12 @@
 .svn
 *.o
 *.ko
+*.ko.unsigned
 *.log
 irq_count.*
 *.pyc
 *.ko.cmd
+*.ko.unsigned.cmd
 *.o.cmd
 *.mod.c
 service/config
