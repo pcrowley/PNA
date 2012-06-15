@@ -35,7 +35,9 @@ static void rtmon_clean(unsigned long data)
 {
     struct pna_rtmon *m = (struct pna_rtmon *)data;
 
-    m->clean();
+    if (m->clean) {
+        m->clean();
+    }
 
     /* update the timer for the next round */
     mod_timer(&m->timer, jiffies + msecs_to_jiffies(RTMON_CLEAN_INTERVAL));
@@ -49,7 +51,9 @@ int rtmon_hook(struct session_key *key, int direction, struct sk_buff *skb,
     int ret = 0;
 
     list_for_each_entry(monitor, &rtmon_list, list) {
-        ret += monitor->hook(key, direction, skb, &data);
+        if (monitor->hook) {
+            ret += monitor->hook(key, direction, skb, &data);
+        }
     }
 
     return ret;
@@ -70,7 +74,9 @@ int rtmon_load(struct pna_rtmon *monitor)
     int ret = 0;
     int idx = 0;
 
-    ret = monitor->init();
+    if (monitor->init) {
+        ret = monitor->init();
+    }
 
     /* initialize/correct timer */
     memcpy(&monitor->timer, &timer_copy, sizeof(timer_copy));
@@ -105,7 +111,9 @@ void rtmon_unload(struct pna_rtmon *monitor)
     del_timer(&monitor->timer);
 
     /* clean up the monitor */
-    monitor->release();
+    if (monitor->release) {
+        monitor->release();
+    }
     pr_info("rtmon '%s' unloaded\n", monitor->name);
 
     /* shor currently active monitors */
