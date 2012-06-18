@@ -6,6 +6,9 @@ LDLIBS := -lpcap
 
 all: ${PROGRAM}
 
+debug: CFLAGS += -ggdb
+debug: ${PROGRAM}
+
 ${PROGRAM}: ${HASHMAP_DEPS}
 
 clean:

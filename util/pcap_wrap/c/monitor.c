@@ -62,6 +62,7 @@ void monitor_release(void)
 void monitor_hook(struct session_key *key, int direction,
                   struct packet *pkt, unsigned long *data)
 {
+    int i;
     struct hash_pair *entry;
 
     /* print the session_key info */
@@ -73,8 +74,15 @@ void monitor_hook(struct session_key *key, int direction,
     printf("local_port: %d, remote_port: %d}\n", key->local_port,
            key->remote_port);
 
+    printf("direction: %d\n", direction);
+
     /* print the number of bytes in this packet */
     printf("length: %lu\n", pkt->length);
+
+    /* dump the packet contents */
+    for (i = 0; i < pkt->length; i++) {
+        printf("%02x ", pkt->data[i]);
+    }
 
     /* now the action -- try to get the key pair */
     entry = (struct hash_pair *)hashmap_get(map, key);
