@@ -29,20 +29,20 @@ class PNALogParser :
                     'local-port', 'remote-port',
                     'packets-out', 'packets-in',
                     'bytes-out', 'bytes-in',
-                    'begin-time', 'protocol',
+                    'begin-time', 'l4-protocol',
                     'first-direction',)
 
     v2hdr_fmt    = 'cccBIII'
     v2hdr_names  = ('magic0', 'magic1', 'magic2', 'version',
                     'start-time', 'end-time','size',)
-    v2data_fmt   = 'HBxIIHHIIIIIII'
-    v2data_names = ('l3_protocol', 'l4_protocol',
+    v2data_fmt   = 'HBxIIHHIIIIIIBBxx'
+    v2data_names = ('l3-protocol', 'l4-protocol',
                     'local-ip', 'remote-ip',
                     'local-port', 'remote-port',
                     'bytes-out', 'bytes-in',
                     'packets-out', 'packets-in',
                     'end-time', 'begin-time',
-                    'first-direction',)
+                    'first-direction', 'flags',)
 
     def __init__(self) :
         self.clear_log()
@@ -81,7 +81,7 @@ class PNALogParser :
             pos += size
             session = dict(zip(data_names, entry))
             if version == 'v1' :
-                session['l4_protocol'] = session['protocol']
+                session['flags'] = 0
                 session['end-time'] = self.log['start-time']
             callback(session)
 

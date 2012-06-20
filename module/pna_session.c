@@ -247,7 +247,8 @@ static inline int sessionkey_match(struct session_key *a, struct session_key *b)
 }
 
 /* Insert/Update this session */
-int session_hook(struct session_key *key, int direction, struct sk_buff *skb)
+int session_hook(struct session_key *key, int direction,
+                 struct sk_buff *skb, int flags)
 {
     struct session_entry *session;
     struct session_data data;
@@ -270,6 +271,7 @@ int session_hook(struct session_key *key, int direction, struct sk_buff *skb)
         session->data.bytes[direction] += skb->len + ETH_OVERHEAD;
         session->data.packets[direction] += 1;
         session->data.timestamp = timeval.tv_sec;
+        session->data.flags |= flags;
         return 0;
     }
 
@@ -280,6 +282,7 @@ int session_hook(struct session_key *key, int direction, struct sk_buff *skb)
     data.timestamp = timeval.tv_sec;
     data.first_tstamp = timeval.tv_sec;
     data.first_dir = direction;
+    data.flags = flags;
     session = (struct session_entry *)hashmap_put(info->map, key, &data);
     if (session) {
         /* successful put */

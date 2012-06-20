@@ -104,7 +104,7 @@ struct sessiontab_info {
 /* some prototypes */
 unsigned int pna_hash(unsigned int key, int bits);
 
-int session_hook(struct session_key *key, int direction, struct sk_buff *skb);
+int session_hook(struct session_key *key, int direction, struct sk_buff *skb, int flags);
 int session_init(void);
 void session_cleanup(void);
 

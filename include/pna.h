@@ -98,7 +98,12 @@ struct session_data {
     unsigned int packets[PNA_DIRECTIONS];
     unsigned int timestamp;
     unsigned int first_tstamp;
-    unsigned int first_dir;
+    unsigned char first_dir;
+#define PNA_DATA_FLAG_RST 0x04
+#define PNA_DATA_FLAG_SYN 0x02
+#define PNA_DATA_FLAG_FIN 0x01
+    unsigned char flags;
+    unsigned char pad[2];
 };
 
 struct session_entry {

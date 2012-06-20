@@ -174,6 +174,7 @@ int pna_hook(struct sk_buff *skb, struct net_device *dev,
     struct tcphdr *tcphdr;
     struct udphdr *udphdr;
     int direction;
+    int flags = 0;
     int ret = 0;
 
     /* we don't care about outgoing packets */
@@ -213,6 +214,9 @@ int pna_hook(struct sk_buff *skb, struct net_device *dev,
             tcphdr = tcp_hdr(skb);
             key.local_port = ntohs(tcphdr->source);
             key.remote_port = ntohs(tcphdr->dest);
+            if (tcphdr->rst) flags |= PNA_DATA_FLAG_RST;
+            if (tcphdr->syn) flags |= PNA_DATA_FLAG_SYN;
+            if (tcphdr->fin) flags |= PNA_DATA_FLAG_FIN;
             break;
         case IPPROTO_UDP:
             udphdr = udp_hdr(skb);
@@ -243,7 +247,7 @@ int pna_hook(struct sk_buff *skb, struct net_device *dev,
 
     /* insert into session table */
     if (pna_session_mon == true) {
-        ret = session_hook(&key, direction, skb);
+        ret = session_hook(&key, direction, skb, flags);
         if (ret < 0) {
             /* failed to insert -- cleanup */
             return pna_done(skb);

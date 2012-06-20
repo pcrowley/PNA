@@ -118,7 +118,7 @@ class CommandLineInterface :
         src_ip = self.int2ip(session['local-ip'])
         dst_ip = self.int2ip(session['remote-ip'])
 
-        proto = str(session['l4_protocol'])
+        proto = str(session['l4-protocol'])
         start = time.strftime(time_fmt, time.localtime(session['begin-time']))
         end = time.strftime(time_fmt, time.localtime(session['end-time']))
         src_pt = str(session['local-port'])
@@ -143,7 +143,7 @@ class CommandLineInterface :
             print 'json unavailable'
 
     # dump the data in session-tools' session-print -f5 format
-    def session_format(self, data) :
+    def flow_format(self, data) :
         fmt = '%-17s %-17s %-5s %-15s %-5s %-5s %-15s %-5s %3s %-2s %-10s %-22s'
         time_fmt = '%m%d.%H:%M:%S.000'
 
@@ -159,9 +159,9 @@ class CommandLineInterface :
                 dst_ip = self.int2ip(f['remote-ip'])
                 sif = '0'
                 dif = '0'
-                flags = '0'
+                flags = str(f['flags'])
 
-                proto = f['l4_protocol']
+                proto = f['l4-protocol']
                 start_time = time.localtime(f['begin-time'])
                 start = time.strftime(time_fmt, start_time)
                 end_time = time.localtime(f['end-time'])
