@@ -22,13 +22,27 @@ __version__ = 'parse_0.1.0-py'
 # contained within that file.  It is up to the caller to convert that raw data
 # into useful information
 class PNALogParser :
-    pna_log_hdr_names = ('start-time', 'end-time','size',)
-    pna_log_data_names = ('local-ip', 'remote-ip',
-                          'local-port', 'remote-port',
-                          'packets-out', 'packets-in',
-                          'bytes-out', 'bytes-in',
-                          'begin-time', 'protocol',
-                          'first-direction',)
+    v1hdr_fmt    = 'III'
+    v1hdr_names  = ('start-time', 'end-time','size',)
+    v1data_fmt   = 'IIHHIIIIIBBxx'
+    v1data_names = ('local-ip', 'remote-ip',
+                    'local-port', 'remote-port',
+                    'packets-out', 'packets-in',
+                    'bytes-out', 'bytes-in',
+                    'begin-time', 'protocol',
+                    'first-direction',)
+
+    v2hdr_fmt    = 'cccBIII'
+    v2hdr_names  = ('magic0', 'magic1', 'magic2', 'version',
+                    'start-time', 'end-time','size',)
+    v2data_fmt   = 'HBxIIHHIIIIIII'
+    v2data_names = ('l3_protocol', 'l4_protocol',
+                    'local-ip', 'remote-ip',
+                    'local-port', 'remote-port',
+                    'bytes-out', 'bytes-in',
+                    'packets-out', 'packets-in',
+                    'end-time', 'begin-time',
+                    'first-direction',)
 
     def __init__(self) :
         self.clear_log()
@@ -42,28 +56,49 @@ class PNALogParser :
     def build_sessions(self, session) :
         self.log['sessions'].append(session)
 
+    def parse_version(self, data, callback, version) :
+        # grab formatting and name info
+        hdr_fmt = getattr(self, version+'hdr_fmt')
+        hdr_names = getattr(self, version+'hdr_names')
+        data_fmt = getattr(self, version+'data_fmt')
+        data_names = getattr(self, version+'data_names')
+
+        # read the header data first
+        pos = 0
+        size = struct.calcsize(hdr_fmt)
+        hdr_data = struct.unpack(hdr_fmt, data[pos:pos+size])
+        pos += size
+        self.log = dict(self.log.items() + zip(hdr_names, hdr_data))
+
+        if not callback :
+            callback = self.build_sessions
+
+        # process the log data
+        size = struct.calcsize(data_fmt)
+        while pos < len(data) :
+            # read an entry
+            entry = struct.unpack(data_fmt, data[pos:pos+size])
+            pos += size
+            session = dict(zip(data_names, entry))
+            if version == 'v1' :
+                session['l4_protocol'] = session['protocol']
+                session['end-time'] = self.log['start-time']
+            callback(session)
+
     # read a log file and return the data as a python list
     def parse(self, file_name, session_callback=None) :
-        # read the file into a list
+        # open the file up and get the data
         file_input = open(file_name, 'r')
         log_data = file_input.read()
         file_input.close()
 
-        # read the header data first
-        pos = 0
-        hdr_data = struct.unpack('III', log_data[pos:pos+12])
-        pos += 12
-        self.log = dict(self.log.items() + zip(self.pna_log_hdr_names, hdr_data))
-        if not session_callback :
-            session_callback = self.build_sessions
+        # Figure out what log version this is
+        if log_data[0:3] != "PNA" :
+            version = 'v1'
+        else :
+            version = 'v%d' % ord(log_data[3])
 
-        while pos < len(log_data) :
-            # read an entry
-            data = struct.unpack('IIHHIIIIIBBxx', log_data[pos:pos+36])
-            pos += 36
-            session = dict(zip(self.pna_log_data_names, data))
-            session['end-time'] = self.log['start-time']
-            session_callback(session)
+        self.parse_version(log_data, session_callback, version)
 
 def main(argv) :
     if len(argv) < 2 :

@@ -118,7 +118,7 @@ class CommandLineInterface :
         src_ip = self.int2ip(session['local-ip'])
         dst_ip = self.int2ip(session['remote-ip'])
 
-        proto = str(session['protocol'])
+        proto = str(session['l4_protocol'])
         start = time.strftime(time_fmt, time.localtime(session['begin-time']))
         end = time.strftime(time_fmt, time.localtime(session['end-time']))
         src_pt = str(session['local-port'])
@@ -154,8 +154,6 @@ class CommandLineInterface :
         print fmt % display
 
         for log in data :
-            end_time = time.localtime(log['start-time'])
-            end = time.strftime(time_fmt, end_time)
             for f in log['sessions'] :
                 src_ip = self.int2ip(f['local-ip'])
                 dst_ip = self.int2ip(f['remote-ip'])
@@ -163,9 +161,11 @@ class CommandLineInterface :
                 dif = '0'
                 flags = '0'
 
-                proto = f['protocol']
+                proto = f['l4_protocol']
                 start_time = time.localtime(f['begin-time'])
                 start = time.strftime(time_fmt, start_time)
+                end_time = time.localtime(f['end-time'])
+                end = time.strftime(time_fmt, end_time)
                 src_pt = str(f['local-port'])
                 dst_pt = str(f['remote-port'])
                 npkts = str(f['packets-in']+f['packets-out'])
