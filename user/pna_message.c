@@ -78,6 +78,8 @@ int pna_message_init(void)
         perror("bind");
         return -1;
     }
+
+    return 0;
 }
 
 void pna_message_send(struct pna_message *message)

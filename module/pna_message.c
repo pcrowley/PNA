@@ -73,7 +73,7 @@ static void pna_message_recv(struct sk_buff *skb)
             if ( nlh->nlmsg_pid == *data_pid ) {
                 /* and we know who to send messages to */
                 pna_message_pid = *data_pid;
-                printk(KERN_INFO "pna messages registered to pid %d\n", pna_message_pid);
+                pr_info("pna messages registered to pid %d\n", pna_message_pid);
             }
             do_gettimeofday(&currtime);
             msg_out.command = PNA_MSG_CMD_REGISTER;
@@ -87,11 +87,11 @@ static void pna_message_recv(struct sk_buff *skb)
             if ( pna_message_pid == *data_pid ) {
                 /* unregister the messages */
                 pna_message_pid = 0;
-                printk(KERN_INFO "pna messages unregistered\n");
+                pr_info("pna messages unregistered\n");
             }
             break;
         default:
-            printk(KERN_WARNING "pna_message: invalid command %d\n", message->command);
+            pr_warn("pna_message: invalid command %d\n", message->command);
     }
 }
 
@@ -110,7 +110,7 @@ static int pna_message_send(struct pna_message *message)
     /* allocate the message buffer */
     skb = nlmsg_new(PNA_MESSAGE_SZ, 0);
     if (!skb) {
-        printk(KERN_WARNING "could not allocate socket buffer\n");
+        pr_warn("could not allocate socket buffer\n");
         return -2;
     } 
 
@@ -124,12 +124,9 @@ static int pna_message_send(struct pna_message *message)
     /* send the message */
     ret = nlmsg_unicast(pna_message_sock, skb, pna_message_pid);
     if (ret < 0) {
-        printk(KERN_WARNING "could not send buffer to pid %d\n", pna_message_pid);
+        pr_warn("could not send buffer to pid %d\n", pna_message_pid);
         return -3;
     }
-
-    pr_info("pna_message: sent (%d, %d, %s) to %d\n", message->command,
-            message->method, message->data, pna_message_pid);
 
     return 0;
 }
@@ -139,7 +136,7 @@ int pna_message_init(void)
     pna_message_sock = netlink_kernel_create(&init_net, NETLINK_PNA, 0,
             pna_message_recv, NULL, THIS_MODULE);
     if (!pna_message_sock) {
-        printk(KERN_ERR "failed to create netlink socket\n");
+        pr_err("failed to create netlink socket\n");
         return -1;
     }
 

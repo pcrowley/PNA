@@ -17,9 +17,12 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <string.h>
+#include <unistd.h>
 #include <fcntl.h>
 #include <errno.h>
 #include <sys/mman.h>
+#include <sys/stat.h>
+#include <sys/types.h>
 
 /* dumps the in-memory table to a file */
 uint64_t mem_dump(int out_fd, void *src, uint64_t table_sz, uint64_t entry_sz)
