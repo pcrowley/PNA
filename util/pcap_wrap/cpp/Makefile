@@ -1,7 +1,7 @@
 PROGRAM := pna_pcap
 HASHMAP_DEPS := pna_hashmap.o murmur3.o monitor.o
 
-CFLAGS := -I../include
+CXXFLAGS := -I../include
 LDLIBS := -lpcap
 
 all: ${PROGRAM}

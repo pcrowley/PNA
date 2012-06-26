@@ -5,6 +5,8 @@
 
 #include "pna_hashmap.h"
 
+void MurmurHash3_x64_128(const void *, const int, const uint32_t, void *);
+
 /* local prototypes */
 static void hashmap_hashit(struct pna_hashmap *map, void *key, int func, uint32_t *b, uint32_t *fp);
 #define pna_error printf
@@ -50,11 +52,11 @@ struct pna_hashmap *hashmap_create(uint32_t n_pairs, uint32_t key_size, uint32_t
     map->kvx_mask = (8*map->n_buckets) - 1;
     map->fp_mask = ~(map->kvx_mask);
 
-    if (NULL == (map->buckets = malloc(BKTS_BYTES(map)))) {
+    if (NULL == (map->buckets = (bkt_t *)malloc(BKTS_BYTES(map)))) {
         pna_error("Error could not allocate memory for buckets");
         return NULL;
     }
-    if (NULL == (map->pairs = malloc(PAIRS_BYTES(map)))) {
+    if (NULL == (map->pairs = (char *)malloc(PAIRS_BYTES(map)))) {
         pna_error("Error could not allocate memory for pairs");
         return NULL;
     }

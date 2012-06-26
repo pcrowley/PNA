@@ -29,7 +29,7 @@ struct hash_pair {
 /* monitor global variables */
 static struct pna_hashmap *map;
 /* empty value for first insertion to hashmap */
-static struct monitor_entry value = { .bytes_in = 0, .bytes_out = 0 };
+static struct monitor_entry value = { 0, 0 };
 
 uint64_t max_in, max_out;
 
