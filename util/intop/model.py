@@ -94,7 +94,11 @@ class PNAModel :
                 filter_bits = int(f_value[1])
                 mask = 0
                 for i in range(32) :
-                    mask = (mask << 1) + (1 if filter_bits > i else 0)
+                    mask = (mask << 1)
+                    if filter_bits > i :
+                        mask += 1
+                    else:
+                        mask += 0
                 if (value & mask) == (filter_ip & mask) :
                     return False
                 else :
@@ -118,17 +122,24 @@ class PNAModel :
             # get the values
             (year,month,day,hour,min,sec) = match.groups()
 
+            if year: year = int(year)
+            if month: month = int(month)
+            if day: day = int(day)
+            if hour: hour = int(hour)
+            if min: min = int(min)
+            if sec: sec = int(sec)
+
             # datetime-ify the input value
             v_dt = datetime.utcfromtimestamp(value)
 
             if f_name == 'begin-time' :
                 # fill any unset parameters ("rounding down")
-                year = int(year) if year != None else dt_date.min.year
-                month = int(month) if month != None else dt_date.min.month
-                day = int(day) if day != None else dt_date.min.day
-                hour = int(hour) if hour != None else dt_time.min.hour
-                min = int(min) if min != None else dt_time.min.minute
-                sec = int(sec) if sec != None else dt_time.min.second
+                if not year: year = dt_date.min.year
+                if not month: month = dt_date.min.month
+                if not day: day = dt_date.min.day
+                if not hour: hour = dt_date.min.hour
+                if not min: min = dt_date.min.minute
+                if not sec: sec = dt_date.min.second
                 # datetime-ify the filter value
                 f_dt = datetime(year,month,day,hour,min,sec)
                 # check the values
@@ -137,12 +148,12 @@ class PNAModel :
                     return True
             elif f_name == 'end-time' :
                 # fill any unset parameters ("rounding up")
-                year = int(year) if year != None else dt_date.max.year
-                month = int(month) if month != None else dt_date.max.month
-                day = int(day) if day != None else dt_date.max.day
-                hour = int(hour) if hour != None else dt_time.max.hour
-                min = int(min) if min != None else dt_time.min.minute
-                sec = int(sec) if sec != None else dt_time.max.second
+                if not year: year = dt_date.max.year
+                if not month: month = dt_date.max.month
+                if not day: day = dt_date.max.day
+                if not hour: hour = dt_date.max.hour
+                if not min: min = dt_date.max.minute
+                if not sec: sec = dt_date.max.second
                 # datetime-ify the filter value
                 f_dt = datetime(year,month,day,hour,min,sec)
                 # check the values
