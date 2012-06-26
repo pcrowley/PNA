@@ -99,6 +99,11 @@ struct session_data {
     unsigned int timestamp;
     unsigned int first_tstamp;
     unsigned char first_dir;
+#define PNA_DATA_FLAG_CWR 0x80
+#define PNA_DATA_FLAG_ECE 0x40
+#define PNA_DATA_FLAG_URG 0x20
+#define PNA_DATA_FLAG_ACK 0x10
+#define PNA_DATA_FLAG_PSH 0x08
 #define PNA_DATA_FLAG_RST 0x04
 #define PNA_DATA_FLAG_SYN 0x02
 #define PNA_DATA_FLAG_FIN 0x01

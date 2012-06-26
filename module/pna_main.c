@@ -214,6 +214,14 @@ int pna_hook(struct sk_buff *skb, struct net_device *dev,
             tcphdr = tcp_hdr(skb);
             key.local_port = ntohs(tcphdr->source);
             key.remote_port = ntohs(tcphdr->dest);
+            /* only pass ECE through if not SYN packet (ignore otherwise) */
+            if (!tcphdr->syn && tcphdr->ece)
+                flags |= PNA_DATA_FLAG_ECE;
+            /* pass through other TCP flags as they happen */
+            if (tcphdr->cwr) flags |= PNA_DATA_FLAG_CWR;
+            if (tcphdr->urg) flags |= PNA_DATA_FLAG_URG;
+            if (tcphdr->ack) flags |= PNA_DATA_FLAG_ACK;
+            if (tcphdr->psh) flags |= PNA_DATA_FLAG_PSH;
             if (tcphdr->rst) flags |= PNA_DATA_FLAG_RST;
             if (tcphdr->syn) flags |= PNA_DATA_FLAG_SYN;
             if (tcphdr->fin) flags |= PNA_DATA_FLAG_FIN;
