@@ -12,12 +12,12 @@
 /* prototype */
 void MurmurHash3_x64_128(const void *key, const int len, const uint32_t seed, void *out);
 
-inline uint64_t rotl64(uint64_t x, int8_t r)
+static inline uint64_t rotl64(uint64_t x, int8_t r)
 {
       return (x << r) | (x >> (64 - r));
 }
 
-__attribute__((always_inline)) uint64_t fmix64(uint64_t k)
+static inline uint64_t fmix64(uint64_t k)
 {
     k ^= k >> 33;
     k *= BIG_CONSTANT(0xff51afd7ed558ccd);
