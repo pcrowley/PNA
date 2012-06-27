@@ -7,6 +7,7 @@
 
 import sys
 import socket
+import struct
 import pycap
 import pycap.capture as capture
 import pycap.constants as constants
@@ -17,8 +18,40 @@ PNA_DIR_OUTBOUND = 0
 PNA_DIR_INBOUND = 1
 
 def monitor_hook(key, direction, pkt, data) :
+    packet = explode_pkt(pkt)
     print key
-    print 'length:', len(pkt)
+    print packet
+
+def explode_pkt(pkt) :
+    # Assume we start with an Ethernet header
+    eth_end = 14
+    eth_hdr = pkt[0:eth_end]
+    eth_type = struct.unpack('>H', eth_hdr[12:14])[0]
+    if eth_type != constants.ethernet.ETHERTYPE_IP :
+        return (eth_hdr,)
+
+    # We've got an IP packet, break off the IP layer
+    ip_end = eth_end + 4*(ord(pkt[eth_end]) & 0x0f)
+    ip_hdr = pkt[eth_end:ip_end]
+    ip_proto = ord(ip_hdr[9])
+    if ip_proto not in (constants.ip.IPPROTO_TCP, constants.ip.IPPROTO_UDP) :
+        return (eth_hdr, ip_hdr,)
+
+    if ip_proto == constants.ip.IPPROTO_TCP :
+        # We've got a TCP header, break off the TCP layer
+        hdr_end = ip_end + 4*(ord(pkt[ip_end+12]) >> 4)
+        last_hdr = pkt[ip_end:hdr_end]
+    elif ip_proto == constants.ip.IPPROTO_UDP :
+        # We've got a UDP header, break off the UDP layer
+        hdr_end = ip_end + 8
+        last_hdr = pkt[ip_end:hdr_end]
+
+    if len(pkt) <= hdr_end :
+        return (eth_hdr, ip_hdr, last_hdr,)
+
+    # Return the layers of the packet
+    payload = pkt[hdr_end:]
+    return (eth_hdr, ip_hdr, last_hdr, payload,)
 
 ##
 # Shouldn't need to change things below this point
