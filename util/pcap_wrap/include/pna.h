@@ -21,6 +21,13 @@ struct session_key {
 struct packet {
     const unsigned long length;
     const unsigned char *data;
+    void *eth_hdr;
+    void *ip_hdr;
+    union {
+        void *tcp_hdr;
+        void *udp_hdr;
+    };
+    void *payload;
 };
 
 #endif /* _PNA_H_ */

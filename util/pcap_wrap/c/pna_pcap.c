@@ -49,13 +49,14 @@ void pna_callback(u_char *user, const struct pcap_pkthdr *h,
     unsigned int temp;
     int dir = 0;
     unsigned long pipe_data = -1;
-    struct packet pkt = { h->caplen, bytes };
+    struct packet pkt = { h->caplen, bytes, NULL, NULL, NULL, NULL };
 
     pkt_count += 1;
 
     /* we just assume it's Ethernet */
     eh = (struct ethhdr *)data;
     data += sizeof(*eh);
+    pkt.eth_hdr = eh;
     key.l3_protocol = ntohs(eh->h_proto);
     if (key.l3_protocol != ETH_P_IP) {
         return;
@@ -64,6 +65,7 @@ void pna_callback(u_char *user, const struct pcap_pkthdr *h,
     /* extract l3 info */
     ih = (struct iphdr *)data;
     data += ((ih->ihl & 0x0f) << 2);
+    pkt.ip_hdr = ih;
     key.l4_protocol = ih->protocol;
     key.local_ip = ntohl(ih->saddr);
     key.remote_ip = ntohl(ih->daddr);
@@ -71,17 +73,22 @@ void pna_callback(u_char *user, const struct pcap_pkthdr *h,
     /* extract l4 info */
     if (ih->protocol == IPPROTO_TCP) {
         th = (struct tcphdr *)data;
+        data += (th->doff << 2);
+        pkt.tcp_hdr = th;
         key.local_port = ntohs(th->source);
         key.remote_port = ntohs(th->dest);
     }
     else if (ih->protocol == IPPROTO_UDP) {
         uh = (struct udphdr *)data;
+        pkt.udp_hdr = uh;
+        data += sizeof(*uh);
         key.local_port = ntohs(uh->source);
         key.remote_port = ntohs(uh->dest);
     }
     else {
         return;
     }
+    pkt.payload = data;
 
     /* localize */
     temp = key.local_ip & PNA_MASK;
