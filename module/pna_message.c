@@ -48,6 +48,7 @@ int pna_message_signal(int method, struct timeval *time, char *data, uint length
     memcpy(&message.timeval, time, sizeof(message.timeval));
     memcpy(&message.data, data, length);
     /* make sure we have a null terminator */
+    message.data[length] = '\0';
     message.data[PNA_MSG_DATA_LEN-1] = '\0';
 
     return pna_message_send(&message);

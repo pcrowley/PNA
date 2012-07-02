@@ -55,7 +55,8 @@ void session_cleanup(void);
 static struct sessiontab_info *sessiontab_info;
 
 /* pointer to the /proc durectiry parent node */
-static struct proc_dir_entry *proc_parent;
+struct proc_dir_entry *proc_parent;
+EXPORT_SYMBOL(proc_parent);
 
 /* file operations for accessing the sessiontab */
 static const struct file_operations sessiontab_fops = {

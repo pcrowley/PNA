@@ -422,6 +422,7 @@ void pna_cleanup(void)
         dev_remove_pack(&pna_packet_type[i]);
         pr_info("pna: released %s\n", pna_packet_type[i].dev->name);
     }
+    rtmon_cleanup();
     pna_message_cleanup();
     session_cleanup();
     pr_info("pna: module is inactive\n");

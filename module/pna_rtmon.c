@@ -27,7 +27,7 @@
 static void rtmon_clean(unsigned long data);
 
 /* real-time monitor list and timer declarations */
-LIST_HEAD(rtmon_list);
+struct pna_rtmon rtmon_list;
 DEFINE_TIMER(timer_copy, rtmon_clean, 0, 0);
 
 /* reset each rtmon for next round of processing -- once per */
@@ -50,7 +50,7 @@ int rtmon_hook(struct session_key *key, int direction, struct sk_buff *skb,
     struct pna_rtmon *monitor;
     int ret = 0;
 
-    list_for_each_entry(monitor, &rtmon_list, list) {
+    list_for_each_entry(monitor, &rtmon_list.list, list) {
         if (monitor->hook) {
             ret += monitor->hook(key, direction, skb, &data);
         }
@@ -62,10 +62,24 @@ int rtmon_hook(struct session_key *key, int direction, struct sk_buff *skb,
 /* simple pna module init routines for dynamic rtmon support */
 int rtmon_init(void)
 {
-//    memset(&rtmon_list, 0, sizeof(rtmon_list));
-//    INIT_LIST_HEAD(&rtmon_list.list);
+    INIT_LIST_HEAD(&rtmon_list.list);
 
     return 0;
+}
+
+/* go through any rtmons and call their cleanup routine */
+void rtmon_cleanup(void)
+{
+    struct list_head *pos, *q;
+    struct pna_rtmon *m;
+
+    pr_info("rtmon_cleanup()\n");
+
+    list_for_each_safe(pos, q, &rtmon_list.list) {
+        m = list_entry(pos, struct pna_rtmon, list);
+        pr_info("cleanup of '%s'\n", m->name);
+        rtmon_unload(m);
+    }
 }
 
 /* initialize all the resources needed for an rtmon */
@@ -86,11 +100,11 @@ int rtmon_load(struct pna_rtmon *monitor)
     add_timer(&monitor->timer);
 
     /* insert new monitor to tail of monitor list */
-    list_add_tail(&(monitor->list), &rtmon_list);
+    list_add_tail(&monitor->list, &rtmon_list.list);
     pr_info("rtmon '%s' loaded\n", monitor->name);
 
     monitor = NULL;
-    list_for_each_entry(monitor, &rtmon_list, list) {
+    list_for_each_entry(monitor, &rtmon_list.list, list) {
         pr_info("rtmon%d: %s\n", idx, monitor->name);
         idx++;
     }
@@ -104,20 +118,28 @@ void rtmon_unload(struct pna_rtmon *monitor)
 {
     int idx = 0;
 
+    pr_info("rtmon unloading...\n");
+    pr_info("rtmon '%s' unloading...\n", monitor->name);
+
     /* remove the monitor from the table */
     list_del(&monitor->list);
+
+    pr_info(" ... not in list\n");
 
     /* remove the timer */
     del_timer(&monitor->timer);
 
+    pr_info(" ... not on timer\n");
+
     /* clean up the monitor */
     if (monitor->release) {
+        pr_info(" ... release hook\n");
         monitor->release();
     }
     pr_info("rtmon '%s' unloaded\n", monitor->name);
 
-    /* shor currently active monitors */
-    list_for_each_entry(monitor, &rtmon_list, list) {
+    /* show currently active monitors */
+    list_for_each_entry(monitor, &rtmon_list.list, list) {
         pr_info("rtmon%d: %s\n", idx, monitor->name);
         idx++;
     }

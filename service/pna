@@ -148,11 +148,24 @@ stop () {
     [ -f /var/run/$SERVICE.pid ] && kill $(cat /var/run/$SERVICE.pid)
     rm -f /var/run/$SERVICE.pid
 
+    lsmod | grep pna
+    echo -n "sleep 30..."
+    sleep 30
+    echo "done"
+    lsmod | grep pna
+
     # Determine if any rtmons are loaded (and unload them)
     RTMONS=$($LSMOD | grep "\<$SERVICE\>" | awk '{print $4}')
     for mon in ${RTMONS/,/ } ; do
         unload $mon
     done
+
+    lsmod | grep pna
+    echo -n "sleep 30..."
+    sleep 30
+    echo "done"
+    lsmod | grep pna
+
 
     # Unload the main PNA module
     if [ -f /var/run/$SERVICE.kmod ] ; then

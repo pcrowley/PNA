@@ -17,11 +17,11 @@ progs := user_message
 prog-deps := pna_message.o session_dump.o proc_dump.o
 
 # special-purpose user-space programs
-special-progs := session
+special-progs := session example
 special-deps := session_dump.o proc_dump.o
 
 CFLAGS += -I../include/
-LDLIBS := -lpthread
+LDLIBS := -lpthread -lpcap
 
 all: $(progs)
 

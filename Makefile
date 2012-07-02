@@ -13,7 +13,7 @@
 # limitations under the License.
 
 MODULE := module/pna.ko
-USER := user/user_monitor user/user_alerts
+USER := user/user_message
 
 all: $(MODULE) $(USER) rtmons
 
@@ -31,6 +31,9 @@ start: $(MODULE) $(USER)
 
 stop:
 	sudo ./service/pna stop
+
+dumper:
+	sudo ./service/pna load pna_dumper
 
 status:
 	sudo ./service/pna status

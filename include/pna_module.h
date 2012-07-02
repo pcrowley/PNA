@@ -28,6 +28,7 @@
 
 /* /proc directory PNA tables will be stored in */
 #define PNA_PROCDIR  "pna"
+extern struct proc_dir_entry *proc_parent;
 
 /* name format of PNA table files */
 #define PNA_SESSIONFILE "session-%d"
@@ -109,6 +110,7 @@ int session_init(void);
 void session_cleanup(void);
 
 int rtmon_init(void);
+void rtmon_cleanup(void);
 int rtmon_load(struct pna_rtmon *monitor);
 void rtmon_unload(struct pna_rtmon *monitor);
 int rtmon_hook(struct session_key *key, int direction, struct sk_buff *skb,

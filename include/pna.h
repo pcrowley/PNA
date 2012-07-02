@@ -49,6 +49,14 @@ struct pna_log_header {
     unsigned int end_time;
 };
 
+/* standard packet sharing format between kernel-/user-space */
+struct pna_packet {
+    struct timeval ts; /* time packet arrived */
+    ssize_t pkt_len;   /* actual packet length received */
+    ssize_t data_len;  /* data length of packet (including this struct) */
+    char data[0];      /* actual packet data (possibly truncated) */
+};
+
 /* PNA message commands */
 #define PNA_MSG_CMD_REGISTER   0x0001
 #define PNA_MSG_CMD_UNREGISTER 0x0002
