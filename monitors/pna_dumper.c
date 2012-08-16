@@ -42,7 +42,7 @@
 static int dumper_init(void);
 static void dumper_release(void);
 static int dumper_hook(struct session_key *, int, struct sk_buff *, unsigned long *);
-static void dumper_clean(void);
+//static void dumper_clean(void);
 
 struct pna_rtmon dumper = {
     .name = "Packet Dumper",
@@ -133,11 +133,15 @@ ssize_t dumper_procread(struct file *filep,
  * PNA dumper monitor hook
  */
 static int dumper_hook(struct session_key *key, int direction,
-                        struct sk_buff *skb, unsigned long *data)
+                        struct sk_buff *skb, unsigned long *info)
 {
     dumper_t *d;
     struct pna_packet *pkt;
     int match;
+
+    /* bump the skb data pointer back to the ethernet header */
+    // XXX: safe???
+    skb->data = skb_mac_header(skb);
 
     /* loop over all dumpers and find packet matches */
     list_for_each_entry(d, &dumper_list.list, list) {
@@ -153,9 +157,18 @@ static int dumper_hook(struct session_key *key, int direction,
                 }
                 /* copy packet into local buffer */
                 pkt = (struct pna_packet *)&d->data[0];
+                memcpy(&pkt->key, key, sizeof(pkt->key));
+
+                pkt->hdr.eth_hdr = pkt->data + (skb_mac_header(skb) - skb_mac_header(skb));
+                pkt->hdr.ip_hdr = pkt->data + (skb_network_header(skb) - skb_mac_header(skb));
+                pkt->hdr.l4_hdr = pkt->data + (skb_transport_header(skb) - skb_mac_header(skb));
+                pkt->hdr.payload = NULL;
+
+                pkt->direction = direction;
+                pkt->info = info;
                 pkt->ts = ktime_to_timeval(skb->tstamp);
-                pkt->pkt_len = skb->len + ETH_HLEN;
-                pkt->data_len = d->full;
+                pkt->real_length = skb->len + ETH_HLEN;
+                pkt->length = d->full;
                 memcpy(pkt->data, skb_mac_header(skb), d->full - sizeof(*pkt));
 
                 pr_info("    match! data ready\n");
@@ -169,10 +182,15 @@ static int dumper_hook(struct session_key *key, int direction,
     return 0;
 }
 
+#if 0
+/**
+ * Example periodic cleaner function.
+ */
 static void dumper_clean(void)
 {
     pr_info("pna_dumper: periodic callback\n");
 }
+#endif
 
 /**
  * Construct the full path to a procfile entry.
@@ -258,14 +276,15 @@ static ssize_t config_add(struct file *file, const char __user *buf,
     flen = flen / sizeof(*filter);
 
     /* verify the code */
-    if (0 != sk_chk_filter(filter, flen)) {
-        pr_err("filter code does not verify\n");
-        vfree(dumper);
-        return len;
-    }
     dumper->filter = (struct sock_filter *)vmalloc(flen * sizeof(*filter));
     memcpy(dumper->filter, filter, flen * sizeof(*filter));
     dumper->flen = flen;
+    if (0 != sk_chk_filter(dumper->filter, dumper->flen)) {
+        pr_err("filter code does not verify\n");
+        vfree(dumper->filter);
+        vfree(dumper);
+        return len;
+    }
 
     /* create procfile */
     proc_node = create_proc_entry(dumper->name, 0644, proc_parent);
@@ -379,12 +398,9 @@ static void dumper_release(void)
     struct list_head *pos, *q;
     dumper_t *d;
 
-    pr_info("release dumper\n");
-
     /* make sure no more entries are straggling */
     list_for_each_safe(pos, q, &dumper_list.list) {
         d = list_entry(pos, struct dumper, list);
-        pr_info("removing: %s\n", d->name);
         dumper_del(d);
     }
 

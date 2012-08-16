@@ -118,25 +118,16 @@ void rtmon_unload(struct pna_rtmon *monitor)
 {
     int idx = 0;
 
-    pr_info("rtmon unloading...\n");
-    pr_info("rtmon '%s' unloading...\n", monitor->name);
-
     /* remove the monitor from the table */
     list_del(&monitor->list);
-
-    pr_info(" ... not in list\n");
 
     /* remove the timer */
     del_timer(&monitor->timer);
 
-    pr_info(" ... not on timer\n");
-
     /* clean up the monitor */
     if (monitor->release) {
-        pr_info(" ... release hook\n");
         monitor->release();
     }
-    pr_info("rtmon '%s' unloaded\n", monitor->name);
 
     /* show currently active monitors */
     list_for_each_entry(monitor, &rtmon_list.list, list) {

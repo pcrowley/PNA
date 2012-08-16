@@ -1,9 +1,6 @@
 /**
- * Simple example program that interacts with the pna_example real-time
- * monitor.
- * - The monitor samples 1 out of every 100 packets
- * - This user-space program should then recieve 1 out of every 100 packets
- *   and write it to a pcap formatted file.
+ * Generic pcap dumper routine, just symlink to a filter name it it will
+ * create the files as needed.
  *
  * - This uses the standard open(), read(), close() system calls.
  * - An mmap() option may become available in the future, but will require
@@ -26,8 +23,68 @@
 #define OUT_FMT "%s/%%Y%%m%%d%%H%%M%%S-%s.pcap"
 #define BUFSZ 2048
 
-char *prog_name;
 int verbose;
+char *prog_name;
+
+char *log_dir = DEFAULT_LOG_DIR;
+char outname[MAXNAMLEN];
+pcap_t *pcap;
+
+void monitor_init(void)
+{
+    time_t start;
+    struct tm *start_gmt;
+    char *name;
+
+    /* create a fake pcap device for the dumper */
+    pcap = pcap_open_dead(DLT_EN10MB, 65535);
+    name = basename(prog_name);
+    snprintf(outname, MAXNAMLEN, OUT_FMT, log_dir, name);
+}
+
+void monitor_release(void)
+{
+    /* close pcap object */
+    pcap_close(pcap);
+}
+
+void monitor_hook(struct session_key *key, int direction,
+                  struct pna_packet *pkt, unsigned long *info)
+{
+    static int npkts = 0;
+    static pcap_dumper_t *dumper;
+
+    time_t start;
+    struct tm *start_gmt;
+    struct pcap_pkthdr hdr;
+    char outfile[MAXNAMLEN];
+
+    /* open up a dumper if needed */
+    if (npkts == 0) {
+        start = time(NULL);
+        start_gmt = gmtime((time_t *)&start);
+        strftime(outfile, MAXNAMLEN, outname, start_gmt);
+        dumper = pcap_dump_open(pcap, outfile);
+    }
+
+    /* fill out header info and write out packet to pcap file */
+    hdr.ts = pkt->ts;
+    hdr.len = pkt->real_length;
+    hdr.caplen = pkt->length - sizeof(*pkt);
+    pcap_dump((u_char *)dumper, &hdr, (u_char *)pkt->data);
+    npkts += 1;
+
+    /* enough packets in this trace, create a new one */
+    if (PKTS_PER_TRACE == npkts) {
+        npkts = 0;
+        pcap_dump_close(dumper);
+    }
+    else {
+        pcap_dump_flush(dumper);
+    }
+}
+
+/* ----------------------------- */
 
 void usage(void)
 {
@@ -45,21 +102,11 @@ void usage(void)
 int main(int argc, char **argv)
 {
     int pd;
-    int npkts;
-    char opt;
     char *procfile;
+    char opt;
     ssize_t nbytes;
-    time_t start;
-    struct tm *start_gmt;
     char buf[BUFSZ];
-    char outname[MAXNAMLEN];
-    char outfile[MAXNAMLEN];
-    pcap_t *pcap;
-    pcap_dumper_t *dumper;
-    struct pcap_pkthdr hdr;
     struct pna_packet *pkt;
-    char *name;
-    char *log_dir = DEFAULT_LOG_DIR;
 
     prog_name = argv[0];
 
@@ -92,6 +139,9 @@ int main(int argc, char **argv)
         printf("running %s with %s\n", prog_name, procfile);
     }
 
+    /* call the monitor initialization routine */
+    monitor_init();
+
     /* open the procfile for reading */
     pd = open(procfile, O_RDONLY);
     if (-1 == pd) {
@@ -99,68 +149,27 @@ int main(int argc, char **argv)
         return -1;
     }
 
-    /* create a fake pcap device for the dumper */
-    pcap = pcap_open_dead(DLT_EN10MB, 65535);
-    name = basename(prog_name);
-    snprintf(outname, MAXNAMLEN, OUT_FMT, log_dir, name);
-
-    /* prep the filename for output */
-    start = time(NULL);
-    start_gmt = gmtime((time_t *)&start);
-    strftime(outfile, MAXNAMLEN, outname, start_gmt);
-    dumper = pcap_dump_open(pcap, outfile);
-
-    if (verbose) {
-        printf("procdesc = %d ; pcap@%p ; dumper@%p\n", pd, pcap, dumper);
-        printf("name='%s' ; file='%s'\n", outname, outfile);
-        fflush(stdout);
-    }
-
-    if (!dumper) {
-        pcap_perror(pcap, prog_name);
-    }
-
     /* as long as the procfile doesn't send EOF, keep reading */
-    npkts = 0;
     while (0 < (nbytes = read(pd, buf, BUFSZ))) {
         pkt = (struct pna_packet *)buf;
 
         /* make sure the buffer holds all the data we expect */
         printf("got %d bytes\n", nbytes);
         fflush(stdout);
-        if (nbytes != pkt->data_len) {
+        if (nbytes != pkt->length) {
             /* it does not, ignore this packet */
             fprintf(stderr, "did not capture entire packet\n");
             continue;
         }
 
-        /* fill out header info and write out packet to pcap file */
-        hdr.ts = pkt->ts;
-        hdr.len = pkt->pkt_len;
-        hdr.caplen = pkt->data_len - sizeof(*pkt);
-        pcap_dump((u_char *)dumper, &hdr, (u_char *)pkt->data);
-        npkts += 1;
-
-        /* enough packets in this trace, create a new one */
-        if (PKTS_PER_TRACE == npkts) {
-            npkts = 0;
-            pcap_dump_close(dumper);
-
-            /* prep a new file for output */
-            start = time(NULL);
-            start_gmt = gmtime((time_t *)&start);
-            strftime(outfile, MAXNAMLEN, outname, start_gmt);
-            dumper = pcap_dump_open(pcap, outfile);
-        }
-        else {
-            pcap_dump_flush(dumper);
-        }
+        /* call the monitor hook function with params */
+        monitor_hook(&pkt->key, pkt->direction, pkt, pkt->info);
     }
-
-    /* close pcap object */
-    pcap_close(pcap);
 
     /* close the procfile when done */
     close(pd);
+
+    /* call any monitor release routines */
+    monitor_release();
 }
 

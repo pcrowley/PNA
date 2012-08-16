@@ -220,39 +220,6 @@ void *poll_thread(void *data)
     /* copy name into local buffer and strip everything after last - */
     rpeel(name, entry->data, '-');
 
-    /* determine if there is an external handler */
-    if (override_exists(name)) {
-        type = POLL_EXTERNAL;
-
-        /* set up the arguments */
-        snprintf(command, MAX_STR, "%s/%s", exec_dir, name);
-        i = 0;
-        args[i++] = command;
-        if (log_dir) {
-            args[i++] = "-d";
-            args[i++] = log_dir;
-        }
-        if (exec_dir) {
-            args[i++] = "-e";
-            args[i++] = exec_dir;
-        }
-        if (verbose) {
-            args[i++] = "-v";
-        }
-        args[i++] = entry->data;
-        args[i++] = NULL;
-
-        debug("using external handler: `%s` (POLL)\n", command);
-    }
-    else if (NULL != (fn = builtin(name))) {
-        type = POLL_BUILTIN;
-        debug("using built-in handler for %s (POLL)\n", entry->data);
-    }
-    else {
-        type = POLL_NONE;
-        error("no handler for %s\n", entry->data);
-    }
-
     while (entry->alive) {
         switch (type) {
             case POLL_EXTERNAL:
@@ -272,7 +239,37 @@ void *poll_thread(void *data)
                 fn(log_dir, entry->data);
                 break;
             default :
-                error("no handler for %s\n", entry->data);
+                /* try to find a handler */
+                if (override_exists(name)) {
+                    type = POLL_EXTERNAL;
+
+                    /* set up the arguments */
+                    snprintf(command, MAX_STR, "%s/%s", exec_dir, name);
+                    i = 0;
+                    args[i++] = command;
+                    if (log_dir) {
+                        args[i++] = "-d";
+                        args[i++] = log_dir;
+                    }
+                    if (exec_dir) {
+                        args[i++] = "-e";
+                        args[i++] = exec_dir;
+                    }
+                    if (verbose) {
+                        args[i++] = "-v";
+                    }
+                    args[i++] = entry->data;
+                    args[i++] = NULL;
+
+                    debug("using external handler: `%s` (POLL)\n", command);
+                }
+                else if (NULL != (fn = builtin(name))) {
+                    type = POLL_BUILTIN;
+                    debug("using built-in handler for %s (POLL)\n", entry->data);
+                }
+                else {
+                    error("no handler for %s\n", entry->data);
+                }
                 break;
         }
 
