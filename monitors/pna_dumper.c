@@ -35,6 +35,7 @@
 #include <linux/sched.h>
 #include <linux/proc_fs.h>
 #include <linux/filter.h>
+#include <linux/tcp.h>
 
 #include "pna.h"
 #include "pna_module.h"
@@ -137,6 +138,7 @@ static int dumper_hook(struct session_key *key, int direction,
 {
     dumper_t *d;
     struct pna_packet *pkt;
+    struct tcphdr *tcphdr;
     int match;
 
     /* bump the skb data pointer back to the ethernet header */
@@ -159,13 +161,32 @@ static int dumper_hook(struct session_key *key, int direction,
                 pkt = (struct pna_packet *)&d->data[0];
                 memcpy(&pkt->key, key, sizeof(pkt->key));
 
-                pkt->hdr.eth_hdr = pkt->data + (skb_mac_header(skb) - skb_mac_header(skb));
-                pkt->hdr.ip_hdr = pkt->data + (skb_network_header(skb) - skb_mac_header(skb));
-                pkt->hdr.l4_hdr = pkt->data + (skb_transport_header(skb) - skb_mac_header(skb));
-                pkt->hdr.payload = NULL;
+                pkt->hdr.eth_hdr = skb_mac_header(skb) - skb_mac_header(skb);
+                pkt->hdr.ip_hdr = skb_network_header(skb) - skb_mac_header(skb);
+                pkt->hdr.l4_hdr = skb_transport_header(skb) - skb_mac_header(skb);
+
+                /* assume we'll find a payload for now */
+                pkt->hdr.payload = pkt->hdr.l4_hdr;
+                switch (key->l4_protocol) {
+                case IPPROTO_TCP:
+                    /* set pointer for TCP */
+                    tcphdr = (struct tcphdr *)skb_transport_header(skb);
+                    pkt->hdr.payload += (tcphdr->doff * 4);
+                    break;
+                case IPPROTO_UDP:
+                    /* set pointer for UDP */
+                    pkt->hdr.payload += sizeof(struct udphdr *);
+                    break;
+                default:
+                    /* reset pointer otherwise */
+                    pkt->hdr.payload = 0;
+                }
+                /* if the payload is not in the buffer, clear the field */
+                if (pkt->hdr.payload > skb->len + ETH_HLEN) {
+                    pkt->hdr.payload = 0;
+                }
 
                 pkt->direction = direction;
-                pkt->info = info;
                 pkt->ts = ktime_to_timeval(skb->tstamp);
                 pkt->real_length = skb->len + ETH_HLEN;
                 pkt->length = d->full;

@@ -12,6 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# Any user created monitors should go on this line
+user-progs := example_mon pcap_dump
+user-deps := pna.o
+
 # standard user-space programs
 progs := user_message
 prog-deps := pna_message.o session_dump.o proc_dump.o
@@ -37,5 +41,7 @@ $(progs): $(prog-deps)
 
 $(special-progs): $(special-deps)
 
+$(user-progs): $(user-deps)
+
 clean:
-	rm -f $(progs) $(prog-deps) $(special-progs) $(special-deps)
+	rm -f $(progs) $(prog-deps) $(special-progs) $(special-deps) $(user-progs) $(user-deps)

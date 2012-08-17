@@ -2,11 +2,13 @@
 # Helper program for converting a BPF expression into BPF VM code and
 # delivering it to the kernel for execution.
 
-dumper_add = '/proc/pna/dumper_add'
-dumper_del = '/proc/pna/dumper_del'
-
-import ctypes, struct, sys
+import ctypes, struct, sys, os.path
 from ctypes.util import find_library
+
+proc_path = '/proc/pna'
+
+dumper_add = os.path.join(proc_path, 'dumper_add')
+dumper_del = os.path.join(proc_path, 'dumper_del')
 
 if len(sys.argv) < 2 :
     print 'error: no filter name defined'
@@ -22,6 +24,11 @@ if name == '-d' :
     f.close()
     print '{0} filter removed'.format(name)
     sys.exit(0)
+
+# A bit of a sanity check to see if the filter already exists
+if os.path.exists(os.path.join(proc_path, name)) :
+    print '{0} filter exists'.format(name)
+    sys.exit(1)
 
 # struct bpf_insn {
 #   u_short     code;
@@ -86,17 +93,17 @@ if -1 == pcap_compile(pcap_handle, program_ref, filter_buf, optimize, mask) :
     pcap_perror(pcap_handle, ctypes.c_char_p(b'pcap'))
     sys.exit(2)
 
-print program.bf_len
 code = ''
 for i in xrange(program.bf_len) :
     insn = program.bf_insns[i]
-    print hex(insn.code), hex(insn.jt), hex(insn.jf), hex(insn.k)
     code += struct.pack(insn.format, insn.code, insn.jt, insn.jf, insn.k)
 
 f = open(dumper_add, 'w')
 f.write('{0}\n'.format(name))
 f.write(code)
 f.close()
+
+print '{0} filter installed'.format(name)
 
 pcap_close(pcap_handle)
 

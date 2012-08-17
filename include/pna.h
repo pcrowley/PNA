@@ -20,6 +20,7 @@
 # include <linux/time.h>
 #else
 # include <stdint.h>
+# include <sys/time.h>
 #endif /* __KERNEL__ */
 
 #define MAX_STR 1024
@@ -85,14 +86,14 @@ struct pna_log_header {
 };
 
 struct pna_headers {
-    void *eth_hdr;
-    void *ip_hdr;
+    unsigned int eth_hdr;
+    unsigned int ip_hdr;
     union {
-        void *tcp_hdr;
-        void *udp_hdr;
-        void *l4_hdr;
+        unsigned int tcp_hdr;
+        unsigned int udp_hdr;
+        unsigned int l4_hdr;
     };
-    void *payload;
+    unsigned int payload;
 };
 
 /* standard packet sharing format between kernel-/user-space */
@@ -100,7 +101,6 @@ struct pna_packet {
     struct session_key key; /* some useful extracted informations */
     struct pna_headers hdr; /* pointers to headers locations in data[] */
     int direction;          /* direction of the packet */
-    unsigned long *info;    /* extra info from rtmons */
     struct timeval ts;      /* time packet arrived */
     ssize_t real_length;    /* actual packet length received */
     ssize_t length;         /* data length of packet (including this struct) */
@@ -137,5 +137,16 @@ struct pna_message *pna_message_recv(void);
 void pna_message_reg(void);
 void pna_message_unreg(void);
 #endif
+
+/* configuration structure for user-space monitors */
+struct pna_config {
+    void (*init)(void);
+    void (*release)(void);
+    void (*hook)(struct session_key *, int, struct pna_packet *);
+    int verbose;
+    char *prog_name;
+    char *log_dir;
+    char *proc_file;
+};
 
 #endif /* __PNA_H */
