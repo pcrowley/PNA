@@ -87,11 +87,11 @@ int rtmon_load(struct pna_rtmon *monitor)
 
     /* insert new monitor to tail of monitor list */
     list_add_tail(&(monitor->list), &rtmon_list);
-    pr_info("rtmon '%s' loaded\n", monitor->name);
+    pna_info("rtmon '%s' loaded\n", monitor->name);
 
     monitor = NULL;
     list_for_each_entry(monitor, &rtmon_list, list) {
-        pr_info("rtmon%d: %s\n", idx, monitor->name);
+        pna_info("rtmon%d: %s\n", idx, monitor->name);
         idx++;
     }
 
@@ -114,11 +114,11 @@ void rtmon_unload(struct pna_rtmon *monitor)
     if (monitor->release) {
         monitor->release();
     }
-    pr_info("rtmon '%s' unloaded\n", monitor->name);
+    pna_info("rtmon '%s' unloaded\n", monitor->name);
 
     /* shor currently active monitors */
     list_for_each_entry(monitor, &rtmon_list, list) {
-        pr_info("rtmon%d: %s\n", idx, monitor->name);
+        pna_info("rtmon%d: %s\n", idx, monitor->name);
         idx++;
     }
 }

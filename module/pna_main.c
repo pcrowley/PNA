@@ -251,7 +251,7 @@ int pna_hook(struct sk_buff *skb, struct net_device *dev,
     }
 
     /* hook actions here */
-    //pr_info("key: {%d/%d, 0x%08x, 0x%08x, 0x%04x, 0x%04x}\n", key.l3_protocol, key.l4_protocol, key.local_ip, key.remote_ip, key.local_port, key.remote_port);
+    //pna_info("key: {%d/%d, 0x%08x, 0x%08x, 0x%04x, 0x%04x}\n", key.l3_protocol, key.l4_protocol, key.local_ip, key.remote_ip, key.local_port, key.remote_port);
 
     /* insert into session table */
     if (pna_session_mon == true) {
@@ -317,7 +317,7 @@ static void pna_perflog(struct sk_buff *skb, int dir)
 
         /* report the numbers */
         if (fps_in + fps_out > 1000) {
-            pr_info("pna session_smpid:%d,in_fps:%llu,in_Mbps:%llu,in_avg:%llu,"
+            pna_info("pna session_smpid:%d,in_fps:%llu,in_Mbps:%llu,in_avg:%llu,"
                     "out_fps:%llu,out_Mbps:%llu,out_avg:%llu\n", smp_processor_id(),
                     fps_in, Mbps_in, avg_in, fps_out, Mbps_out, avg_out);
 
@@ -329,7 +329,7 @@ static void pna_perflog(struct sk_buff *skb, int dir)
 #if LINUX_VERSION_CODE <= KERNEL_VERSION(2,6,32)
                 /* numbers from the NIC */
                 stats = dev_get_stats(dev);
-                pr_info("pna %s_packets:%lu,%s_fifo_overruns:%lu,%s_missed:%lu\n",
+                pna_info("pna %s_packets:%lu,%s_fifo_overruns:%lu,%s_missed:%lu\n",
                         dev->name, stats->rx_packets - perf->dev_last_rx[i],
                         dev->name, stats->rx_fifo_errors - perf->dev_last_fifo[i],
                         dev->name, stats->rx_missed_errors - perf->dev_last_drop[i]);
@@ -339,7 +339,7 @@ static void pna_perflog(struct sk_buff *skb, int dir)
 #else
                 /* numbers from the NIC */
                 dev_get_stats(dev, &stats);
-                pr_info("pna %s_packets:%llu,%s_fifo_overruns:%llu,%s_missed:%lli\n",
+                pna_info("pna %s_packets:%llu,%s_fifo_overruns:%llu,%s_missed:%lli\n",
                         dev->name, stats.rx_packets - perf->dev_last_rx[i],
                         dev->name, stats.rx_fifo_errors - perf->dev_last_fifo[i],
                         dev->name, stats.rx_missed_errors - perf->dev_last_drop[i]);
@@ -396,7 +396,7 @@ int __init pna_init(void)
         if (NULL != next) {
             *next = '\0';
         }
-        pr_info("pna: capturing on %s", pna_iface);
+        pna_info("pna: capturing on %s", pna_iface);
         pna_packet_type[i].dev = dev_get_by_name(&init_net, pna_iface);
         dev_add_pack(&pna_packet_type[i]);
         pna_iface = next + 1;
@@ -408,7 +408,7 @@ int __init pna_init(void)
     next = "";
 #endif /* PIPELINE_MODE */
 
-    pr_info("pna: module is initialized %s\n", next);
+    pna_info("pna: module is initialized %s\n", next);
 
     return ret;
 }
@@ -420,11 +420,11 @@ void pna_cleanup(void)
 
     for (i = 0 ; (i < PNA_MAXIF) && (pna_packet_type[i].dev != NULL); i++) {
         dev_remove_pack(&pna_packet_type[i]);
-        pr_info("pna: released %s\n", pna_packet_type[i].dev->name);
+        pna_info("pna: released %s\n", pna_packet_type[i].dev->name);
     }
     pna_message_cleanup();
     session_cleanup();
-    pr_info("pna: module is inactive\n");
+    pna_info("pna: module is inactive\n");
 }
 
 module_init(pna_init);

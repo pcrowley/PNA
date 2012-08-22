@@ -57,7 +57,7 @@ int example_hook(struct session_key *key, int direction, struct sk_buff *skb,
 
     if (index++ == sample_freq) {
         index = 0;
-        pr_info("example: local 0x%08x:%d, remote 0x%08x:%d\n",
+        pna_info("example: local 0x%08x:%d, remote 0x%08x:%d\n",
                 key->local_ip, key->local_port,
                 key->remote_ip, key->remote_port);
     }
@@ -67,5 +67,5 @@ int example_hook(struct session_key *key, int direction, struct sk_buff *skb,
 
 void example_clean(void)
 {
-    pr_info("pna_example: periodic callback\n");
+    pna_info("pna_example: periodic callback\n");
 }

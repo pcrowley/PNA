@@ -22,7 +22,7 @@
 # include <stdint.h>
 #endif /* __KERNEL__ */
 
-#define MAX_STR 1024
+#define MAX_STR 512
 
 /* XXX: bad practice, but it gets the job done */
 /* could be trouble if Linux decides to use more netlink links */

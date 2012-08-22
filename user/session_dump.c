@@ -15,8 +15,10 @@
  */
 
 #define _GNU_SOURCE
+#define __STDC_FORMAT_MACROS
 #include <stdio.h>
 #include <stdint.h>
+#include <inttypes.h>
 #include <string.h>
 #include <fcntl.h>
 #include <sys/mman.h>
@@ -72,7 +74,7 @@ int session_dump(char *out_dir, char *proc_file)
 
     /* display the number of entries we got */
     if (verbose) {
-        printf("dumped %d entries to '%s'\n", nentries, out_file);
+        printf("dumped %" PRIu64 " entries to '%s'\n", nentries, out_file);
     }
 
     /* complete the header data */

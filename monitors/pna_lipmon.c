@@ -90,7 +90,7 @@ int lipmon_init(void)
     /* allocate memory for liptab */
     liptab = vmalloc(PNA_LIPMON_TABLE_SZ);
     if (!liptab) {
-        pr_err("insufficient memory for lipmon (%ld)", PNA_LIPMON_TABLE_SZ);
+        pna_err("insufficient memory for lipmon (%ld)", PNA_LIPMON_TABLE_SZ);
         return -ENOMEM;
     }
 

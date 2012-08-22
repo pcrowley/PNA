@@ -104,7 +104,7 @@ int conmon_init(void)
     /* allocate memory for contab */
     contab = vmalloc(PNA_CONMON_TABLE_SZ);
     if (!contab) {
-        pr_err("insufficient memory for conmon (%ld)", PNA_CONMON_TABLE_SZ);
+        pna_err("insufficient memory for conmon (%ld)", PNA_CONMON_TABLE_SZ);
         return -ENOMEM;
     }
 
