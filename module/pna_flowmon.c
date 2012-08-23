@@ -18,6 +18,7 @@
 /* functions: flowmon_init, flowmon_cleanup, flowmon_hook */
 
 #include <linux/kernel.h>
+#include <linux/module.h>
 #include <linux/percpu.h>
 #include <linux/hash.h>
 #include <linux/mutex.h>
