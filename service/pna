@@ -164,7 +164,7 @@ stop () {
 
     # allow irqbalance to change interrupts
     #service irqbalance start
-    echo "You may consider running \`service irqblaance start\` if needed"
+    echo "You may consider running \`service irqbalance start\` if needed"
 
     return $RETVAL
 }
