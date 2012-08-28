@@ -120,7 +120,7 @@ start () {
     # finish up with script-y stuff
     [ $RETVAL = 0 ] && touch /var/run/${SERVICE}.kmod
     [ $RETVAL = 0 ] && echo $PID_LIST > /var/run/${SERVICE}.pids
-    [ $RETVAL = 0 ] && echo "$SERVICE started" || echo "Failed to start $SERVIC
+    [ $RETVAL = 0 ] && echo "$SERVICE started" || echo "Failed to start $SERVICE"
 
     return $RETVAL
 }
@@ -160,10 +160,11 @@ stop () {
     # End with script-y stuff
     [ $RETVAL = 0 ] && rm -f /var/run/${SERVICE}.kmod
     [ $RETVAL = 0 ] && rm -f /var/run/${SERVICE}.pids
-    [ $RETVAL = 0 ] && echo "$SERVICE stopped" || echo "Failed to stop $SERVICE
+    [ $RETVAL = 0 ] && echo "$SERVICE stopped" || echo "Failed to stop $SERVICE"
 
     # allow irqbalance to change interrupts
-    service irqbalance start
+    #service irqbalance start
+    echo "You may consider running \`service irqblaance start\` if needed"
 
     return $RETVAL
 }
