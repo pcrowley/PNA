@@ -27,9 +27,6 @@ else
     exit 1
 fi
 
-# Source function library
-source /etc/init.d/functions
-
 PNA_MODULE="${PNA_BASE}/module/pna.ko"      # Name of kernel module
 PNA_MONITOR="${PNA_BASE}/user/user_monitor" # Name of logging program
 PNA_ALERTS="${PNA_BASE}/user/user_alerts"   # Name of alerts program
@@ -51,10 +48,10 @@ start () {
     # prevent irqbalance from changing interrupts
     service irqbalance stop
 
-    echo -n $"Starting $SERVICE: "
+    echo "Starting $SERVICE: "
 
     if [ ! -z "$PARMS" ] ; then
-        echo -n "($PARMS)"
+        echo "...with $PARMS"
     fi
 
     # Turn prefix and mask to hex values
@@ -121,21 +118,19 @@ start () {
     # in theory I should add entry to cron...
     
     # finish up with script-y stuff
-    [ $RETVAL = 0 ] && touch /var/lock/subsys/${SERVICE}
+    [ $RETVAL = 0 ] && touch /var/run/${SERVICE}.kmod
     [ $RETVAL = 0 ] && echo $PID_LIST > /var/run/${SERVICE}.pids
-    [ $RETVAL = 0 ] && success || failure
-    echo
+    [ $RETVAL = 0 ] && echo "$SERVICE started" || echo "Failed to start $SERVIC
 
     return $RETVAL
 }
 
 stop () {
-    echo -n $"Stopping $SERVICE: "
+    echo $"Stopping $SERVICE: "
 
     # make sure there is something to stop
-    if [ ! -f /var/lock/subsys/${SERVICE} ] ; then
-        failure
-        echo 
+    if [ ! -f /var/run/${SERVICE}.kmod ] ; then
+        echo "Failed to stop $SERVICE"
         return
     fi
 
@@ -163,10 +158,9 @@ stop () {
     done
 
     # End with script-y stuff
-    [ $RETVAL = 0 ] && rm -f /var/lock/subsys/${SERVICE}
+    [ $RETVAL = 0 ] && rm -f /var/run/${SERVICE}.kmod
     [ $RETVAL = 0 ] && rm -f /var/run/${SERVICE}.pids
-    [ $RETVAL = 0 ] && success || failure
-    echo
+    [ $RETVAL = 0 ] && echo "$SERVICE stopped" || echo "Failed to stop $SERVICE
 
     # allow irqbalance to change interrupts
     service irqbalance start
