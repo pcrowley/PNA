@@ -108,7 +108,7 @@ static int sessiontab_release(struct inode *inode, struct file *filep)
 
     /* dump a little info about that table */
     if (pna_perfmon) {
-        pr_info("pna table%d_inserts:%u,table%d_drops:%u\n",
+        pna_info("pna table%d_inserts:%u,table%d_drops:%u\n",
                 i, info->nsessions, i, info->nsessions_missed);
     }
 
@@ -131,7 +131,7 @@ static int sessiontab_mmap(struct file *filep, struct vm_area_struct *vma)
     struct sessiontab_info *info = filep->private_data;
 
     if (remap_vmalloc_range(vma, info->map->pairs, 0)) {
-        pr_warning("remap_vmalloc_range failed\n");
+        pna_warn("remap_vmalloc_range failed\n");
         return -EAGAIN;
     }
 
@@ -160,7 +160,7 @@ static int session_assign(int smp_id)
     while (atomic_read(&(sessiontab_info[i].smp_id)) != -1) {
         i = (i + 1) % pna_tables;
         if (i == 0) {
-            pr_err("pna: no free tables, skipping...\n");
+            pna_err("pna: no free tables, skipping...\n");
             i = -1;
             break;
         }
@@ -312,7 +312,7 @@ int session_init(void)
     sessiontab_info = (struct sessiontab_info *)
                     vmalloc(pna_tables * sizeof(struct sessiontab_info));
     if (!sessiontab_info) {
-        pr_err("insufficient memory for sessiontab_info\n");
+        pna_err("insufficient memory for sessiontab_info\n");
         session_cleanup();
         return -ENOMEM;
     }
@@ -323,7 +323,7 @@ int session_init(void)
         info = &sessiontab_info[i];
         info->map = hashmap_create(pna_session_entries, sizeof(e.key), sizeof(e.data));
         if (!info->map) {
-            pr_err("Could not allocate hashmap (%d/%d tables, %u sessions)\n",
+            pna_err("Could not allocate hashmap (%d/%d tables, %u sessions)\n",
                     i, pna_tables, pna_session_entries);
             session_cleanup();
             return -ENOMEM;
@@ -337,7 +337,7 @@ int session_init(void)
         strncpy(info->table_name, table_str, MAX_STR);
         proc_node = create_proc_entry(info->table_name, 0644, proc_parent);
         if (!proc_node) {
-            pr_err("failed to make proc entry: %s\n", table_str);
+            pna_err("failed to make proc entry: %s\n", table_str);
             session_cleanup();
             return -ENOMEM;
         }

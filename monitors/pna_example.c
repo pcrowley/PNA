@@ -125,7 +125,7 @@ static int example_hook(struct session_key *key, int direction,
 
 static void example_clean(void)
 {
-    pr_info("pna_example: periodic callback\n");
+    pna_info("pna_example: periodic callback\n");
 }
 
 /**
@@ -157,7 +157,7 @@ static int example_init(void)
     /* create procfile */
     proc_node = create_proc_entry(PROC_NAME, 0644, proc_parent);
     if (!proc_node) {
-        pr_err("could not create proc entry %s\n", PROC_NAME);
+        pna_err("could not create proc entry %s\n", PROC_NAME);
         return -ENOMEM;
     }
     proc_node->proc_fops = &example_fops;

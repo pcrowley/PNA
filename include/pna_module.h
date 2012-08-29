@@ -26,6 +26,11 @@
 #include <linux/module.h>
 #include <linux/moduleparam.h>
 
+/* some redefs for our namespace */
+#define pna_warn pr_warning
+#define pna_info pr_info
+#define pna_err  pr_err
+
 /* /proc directory PNA tables will be stored in */
 #define PNA_PROCDIR  "pna"
 extern struct proc_dir_entry *proc_parent;

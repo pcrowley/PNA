@@ -23,7 +23,7 @@
 # include <sys/time.h>
 #endif /* __KERNEL__ */
 
-#define MAX_STR 1024
+#define MAX_STR 512
 
 /* settings/structures for storing <src,dst,port> entries */
 /* various constants */

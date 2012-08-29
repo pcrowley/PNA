@@ -98,7 +98,7 @@ static int dumper_procopen(struct inode *inode, struct file *filep)
         if (0 == strncmp(filep->f_path.dentry->d_iname, d->name, MAX_STR)) {
             /* set this descriptors private data pointer to the match */
             filep->private_data = d;
-            pr_info("dump linked for %s\n", d->name);
+            pna_info("dump linked for %s\n", d->name);
             return 0;
         }
     }
@@ -111,7 +111,7 @@ ssize_t dumper_procread(struct file *filep,
 {
     dumper_t *dumper = (dumper_t *)filep->private_data;
 
-    pr_info("dumping for %s\n", dumper->name);
+    pna_info("dumping for %s\n", dumper->name);
 
     /* wait until something is ready */
     if (!dumper->full) {
@@ -148,7 +148,7 @@ static int dumper_hook(struct session_key *key, int direction,
     /* loop over all dumpers and find packet matches */
     list_for_each_entry(d, &dumper_list.list, list) {
         match = sk_run_filter(skb, d->filter, d->flen);
-        pr_info("match on '%s'? -> %d\n", d->name, match);
+        pna_info("match on '%s'? -> %d\n", d->name, match);
         /* look for filter match */
         if (match > 0) {
             /* copy and pass this packet */
@@ -192,7 +192,7 @@ static int dumper_hook(struct session_key *key, int direction,
                 pkt->length = d->full;
                 memcpy(pkt->data, skb_mac_header(skb), d->full - sizeof(*pkt));
 
-                pr_info("    match! data ready\n");
+                pna_info("    match! data ready\n");
 
                 /* wake up the queue */
                 wake_up_interruptible(&d->queue);
@@ -209,7 +209,7 @@ static int dumper_hook(struct session_key *key, int direction,
  */
 static void dumper_clean(void)
 {
-    pr_info("pna_dumper: periodic callback\n");
+    pna_info("pna_dumper: periodic callback\n");
 }
 #endif
 
@@ -277,7 +277,7 @@ static ssize_t config_add(struct file *file, const char __user *buf,
     split = strchr(buf, '\n');
     code = split + 1;
     if (split == NULL) {
-        pr_err("no filter code\n");
+        pna_err("no filter code\n");
         vfree(dumper);
         return len;
     }
@@ -286,7 +286,7 @@ static ssize_t config_add(struct file *file, const char __user *buf,
     i = 0;
     while ('\n' != (c = buf[i])) {
         if (!isgraph(c)) {
-            pr_err("non-printable character in filter name\n");
+            pna_err("non-printable character in filter name\n");
             return len;
         }
         dumper->name[i] = c;
@@ -301,7 +301,7 @@ static ssize_t config_add(struct file *file, const char __user *buf,
     memcpy(dumper->filter, filter, flen * sizeof(*filter));
     dumper->flen = flen;
     if (0 != sk_chk_filter(dumper->filter, dumper->flen)) {
-        pr_err("filter code does not verify\n");
+        pna_err("filter code does not verify\n");
         vfree(dumper->filter);
         vfree(dumper);
         return len;
@@ -310,7 +310,7 @@ static ssize_t config_add(struct file *file, const char __user *buf,
     /* create procfile */
     proc_node = create_proc_entry(dumper->name, 0644, proc_parent);
     if (!proc_node) {
-        pr_err("could not create proc entry %s\n", dumper->name);
+        pna_err("could not create proc entry %s\n", dumper->name);
         return len;
     }
     proc_node->proc_fops = &dumper_fops;
@@ -330,7 +330,7 @@ static ssize_t config_add(struct file *file, const char __user *buf,
     do_gettimeofday(&tv);
     pna_message_signal(PNA_MSG_METH_POLL, &tv, dumper->path, dumper->path_len);
 
-    pr_info("filter %s loaded (%d instructions)\n", dumper->name, dumper->flen);
+    pna_info("filter %s loaded (%d instructions)\n", dumper->name, dumper->flen);
     return len;
 }
 
@@ -359,14 +359,14 @@ static ssize_t config_del(struct file *file, const char __user *buf,
     struct list_head *pos, *q;
     dumper_t *d;
 
-    pr_info("config_del for: %s (%u)\n", buf, (unsigned int)len);
+    pna_info("config_del for: %s (%u)\n", buf, (unsigned int)len);
 
     /* loop over all dumpers and find packet matches */
     list_for_each_safe(pos, q, &dumper_list.list) {
         d = list_entry(pos, struct dumper, list);
-        pr_info("checking for %s == %s\n", d->name, buf);
+        pna_info("checking for %s == %s\n", d->name, buf);
         if (strncmp(d->name, buf, len+1) == 0) {
-            pr_info("match!\n");
+            pna_info("match!\n");
             dumper_del(d);
         }
     }
@@ -380,7 +380,7 @@ static int mkproc(char *name, const struct file_operations *fops, int size)
 
     proc_node = create_proc_entry(name, 0644, proc_parent);
     if (!proc_node) {
-        pr_err("could not create proc entry %s\n", name);
+        pna_err("could not create proc entry %s\n", name);
         return -ENOMEM;
     }
     proc_node->proc_fops = fops;

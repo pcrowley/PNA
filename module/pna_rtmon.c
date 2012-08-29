@@ -73,11 +73,11 @@ void rtmon_cleanup(void)
     struct list_head *pos, *q;
     struct pna_rtmon *m;
 
-    pr_info("rtmon_cleanup()\n");
+    pna_info("rtmon_cleanup()\n");
 
     list_for_each_safe(pos, q, &rtmon_list.list) {
         m = list_entry(pos, struct pna_rtmon, list);
-        pr_info("cleanup of '%s'\n", m->name);
+        pna_info("cleanup of '%s'\n", m->name);
         rtmon_unload(m);
     }
 }
@@ -101,11 +101,11 @@ int rtmon_load(struct pna_rtmon *monitor)
 
     /* insert new monitor to tail of monitor list */
     list_add_tail(&monitor->list, &rtmon_list.list);
-    pr_info("rtmon '%s' loaded\n", monitor->name);
+    pna_info("rtmon '%s' loaded\n", monitor->name);
 
     monitor = NULL;
     list_for_each_entry(monitor, &rtmon_list.list, list) {
-        pr_info("rtmon%d: %s\n", idx, monitor->name);
+        pna_info("rtmon%d: %s\n", idx, monitor->name);
         idx++;
     }
 
@@ -131,7 +131,7 @@ void rtmon_unload(struct pna_rtmon *monitor)
 
     /* show currently active monitors */
     list_for_each_entry(monitor, &rtmon_list.list, list) {
-        pr_info("rtmon%d: %s\n", idx, monitor->name);
+        pna_info("rtmon%d: %s\n", idx, monitor->name);
         idx++;
     }
 }

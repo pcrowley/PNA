@@ -38,7 +38,7 @@ int pna_message_signal(int method, struct timeval *time, char *data, uint length
     struct pna_message message;
 
     if (length > PNA_MSG_DATA_LEN-1) {
-        pr_info("pna_message: too long %d > %d\n", length, PNA_MSG_DATA_LEN-1);
+        pna_info("pna_message: too long %d > %d\n", length, PNA_MSG_DATA_LEN-1);
         return -1;
     }
 
@@ -74,7 +74,7 @@ static void pna_message_recv(struct sk_buff *skb)
             if ( nlh->nlmsg_pid == *data_pid ) {
                 /* and we know who to send messages to */
                 pna_message_pid = *data_pid;
-                pr_info("pna messages registered to pid %d\n", pna_message_pid);
+                pna_info("pna messages registered to pid %d\n", pna_message_pid);
             }
             do_gettimeofday(&currtime);
             msg_out.command = PNA_MSG_CMD_REGISTER;
@@ -88,11 +88,11 @@ static void pna_message_recv(struct sk_buff *skb)
             if ( pna_message_pid == *data_pid ) {
                 /* unregister the messages */
                 pna_message_pid = 0;
-                pr_info("pna messages unregistered\n");
+                pna_info("pna messages unregistered\n");
             }
             break;
         default:
-            pr_warn("pna_message: invalid command %d\n", message->command);
+            pna_warn("pna_message: invalid command %d\n", message->command);
     }
 }
 
@@ -111,7 +111,7 @@ static int pna_message_send(struct pna_message *message)
     /* allocate the message buffer */
     skb = nlmsg_new(PNA_MESSAGE_SZ, 0);
     if (!skb) {
-        pr_warn("could not allocate socket buffer\n");
+        pna_warn("could not allocate socket buffer\n");
         return -2;
     } 
 
@@ -125,7 +125,7 @@ static int pna_message_send(struct pna_message *message)
     /* send the message */
     ret = nlmsg_unicast(pna_message_sock, skb, pna_message_pid);
     if (ret < 0) {
-        pr_warn("could not send buffer to pid %d\n", pna_message_pid);
+        pna_warn("could not send buffer to pid %d\n", pna_message_pid);
         return -3;
     }
 
@@ -137,7 +137,7 @@ int pna_message_init(void)
     pna_message_sock = netlink_kernel_create(&init_net, NETLINK_PNA, 0,
             pna_message_recv, NULL, THIS_MODULE);
     if (!pna_message_sock) {
-        pr_err("failed to create netlink socket\n");
+        pna_err("failed to create netlink socket\n");
         return -1;
     }
 

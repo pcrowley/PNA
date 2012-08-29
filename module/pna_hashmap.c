@@ -5,11 +5,8 @@
 #include <linux/module.h>
 #include <linux/string.h>
 
+#include "pna_module.h"
 #include "pna_hashmap.h"
-
-// XXX should move to pna.h
-// and be used everywhere...
-#define pna_error pr_err
 
 /* local prototypes */
 static void hashmap_hashit(struct pna_hashmap *map, void *key, uint32_t *b0,
@@ -41,7 +38,7 @@ struct pna_hashmap *hashmap_create(uint32_t n_pairs, uint32_t key_size, uint32_t
             break;
     }
     if (i == PNA_NHASHMAPS) {
-        pna_error("Error all hashmaps are in use");
+        pna_err("Error all hashmaps are in use");
         return NULL;
     }
 
@@ -60,11 +57,11 @@ struct pna_hashmap *hashmap_create(uint32_t n_pairs, uint32_t key_size, uint32_t
     map->fp_mask = ~(map->kvx_mask);
 
     if (NULL == (map->buckets = vmalloc(BKTS_BYTES(map)))) {
-        pna_error("Error could not allocate memory for buckets");
+        pna_err("Error could not allocate memory for buckets");
         return NULL;
     }
     if (NULL == (map->pairs = vmalloc_user(PAIRS_BYTES(map)))) {
-        pna_error("Error could not allocate memory for pairs");
+        pna_err("Error could not allocate memory for pairs");
         return NULL;
     }
     map->next_idx = 0;

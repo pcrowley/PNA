@@ -20,8 +20,9 @@ will build the kernel module (found in `module/`) and the user-space programs
 (found in `user/`).
 
 Loading the kernel module and user-space programs is done with a script
-(`service/pna`).  This script has a few configuration parameters that should
-be set:
+(`service/pna`).  This script takes a few configuration parameters that should
+be set in the `service/config` file (see `service/config.example` or
+`service/config.dynamic`, for examples):
 
  - `PNA_BASE` sets the base directory of the PNA software (i.e. `pwd` of this file)
  - `PNA_IFACE` sets the interface on which traffic will be monitored
@@ -31,12 +32,13 @@ be set:
 
 Nothing else should need modification.
 
-The script can be run by typing `make start` from the top level directory.
-This will load the kernel module and start the user-space programs.  If
-there is traffic, log files should appear in `PNA_LOGDIR` after 10 seconds.
-You can stop all the software at any time by running `make stop` from the
-top level directory.  This will unload the kernel module and kill any
-user-space processes.
+You will need to be a `sudo` capable user to load the kernel module and
+configure the system.  The script can be run by typing `make start` from
+the top level directory. This will load the kernel module and start the 
+user-space programs.  If there is traffic, log files should appear in 
+`PNA_LOGDIR` after 10 seconds. You can stop all the software at any time
+by running `make stop` from the top level directory.  This will unload
+the kernel module and kill any user-space processes.
 
 Optionally, there are scripts in `util/cron/` that can be used to move the
 log files elsewhere as needed.  There is also a command line interface
