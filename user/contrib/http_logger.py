@@ -11,7 +11,9 @@ import pprint
 
 # A (typical) Apache log line looks like:
 # "%h %l %u %t \"%r\" %>s %b \"%{Referer}i\" \"%{User-Agent}i\"" # (see http://httpd.apache.org/docs/2.2/mod/mod_log_config.html)
-# <remotehost> <remotelogname|-> <remoteuser|-> <requesttime|std eng. fmt> "<first-request-line>" <return-status> <response-size> "<HTTP['Referer']>" "<HTTP['User-Agent']>"
+
+http_log = '{remote_ip} {remote_logname} {remote_user} {request_time} "{request}" {response_code} {response_size} "{referer}" "{user_agent}"'
+time_fmt = '[%d/%b/%Y:%H:%M:%S %z]'
 
 supported_methods = ['GET', 'HEAD', 'PUT', 'POST']
 
@@ -44,8 +46,8 @@ def monitor_release() :
     """
     global bad_request, bad_method, bad_header, http_bytes, total_bytes, start, end
     end = time.time()
-    print bad_request, bad_method, bad_header
-    print http_bytes, total_bytes
+    print 'bad request:',bad_request, 'method:', bad_method, 'header:', bad_header
+    print 'http:',http_bytes, 'total:', total_bytes
     print start, end, end-start
     print 'HTTP Mb/s:', (http_bytes*8/1E6) / (end-start)
     print 'Total Mb/s:', (total_bytes*8/1E6) / (end-start)
@@ -99,7 +101,22 @@ def monitor_hook(key, direction, packet):
     except IndexError :
         bad_header += 1
 
-    #pprint.pprint(http)
+    fields = {}
+    fields['remote_ip'] = '.'.join(str(key['remote_ip'] >> x & 0xff) for x in [24, 16, 8, 0])
+    fields['remote_logname'] = '-'
+    fields['remote_user'] = '-'
+    fields['request_time'] = time.strftime(time_fmt, time.localtime(packet.tv_sec))
+    fields['request'] = request[0]
+    fields['response_code'] = '-'
+    fields['response_size'] = '-'
+    fields['referer'] = '-'
+    if 'Referer' in http :
+        fields['referer'] = http['Referer']
+    fields['user_agent'] = '-'
+    if 'User-Agent' in http :
+        fields['user_agent'] = http['User-Agent']
+
+    print http_log.format(**fields)
 
 def main(args) :
     """
