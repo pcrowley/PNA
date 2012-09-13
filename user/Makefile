@@ -20,28 +20,22 @@ user-deps := pna.o
 progs := user_message
 prog-deps := pna_message.o session_dump.o proc_dump.o
 
-# special-purpose user-space programs
-special-progs := session example
-special-deps := session_dump.o proc_dump.o
-
 CFLAGS += -I../include/
 LDLIBS := -lpthread -lpcap
 
-all: $(progs)
+all: $(progs) contrib-progs
 
 debug: CFLAGS += -ggdb
 debug: $(progs)
 
-debug-special: CFLAGS += -ggdb
-debug-special: $(special-progs)
-
-special: $(special-progs)
-
 $(progs): $(prog-deps)
-
-$(special-progs): $(special-deps)
 
 $(user-progs): $(user-deps)
 
+contrib-progs: pna.o
+	make -C contrib
+	@echo Create a symlink in the user/ directory to enable a user monitor
+
 clean:
 	rm -f $(progs) $(prog-deps) $(special-progs) $(special-deps) $(user-progs) $(user-deps)
+	make -C contrib clean
