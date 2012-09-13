@@ -9,6 +9,10 @@ import pna, sys
 import time
 import pprint
 
+# A (typical) Apache log line looks like:
+# "%h %l %u %t \"%r\" %>s %b \"%{Referer}i\" \"%{User-Agent}i\"" # (see http://httpd.apache.org/docs/2.2/mod/mod_log_config.html)
+# <remotehost> <remotelogname|-> <remoteuser|-> <requesttime|std eng. fmt> "<first-request-line>" <return-status> <response-size> "<HTTP['Referer']>" "<HTTP['User-Agent']>"
+
 supported_methods = ['GET', 'HEAD', 'PUT', 'POST']
 
 bad_request = 0
