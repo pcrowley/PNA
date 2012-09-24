@@ -123,6 +123,8 @@ void dump_table(void *table_base, char *out_file)
 		log->remote_ip = flow->key.remote_ip;
 		log->local_port = flow->key.local_port;
 		log->remote_port = flow->key.remote_port;
+                log->local_domain = flow->key.local_domain;
+                log->remote_domain = flow->key.remote_domain;
 		log->packets[PNA_DIR_OUTBOUND] = flow->data.packets[PNA_DIR_OUTBOUND];
 		log->packets[PNA_DIR_INBOUND] = flow->data.packets[PNA_DIR_INBOUND];
 		log->bytes[PNA_DIR_OUTBOUND] = flow->data.bytes[PNA_DIR_OUTBOUND];

@@ -37,6 +37,10 @@
 
 #include "pna.h"
 
+extern unsigned int pna_dtrie_lookup(unsigned int ip);
+extern int pna_dtrie_init();
+extern int pna_dtrie_deinit();
+
 static void pna_perflog(struct sk_buff *skb, int dir);
 static int pna_localize(struct pna_flowkey *key, int *direction);
 static int pna_done(struct sk_buff *skb);
@@ -96,20 +100,6 @@ unsigned int pna_hash(unsigned int key, int bits)
     return hash;
 }
 
-//swap remote and local in the pna_flowkey
-static inline void pna_key_swap(struct pna_flowkey * key)
-{
-    unsigned int temp;
-
-    temp = key->local_ip;
-    key->local_ip = key->remote_ip;
-    key->remote_ip = temp;
-
-    temp = key->local_port;
-    key->local_port = key->remote_port;
-    key->remote_port = temp;
-}
-
 /**
  * Receive Packet Hook (and helpers)
  */
@@ -118,38 +108,41 @@ static int pna_localize(struct pna_flowkey *key, int *direction)
 {
     unsigned int temp;
 
-    /* test local_ip against pna_prefix/pna_mask */
-    temp = key->local_ip & pna_mask;
-    if (temp == (pna_prefix & pna_mask)) {
-        /* local ip is local! */
+    key->local_domain = pna_dtrie_lookup((key->local_ip));
+    key->remote_domain = pna_dtrie_lookup((key->remote_ip));
+
+    /* the lowest domain ID is treated as local */
+    if (key->local_domain < key->remote_domain) {
+        /* local ip is local */
         temp = key->remote_ip & pna_mask;
-        if(temp == (pna_prefix & pna_mask)){
-          //remote ip is also local
-          if(key->local_ip > key->remote_ip){
-            //check for canonical ordering
-            *direction = PNA_DIR_INBOUND;
-            pna_key_swap(key);
-            return 1;
-          }
+        if (temp == (pna_prefix & pna_mask)) {
+            /* remote ip is also local */
+            if (key->local_ip > key->remote_ip) {
+                /* check for canonical ordering */
+                *direction = PNA_DIR_INBOUND;
+                return 1;
+            }
         } 
-        
-        *direction = PNA_DIR_OUTBOUND;
-
-        return 1;
     }
-
-    /* test if remote_ip is actually local */
-    temp = key->remote_ip & pna_mask;
-    if (temp == (pna_prefix & pna_mask)) {
-        /* remote_ip is local, swap! */
+    else {
+        /* remote_ip is smaller, swap! */
         *direction = PNA_DIR_INBOUND;
-        pna_key_swap(key);
+
+        temp = key->local_ip;
+        key->local_ip = key->remote_ip;
+        key->remote_ip = temp;
+
+        temp = key->local_port;
+        key->local_port = key->remote_port;
+        key->remote_port = temp;
+
+        temp = key->local_domain;
+        key->local_domain = key->remote_domain;
+        key->remote_domain = temp;
+
         return 1;
     }
     
-    //if we get here, both ips are remote
-    
-
     return 0;
 }
 
@@ -363,6 +356,9 @@ int __init pna_init(void)
         return ret;
     }
 
+    //init the domain mappings must be called after flowmon_init because of initialization of PNA proc entry
+    pna_dtrie_init();
+
     /* set up the alert system */
     if (pna_alert_init() < 0) {
         pna_cleanup();
@@ -409,6 +405,8 @@ void pna_cleanup(void)
     }
     rtmon_release();
     pna_alert_cleanup();
+    //dtrie deinit should be called before flowmon_cleanup for proc file reasons
+    pna_dtrie_deinit();
     flowmon_cleanup();
     pr_info("pna: module is inactive\n");
 }
