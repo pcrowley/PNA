@@ -98,7 +98,6 @@ static int dumper_procopen(struct inode *inode, struct file *filep)
         if (0 == strncmp(filep->f_path.dentry->d_iname, d->name, MAX_STR)) {
             /* set this descriptors private data pointer to the match */
             filep->private_data = d;
-            pna_info("dump linked for %s\n", d->name);
             return 0;
         }
     }
@@ -110,8 +109,6 @@ ssize_t dumper_procread(struct file *filep,
                         char __user *buf, size_t len, loff_t *ppos)
 {
     dumper_t *dumper = (dumper_t *)filep->private_data;
-
-    pna_info("dumping for %s\n", dumper->name);
 
     /* wait until something is ready */
     if (!dumper->full) {
@@ -148,7 +145,6 @@ static int dumper_hook(struct session_key *key, int direction,
     /* loop over all dumpers and find packet matches */
     list_for_each_entry(d, &dumper_list.list, list) {
         match = sk_run_filter(skb, d->filter, d->flen);
-        pna_info("match on '%s'? -> %d\n", d->name, match);
         /* look for filter match */
         if (match > 0) {
             /* copy and pass this packet */
@@ -190,9 +186,8 @@ static int dumper_hook(struct session_key *key, int direction,
                 pkt->ts = ktime_to_timeval(skb->tstamp);
                 pkt->real_length = skb->len + ETH_HLEN;
                 pkt->length = d->full;
+                memset(pkt->data, 0, MAX_PKT_LEN - sizeof(*pkt));
                 memcpy(pkt->data, skb_mac_header(skb), d->full - sizeof(*pkt));
-
-                pna_info("    match! data ready\n");
 
                 /* wake up the queue */
                 wake_up_interruptible(&d->queue);
