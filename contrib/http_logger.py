@@ -5,9 +5,8 @@ For an example implementation, see http_sniffer.py which uses this as the
 base and creates a hook that snoops HTTP packets for matching strings.
 """
 
-import pna, sys
-import time
-import pprint
+import sys, time
+import pna
 
 # A (typical) Apache log line looks like:
 # "%h %l %u %t \"%r\" %>s %b \"%{Referer}i\" \"%{User-Agent}i\"" # (see http://httpd.apache.org/docs/2.2/mod/mod_log_config.html)
@@ -64,7 +63,7 @@ def monitor_hook(key, direction, packet):
         packet    wrapper the actual packet data, has length and packet data
     """
     global bad_request, bad_method, bad_header, http_bytes, total_bytes
-    total_bytes += packet.len
+    total_bytes += packet.length
 
     if key['local_port'] != 80 or direction != pna.DIR_INBOUND :
         # Not interested in this packet
@@ -74,7 +73,7 @@ def monitor_hook(key, direction, packet):
         # Everything is right, but no payload
         return
 
-    http_bytes += packet.len
+    http_bytes += packet.length
 
     # Okay, we've got a possible packet
     request = str(packet.payload).split('\r\n')
@@ -86,6 +85,8 @@ def monitor_hook(key, direction, packet):
 
     if method not in supported_methods :
         bad_method += 1
+        print 'bad method', method
+        sys.stdout.flush()
         return
 
     http = {method: path, 'Protocol-Version':version}
@@ -102,6 +103,7 @@ def monitor_hook(key, direction, packet):
         bad_header += 1
 
     fields = {}
+    fields['local_ip'] = '.'.join(str(key['local_ip'] >> x & 0xff) for x in [24, 16, 8, 0])
     fields['remote_ip'] = '.'.join(str(key['remote_ip'] >> x & 0xff) for x in [24, 16, 8, 0])
     fields['remote_logname'] = '-'
     fields['remote_user'] = '-'
@@ -116,7 +118,7 @@ def monitor_hook(key, direction, packet):
     if 'User-Agent' in http :
         fields['user_agent'] = http['User-Agent']
 
-    print http_log.format(**fields)
+    print fields['local_ip'], '<', http_log.format(**fields)
 
 def main(args) :
     """
