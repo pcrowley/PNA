@@ -23,7 +23,7 @@ class Packet :
     key_names = ('l3_protocol', 'l4_protocol', 'local_ip',
                  'remote_ip', 'local_port', 'remote_port')
     names = key_names + ('eth_addr', 'ip_addr', 'l4_addr', 'payload_addr',
-            'direction', 'tv_sec', 'tv_usec', 'real_length', 'length')
+            'direction', 'tv_sec', 'tv_usec', 'len', 'caplen')
     field_size = struct.calcsize(fields)
 
     def __init__(self, packet) :
@@ -102,7 +102,8 @@ class PNA :
                 # Parse the header bytes
                 pkt = Packet(bytes)
                 # Now get the remaining bytes (should be packet data)
-                pkt.set_data(procfile.read(pkt.length - pkt.field_size))
+                pkt.set_data(procfile.read(pkt.caplen))
+                sys.stdout.flush()
 
                 # call the monitor hook function with params
                 if self.hook:

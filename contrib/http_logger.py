@@ -63,7 +63,7 @@ def monitor_hook(key, direction, packet):
         packet    wrapper the actual packet data, has length and packet data
     """
     global bad_request, bad_method, bad_header, http_bytes, total_bytes
-    total_bytes += packet.length
+    total_bytes += packet.len
 
     if key['local_port'] != 80 or direction != pna.DIR_INBOUND :
         # Not interested in this packet
@@ -73,7 +73,7 @@ def monitor_hook(key, direction, packet):
         # Everything is right, but no payload
         return
 
-    http_bytes += packet.length
+    http_bytes += packet.len
 
     # Okay, we've got a possible packet
     request = str(packet.payload).split('\r\n')

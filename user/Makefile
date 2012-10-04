@@ -23,7 +23,7 @@ prog-deps := pna_message.o session_dump.o proc_dump.o
 CFLAGS += -I../include/
 LDLIBS := -lpthread -lpcap
 
-all: $(progs) contrib-progs
+all: $(progs)
 
 debug: CFLAGS += -ggdb
 debug: $(progs)
@@ -32,10 +32,5 @@ $(progs): $(prog-deps)
 
 $(user-progs): $(user-deps)
 
-contrib-progs: pna.o
-	make -C contrib
-	@echo Create a symlink in the user/ directory to enable a user monitor
-
 clean:
 	rm -f $(progs) $(prog-deps) $(special-progs) $(special-deps) $(user-progs) $(user-deps)
-	make -C contrib clean
