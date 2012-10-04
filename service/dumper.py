@@ -103,7 +103,7 @@ f.write('{0}\n'.format(name))
 f.write(code)
 f.close()
 
-print '{0} filter installed'.format(name)
+print '{0} filter installed ({1} instructions)'.format(name, program.bf_len)
 
 pcap_close(pcap_handle)
 

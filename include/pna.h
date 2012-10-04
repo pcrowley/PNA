@@ -101,9 +101,9 @@ struct pna_packet {
     struct session_key key; /* some useful extracted informations */
     struct pna_headers hdr; /* pointers to headers locations in data[] */
     int direction;          /* direction of the packet */
-    struct timeval ts;      /* time packet arrived */
-    ssize_t real_length;    /* actual packet length received */
-    ssize_t length;         /* data length of packet (including this struct) */
+    struct timeval timestamp; /* time packet arrived */
+    ssize_t len;            /* actual packet length received */
+    ssize_t caplen;         /* data length of packet (including this struct) */
     char data[0];           /* actual packet data (possibly truncated) */
 };
 

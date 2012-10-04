@@ -61,15 +61,16 @@ PNA_MONITOR(&dumper);
  */
 #define MAX_PKT_LEN 2048
 struct dumper {
+    struct list_head   list;
+    wait_queue_head_t  queue;
     char               name[MAX_STR];
     char               path[MAX_STR];
     ssize_t            path_len;
     struct sock_filter *filter;
-    int                flen;
-    struct list_head   list;
-    size_t             full;
-    wait_queue_head_t  queue;
-    char               data[MAX_PKT_LEN];
+    int                filter_len;
+    size_t             buffer_len;
+    loff_t             buffer_pos;
+    char               buffer[MAX_PKT_LEN];
 };
 typedef struct dumper dumper_t;
 
@@ -108,22 +109,27 @@ static int dumper_procopen(struct inode *inode, struct file *filep)
 ssize_t dumper_procread(struct file *filep,
                         char __user *buf, size_t len, loff_t *ppos)
 {
-    dumper_t *dumper = (dumper_t *)filep->private_data;
+    dumper_t *d = (dumper_t *)filep->private_data;
 
     /* wait until something is ready */
-    if (!dumper->full) {
-        wait_event_interruptible(dumper->queue, (0 != dumper->full) );
+    if (!d->buffer_len) {
+        wait_event_interruptible(d->queue, (0 != d->buffer_len) );
     }
 
     /* only copy our data if user buf is too long */
-    if (len >= dumper->full) {
-        len = dumper->full;
+    if (len >= d->buffer_len) {
+        len = d->buffer_len;
     }
 
-
     /* do the copy */
-    memcpy(buf, &dumper->data[*ppos], len);
-    dumper->full -= len;
+    memcpy(buf, &d->buffer[d->buffer_pos], len);
+    d->buffer_len -= len;
+    d->buffer_pos += len;
+
+    if (d->buffer_len == 0) {
+        d->buffer_pos = 0;
+    }
+
     return len;
 }
 
@@ -137,29 +143,32 @@ static int dumper_hook(struct session_key *key, int direction,
     struct pna_packet *pkt;
     struct tcphdr *tcphdr;
     int match;
+    unsigned char *base_addr;
 
     /* bump the skb data pointer back to the ethernet header */
     // XXX: safe???
+    // Ugh, who knows about the skb->len
     skb->data = skb_mac_header(skb);
 
     /* loop over all dumpers and find packet matches */
     list_for_each_entry(d, &dumper_list.list, list) {
-        match = sk_run_filter(skb, d->filter, d->flen);
+        match = sk_run_filter(skb, d->filter, d->filter_len);
         /* look for filter match */
         if (match > 0) {
             /* copy and pass this packet */
-            if (!d->full) {
-                d->full = skb->len + ETH_HLEN + sizeof(*pkt);
-                if (d->full > MAX_PKT_LEN) {
-                    d->full = MAX_PKT_LEN;
+            if (!d->buffer_len) {
+                d->buffer_len = skb->len + sizeof(*pkt);
+                if (d->buffer_len > MAX_PKT_LEN) {
+                    d->buffer_len = MAX_PKT_LEN;
                 }
                 /* copy packet into local buffer */
-                pkt = (struct pna_packet *)&d->data[0];
+                pkt = (struct pna_packet *)&d->buffer[0];
                 memcpy(&pkt->key, key, sizeof(pkt->key));
 
-                pkt->hdr.eth_hdr = skb_mac_header(skb) - skb_mac_header(skb);
-                pkt->hdr.ip_hdr = skb_network_header(skb) - skb_mac_header(skb);
-                pkt->hdr.l4_hdr = skb_transport_header(skb) - skb_mac_header(skb);
+                base_addr = skb_mac_header(skb);
+                pkt->hdr.eth_hdr = skb_mac_header(skb) - base_addr;
+                pkt->hdr.ip_hdr = skb_network_header(skb) - base_addr;
+                pkt->hdr.l4_hdr = skb_transport_header(skb) - base_addr;
 
                 /* assume we'll find a payload for now */
                 pkt->hdr.payload = pkt->hdr.l4_hdr;
@@ -178,16 +187,15 @@ static int dumper_hook(struct session_key *key, int direction,
                     pkt->hdr.payload = 0;
                 }
                 /* if the payload is not in the buffer, clear the field */
-                if (pkt->hdr.payload > skb->len + ETH_HLEN) {
+                if (pkt->hdr.payload > skb->len) {
                     pkt->hdr.payload = 0;
                 }
 
                 pkt->direction = direction;
-                pkt->ts = ktime_to_timeval(skb->tstamp);
-                pkt->real_length = skb->len + ETH_HLEN;
-                pkt->length = d->full;
-                memset(pkt->data, 0, MAX_PKT_LEN - sizeof(*pkt));
-                memcpy(pkt->data, skb_mac_header(skb), d->full - sizeof(*pkt));
+                pkt->timestamp = ktime_to_timeval(skb->tstamp);
+                pkt->len = skb->len;
+                pkt->caplen = d->buffer_len - sizeof(*pkt);
+                skb_copy_bits(skb, 0, pkt->data, pkt->caplen);
 
                 /* wake up the queue */
                 wake_up_interruptible(&d->queue);
@@ -250,62 +258,62 @@ static ssize_t config_add(struct file *file, const char __user *buf,
 {
     struct proc_dir_entry *proc_node;
     struct timeval tv;
-    char *name;
-    char c;
     int i;
     char *split;
     char *code;
-    int flen;
-    dumper_t *dumper;
+    int filter_len;
+    dumper_t *d;
     struct sock_filter *filter;
 
     /* allocate dumper entry */
-    dumper = (dumper_t *)vmalloc(sizeof(*dumper));
+    d = (dumper_t *)vmalloc(sizeof(*d));
 
     /* initilize packet queue */
-    init_waitqueue_head(&dumper->queue);
-    memset(dumper->data, 0, MAX_PKT_LEN);
-    dumper->full = 0;
+    init_waitqueue_head(&d->queue);
+    memset(d->buffer, 0, MAX_PKT_LEN);
+    d->buffer_len = 0;
+    d->buffer_pos = 0;
 
     /* get these from the shared buffer */
-    name = (char *)buf;
     split = strchr(buf, '\n');
     code = split + 1;
     if (split == NULL) {
         pna_err("no filter code\n");
-        vfree(dumper);
+        vfree(d);
         return len;
     }
-    split = '\0';
+    *split = '\0';
 
     i = 0;
-    while ('\n' != (c = buf[i])) {
-        if (!isgraph(c)) {
-            pna_err("non-printable character in filter name\n");
+    while (split != (buf + i)) {
+        if (!isgraph(buf[i])) {
+            pna_err("non-printable character in filter name (0x%x)\n", buf[i]);
             return len;
         }
-        dumper->name[i] = c;
+        d->name[i] = buf[i];
         i++;
     }
+    d->name[i] = '\0';
+
     filter = (struct sock_filter *)code;
-    flen = len - strnlen(dumper->name, len) - 1;
-    flen = flen / sizeof(*filter);
+    filter_len = len - strnlen(d->name, len) - 1;
+    filter_len = filter_len / sizeof(*filter);
 
     /* verify the code */
-    dumper->filter = (struct sock_filter *)vmalloc(flen * sizeof(*filter));
-    memcpy(dumper->filter, filter, flen * sizeof(*filter));
-    dumper->flen = flen;
-    if (0 != sk_chk_filter(dumper->filter, dumper->flen)) {
+    d->filter = (struct sock_filter *)vmalloc(filter_len * sizeof(*filter));
+    memcpy(d->filter, filter, filter_len * sizeof(*filter));
+    d->filter_len = filter_len;
+    if (0 != sk_chk_filter(d->filter, d->filter_len)) {
         pna_err("filter code does not verify\n");
-        vfree(dumper->filter);
-        vfree(dumper);
+        vfree(d->filter);
+        vfree(d);
         return len;
     }
 
     /* create procfile */
-    proc_node = create_proc_entry(dumper->name, 0644, proc_parent);
+    proc_node = create_proc_entry(d->name, 0644, proc_parent);
     if (!proc_node) {
-        pna_err("could not create proc entry %s\n", dumper->name);
+        pna_err("could not create proc entry %s\n", d->name);
         return len;
     }
     proc_node->proc_fops = &dumper_fops;
@@ -315,17 +323,17 @@ static ssize_t config_add(struct file *file, const char __user *buf,
     proc_node->size = MAX_PKT_LEN;
 
     /* get the full proc path */
-    dumper->path_len = proc_path(dumper->path, MAX_STR, proc_node);
-    dumper->path[dumper->path_len-1] = '\0';
+    d->path_len = proc_path(d->path, MAX_STR, proc_node);
+    d->path[d->path_len-1] = '\0';
 
     /* add to list of dumpers */
-    list_add_tail(&(dumper->list), &dumper_list.list);
+    list_add_tail(&(d->list), &dumper_list.list);
 
     /* signal userspace to start polling procfile */
     do_gettimeofday(&tv);
-    pna_message_signal(PNA_MSG_METH_POLL, &tv, dumper->path, dumper->path_len);
+    pna_message_signal(PNA_MSG_METH_POLL, &tv, d->path, d->path_len);
 
-    pna_info("filter %s loaded (%d instructions)\n", dumper->name, dumper->flen);
+    pna_info("filter %s loaded (%d instructions)\n", d->name, d->filter_len);
     return len;
 }
 
