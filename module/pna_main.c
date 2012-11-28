@@ -109,19 +109,19 @@ static int pna_localize(struct pna_flowkey *key, int *direction)
 {
     unsigned int temp;
 
-    key->local_domain = pna_dtrie_lookup((key->local_ip));  //trie stores stuff in network byte order
+    //trie stores stuff in network byte order
+    key->local_domain = pna_dtrie_lookup((key->local_ip));
     key->remote_domain = pna_dtrie_lookup((key->remote_ip));
 
     /* the lowest domain ID is treated as local */
     if (key->local_domain < key->remote_domain) {
-        /* local ip is local! */
+        /* local domain is local! */
         *direction = PNA_DIR_OUTBOUND;
 
         return 1;
     }
-
-    else {
-        /* remote_ip is smaller, swap! */
+    else if (key->remote_domain < key->local_domain) {
+        /* remote_domain is smaller, swap! */
         *direction = PNA_DIR_INBOUND;
 
         temp = key->local_ip;
@@ -137,6 +137,31 @@ static int pna_localize(struct pna_flowkey *key, int *direction)
         key->remote_domain = temp;
 
         return 1;
+    }
+    else {
+        /* both are equal, smaller ip is local */
+        if (key->local_ip < key->remote_ip) {
+            *direction = PNA_DIR_OUTBOUND;
+             return 1;
+        }
+        else {
+            /* remote_ip is smaller, swap! */
+            *direction = PNA_DIR_INBOUND;
+    
+            temp = key->local_ip;
+            key->local_ip = key->remote_ip;
+            key->remote_ip = temp;
+    
+            temp = key->local_port;
+            key->local_port = key->remote_port;
+            key->remote_port = temp;
+    
+            temp = key->local_domain;
+            key->local_domain = key->remote_domain;
+            key->remote_domain = temp;
+    
+            return 1;
+        }
     }
 
     return 0;
