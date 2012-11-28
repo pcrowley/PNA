@@ -27,9 +27,6 @@ else
     exit 1
 fi
 
-# Source function library
-source /etc/init.d/functions
-
 PNA_MODULE="${PNA_BASE}/module/pna.ko"      # Name of kernel module
 PNA_MONITOR="${PNA_BASE}/user/user_monitor" # Name of logging program
 PNA_ALERTS="${PNA_BASE}/user/user_alerts"   # Name of alerts program
@@ -124,10 +121,8 @@ start () {
     # in theory I should add entry to cron...
     
     # finish up with script-y stuff
-    [ $RETVAL = 0 ] && touch /var/lock/subsys/${SERVICE}
+    [ $RETVAL = 0 ] && touch /var/run/${SERVICE}
     [ $RETVAL = 0 ] && echo $PID_LIST > /var/run/${SERVICE}.pids
-    [ $RETVAL = 0 ] && success || failure
-    echo
 
     return $RETVAL
 }
@@ -136,9 +131,8 @@ stop () {
     echo -n $"Stopping $SERVICE: "
 
     # make sure there is something to stop
-    if [ ! -f /var/lock/subsys/${SERVICE} ] ; then
-        failure
-        echo 
+    if [ ! -f /var/run/${SERVICE} ] ; then
+        echo "failed"
         return
     fi
 
@@ -166,9 +160,8 @@ stop () {
     done
 
     # End with script-y stuff
-    [ $RETVAL = 0 ] && rm -f /var/lock/subsys/${SERVICE}
+    [ $RETVAL = 0 ] && rm -f /var/run/${SERVICE}
     [ $RETVAL = 0 ] && rm -f /var/run/${SERVICE}.pids
-    [ $RETVAL = 0 ] && success || failure
     echo
 
     # allow irqbalance to change interrupts
