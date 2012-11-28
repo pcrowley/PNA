@@ -38,8 +38,8 @@
 #include "pna.h"
 
 extern unsigned int pna_dtrie_lookup(unsigned int ip);
-extern int pna_dtrie_init();
-extern int pna_dtrie_deinit();
+extern int pna_dtrie_init(void);
+extern int pna_dtrie_deinit(void);
 
 static void pna_perflog(struct sk_buff *skb, int dir);
 static int pna_localize(struct pna_flowkey *key, int *direction);
