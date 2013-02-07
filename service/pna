@@ -91,14 +91,30 @@ start () {
     [ -f $PNA_MODULE ] || error 1
     [ -f $USER_MESSAGE ] || error 1
 
-    # Disable conflicting services
-    conflicts "stop"
-
     # Bring up and set affinity on PNA interfaces
     for iface in ${PNA_IFACE/,/ } ; do
+        # Check the device state first
+        state=$(cat /sys/class/net/$iface/operstate > /dev/null 2>&1)
+        if [ $? -eq 1 ] ; then
+            echo "There does not appear to be a $iface device"
+            echo "Aborting"
+            exit 1
+        fi
+        if [[ "$state" != "down" ]] ; then
+            echo "$iface is NOT in the 'down' state."
+            echo "Are you sure you want to intercept $iface traffic?"
+            read -p "yes/[no]? " yn
+            if [[ "$yn" != "yes" ]] ; then
+                echo "Aborting (must type 'yes' to continue)"
+                exit 1
+            fi
+        fi
         $IFCONFIG $iface up promisc
         affinitize $iface
     done
+
+    # Disable conflicting services
+    conflicts "stop"
 
     # Set up parameters for kernel modules
     PNA_PREFIX=$(ip2hex "$PNA_PREFIX")
