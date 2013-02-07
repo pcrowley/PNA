@@ -396,8 +396,13 @@ int __init pna_init(void)
         if (NULL != next) {
             *next = '\0';
         }
-        pna_info("pna: capturing on %s", pna_iface);
         pna_packet_type[i].dev = dev_get_by_name(&init_net, pna_iface);
+        if (pna_packet_type[i].dev == NULL) {
+            pna_err("pna: no device named '%s'", pna_iface);
+            pna_cleanup();
+            return -1;
+        }
+        pna_info("pna: capturing on %s", pna_iface);
         dev_add_pack(&pna_packet_type[i]);
         pna_iface = next + 1;
     }
