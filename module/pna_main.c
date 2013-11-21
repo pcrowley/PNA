@@ -62,6 +62,16 @@ static struct packet_type pna_packet_type[PNA_MAXIF] = {
     { .type = htons(ETH_P_ALL), .func = pna_hook, .dev = NULL, },
 };
 
+/* define a fragment table for reconstruction */
+#define PNA_MAXFRAGS 8
+struct pna_frag {
+    unsigned long fingerprint;
+    unsigned short src_port;
+    unsigned short dst_port;
+};
+static struct pna_frag pna_frag_table[PNA_MAXFRAGS];
+static int pna_frag_next_idx = 0;
+
 /* for performance measurement */
 struct pna_perf {
     __u64 t_jiffies; /* 8 */
@@ -81,6 +91,45 @@ DEFINE_PER_CPU(struct pna_perf, perf_data);
    (typecheck(__u64,a) && typecheck(__u64,b) && ((__s64)(a)-(__s64)(b)>=0))
 #endif
 #define PERF_INTERVAL      10
+
+/* handle IP fragmented packets */
+unsigned long pna_frag_hash(struct iphdr *iphdr) {
+    unsigned long hash = 0;
+    /* note: don't care about byte ordering here since we're hashing */
+    hash ^= hash_32(iphdr->saddr, 32);
+    hash ^= hash_32(iphdr->daddr, 32);
+    hash ^= (hash_32(iphdr->protocol, 16) << 16);
+    hash ^= hash_32(iphdr->id, 16);
+    return hash;
+}
+
+struct pna_frag *pna_get_frag(struct iphdr *iphdr) {
+    struct pna_frag *entry;
+    unsigned long fingerprint = pna_frag_hash(iphdr);
+
+    for (i = 0; i < PNA_MAXFRAGS; i++) {
+        entry = &pna_frag_table[i];
+        if (fingerprint == entry->fingerprint) {
+            return entry;
+        }
+    }
+
+    return NULL;
+}
+
+void pna_set_frag(struct iphdr *iphdr,
+                  unsigned short src_port, unsigned short dst_port) {
+    /* this is in the handler, so it is serial (for now) */
+    struct pna_frag *entry;
+    /* grab the entry to update */
+    entry = &pna_frag_tab[pna_frag_next_idx];
+    /* increment to next index to use */
+    pna_frag_next_idx = (pna_frag_next_idx + 1) % PNA_MAXFRAGS;
+    /* update the entry */
+    entry->fingerprint = pna_frag_hash(iphdr);
+    entry->src_port = src_port;
+    entry->dst_port = dst_port;
+}
 
 /* general non-kernel hash function for double hashing */
 unsigned int pna_hash(unsigned int key, int bits)
@@ -169,7 +218,7 @@ int pna_hook(struct sk_buff *skb, struct net_device *dev,
     struct iphdr *iphdr;
     struct tcphdr *tcphdr;
     struct udphdr *udphdr;
-    int ret, direction;
+    int ret, direction, offset;
     
     /* we don't care about outgoing packets */
     if (skb->pkt_type == PACKET_OUTGOING) {
@@ -192,6 +241,9 @@ int pna_hook(struct sk_buff *skb, struct net_device *dev,
     /* we now have exclusive access, so let's decode the skb */
     ethhdr = eth_hdr(skb);
     key.l3_protocol = ntohs(ethhdr->h_proto);
+
+    /* check if there are fragments */
+    offset = iphdr->frag_off & IP_OFFSET;
     
     switch (key.l3_protocol) {
     case ETH_P_IP:
@@ -205,14 +257,38 @@ int pna_hook(struct sk_buff *skb, struct net_device *dev,
         skb_set_transport_header(skb, ip_hdrlen(skb));
         switch (key.l4_protocol) {
         case IPPROTO_TCP:
+            if (offset != 0) {
+                pr_warn("Unknown IP-fragmented TCP, dropping");
+                return pna_done(skb);
+            }
             tcphdr = tcp_hdr(skb);
             key.local_port = ntohs(tcphdr->source);
             key.remote_port = ntohs(tcphdr->dest);
             break;
         case IPPROTO_UDP:
-            udphdr = udp_hdr(skb);
-            key.local_port = ntohs(udphdr->source);
-            key.remote_port = ntohs(udphdr->dest);
+            /* this is an IP fragmented UDP packet */
+            if (offset != 0) {
+                /* offset is set, get the appropriate entry */
+                entry = pna_get_frag(iphdr);
+                if (!entry) {
+                    pr_warn("Unknown IP-fragmented UDP, dropping");
+                    return pna_done(skb);
+                }
+                src_port = entry->src_port;
+                dst_port = entry->dst_port;
+            }
+            else {
+                /* no offset */
+                udphdr = udp_hdr(skb);
+                src_port = ntohs(udphdr->source);
+                dst_port = ntohs(udphdr->dest);
+                /* there will be fragments, add to table */
+                if (iphdr->frag_off & IP_MF) {
+                    pna_set_frag(ip_hdr, src_port, dst_port);
+                }
+            }
+            key.local_port = src_port;
+            key.remote_port = dst_port;
             break;
         default:
             return pna_done(skb);
