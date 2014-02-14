@@ -16,7 +16,7 @@
 
 /* netlink alerts system connects to userspace listener */
 /* functions: pna_alert_init, pna_alert_cleanup, pna_alert_warn */
- 
+
 #include <linux/module.h>
 #include <net/sock.h>
 #include <linux/netlink.h>
@@ -51,28 +51,30 @@ static void pna_alert_recv(struct sk_buff *skb)
     struct nlmsghdr *nlh;
     struct pna_alert_msg *alert;
 
-    nlh = (struct nlmsghdr *)skb->data;
-    alert = (struct pna_alert_msg *)nlmsg_data(nlh);
+    nlh = (struct nlmsghdr *) skb->data;
+    alert = (struct pna_alert_msg *) nlmsg_data(nlh);
 
     switch (alert->command) {
-        case PNA_ALERT_CMD_REGISTER:
-            /* sanity check */
-            if ( nlh->nlmsg_pid == alert->value ) {
-                /* and we know who to send messages to */
-                pna_alert_pid = alert->value;
-                printk(KERN_INFO "pna alerts registered to pid %d\n", pna_alert_pid);
-            }
-            break;
-        case PNA_ALERT_CMD_UNREGISTER:
-            /* sanity check */
-            if ( pna_alert_pid == alert->value ) {
-                /* unregister the alerts */
-                pna_alert_pid = 0;
-                printk(KERN_INFO "pna alerts unregistered\n");
-            }
-            break;
-        default:
-            printk(KERN_WARNING "pna_alert: invalid command %d\n", alert->command);
+    case PNA_ALERT_CMD_REGISTER:
+	/* sanity check */
+	if (nlh->nlmsg_pid == alert->value) {
+	    /* and we know who to send messages to */
+	    pna_alert_pid = alert->value;
+	    printk(KERN_INFO "pna alerts registered to pid %d\n",
+		   pna_alert_pid);
+	}
+	break;
+    case PNA_ALERT_CMD_UNREGISTER:
+	/* sanity check */
+	if (pna_alert_pid == alert->value) {
+	    /* unregister the alerts */
+	    pna_alert_pid = 0;
+	    printk(KERN_INFO "pna alerts unregistered\n");
+	}
+	break;
+    default:
+	printk(KERN_WARNING "pna_alert: invalid command %d\n",
+	       alert->command);
     }
 }
 
@@ -85,18 +87,18 @@ static int pna_alert_send(struct pna_alert_msg *alert)
 
     /* see if anyone has registered a user-space handler yet */
     if (pna_alert_pid == 0) {
-        return -1;
+	return -1;
     }
 
     /* allocate the message buffer */
     skb = nlmsg_new(PNA_ALERT_MSG_SZ, 0);
     if (!skb) {
-        printk(KERN_WARNING "could not allocate socket buffer\n");
-        return -2;
-    } 
+	printk(KERN_WARNING "could not allocate socket buffer\n");
+	return -2;
+    }
 
     /* set up netlink header */
-    nlh = nlmsg_put(skb, 0, 0, NLMSG_DONE, PNA_ALERT_MSG_SZ, 0);  
+    nlh = nlmsg_put(skb, 0, 0, NLMSG_DONE, PNA_ALERT_MSG_SZ, 0);
     NETLINK_CB(skb).dst_group = 0;
 
     /* copy the data to send */
@@ -105,8 +107,9 @@ static int pna_alert_send(struct pna_alert_msg *alert)
     /* send the message */
     ret = nlmsg_unicast(pna_alert_sock, skb, pna_alert_pid);
     if (ret < 0) {
-        printk(KERN_WARNING "could not send buffer to pid %d\n", pna_alert_pid);
-        return -3;
+	printk(KERN_WARNING "could not send buffer to pid %d\n",
+	       pna_alert_pid);
+	return -3;
     }
 
     return 0;
@@ -115,10 +118,11 @@ static int pna_alert_send(struct pna_alert_msg *alert)
 int pna_alert_init(void)
 {
     pna_alert_sock = netlink_kernel_create(&init_net, NETLINK_PNA, 0,
-            pna_alert_recv, NULL, THIS_MODULE);
+					   pna_alert_recv, NULL,
+					   THIS_MODULE);
     if (!pna_alert_sock) {
-        printk(KERN_ERR "failed to create netlink socket\n");
-        return -1;
+	printk(KERN_ERR "failed to create netlink socket\n");
+	return -1;
     }
 
     return 0;

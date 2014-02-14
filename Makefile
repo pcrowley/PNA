@@ -32,6 +32,10 @@ stop:
 status:
 	sudo ./service/pna status
 
+indent:
+	find . -name '*.[ch]' | xargs indent -kr
+	find . -name '*~' -delete
+
 clean:
 	$(MAKE) -C module clean
 	$(MAKE) -C user clean

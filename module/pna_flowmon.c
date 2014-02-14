@@ -45,7 +45,8 @@ static void flowtab_clean(struct flowtab_info *info);
 
 /* kernel functions for flow monitoring */
 static struct flowtab_info *flowtab_get(struct timeval *timeval);
-static int flowkey_match(struct pna_flowkey *key_a, struct pna_flowkey *key_b);
+static int flowkey_match(struct pna_flowkey *key_a,
+			 struct pna_flowkey *key_b);
 int flowmon_init(void);
 void flowmon_cleanup(void);
 
@@ -56,10 +57,10 @@ struct proc_dir_entry *proc_parent;
 
 /* file operations for accessing the flowtab */
 static const struct file_operations flowtab_fops = {
-    .owner      = THIS_MODULE,
-    .open       = flowtab_open,
-    .release    = flowtab_release,
-    .mmap       = flowtab_mmap,
+    .owner = THIS_MODULE,
+    .open = flowtab_open,
+    .release = flowtab_release,
+    .mmap = flowtab_mmap,
 };
 
 /* simple null key */
@@ -95,9 +96,9 @@ static int flowtab_open(struct inode *inode, struct file *filep)
     /* make sure the table was written and not in the last LAG_TIME */
     do_gettimeofday(&now);
     first_sec = info->first_sec + PNA_LAG_TIME;
-    if (!info->table_dirty || first_sec >= now.tv_sec ) {
-        module_put(THIS_MODULE);
-        return -EACCES;
+    if (!info->table_dirty || first_sec >= now.tv_sec) {
+	module_put(THIS_MODULE);
+	return -EACCES;
     }
 
     /* give pointer to filep struct for mmap */
@@ -121,8 +122,8 @@ static int flowtab_release(struct inode *inode, struct file *filep)
 
     /* dump a little info about that table */
     if (pna_perfmon) {
-        pr_info("pna table%d: flows_inserted:%u ; flows_dropped:%u\n",
-                i, info->nflows, info->nflows_missed);
+	pr_info("pna table%d: flows_inserted:%u ; flows_dropped:%u\n",
+		i, info->nflows, info->nflows_missed);
     }
 
     /* zero out the table */
@@ -130,10 +131,10 @@ static int flowtab_release(struct inode *inode, struct file *filep)
 
 #if 0
     for (i = 0; i < PNA_TABLE_TRIES; i++) {
-        printk("tries\t%d\t%u\n", i, info->probes[i]);
-        info->probes[i] = 0;
+	printk("tries\t%d\t%u\n", i, info->probes[i]);
+	info->probes[i] = 0;
     }
-#endif /* 0 */
+#endif				/* 0 */
 
     /* this table is safe to use again */
     flowtab_clean(info);
@@ -151,8 +152,8 @@ static int flowtab_mmap(struct file *filep, struct vm_area_struct *vma)
     struct flowtab_info *info = filep->private_data;
 
     if (remap_vmalloc_range(vma, info->table_base, 0)) {
-        pr_warning("remap_vmalloc_range failed\n");
-        return -EAGAIN;
+	pr_warning("remap_vmalloc_range failed\n");
+	return -EAGAIN;
     }
 
     return 0;
@@ -180,43 +181,46 @@ static struct flowtab_info *flowtab_get(struct timeval *timeval)
     /* check if table is locked */
     i = 0;
     while (mutex_is_locked(&info->read_mutex) && i < pna_tables) {
-        /* if it is locked try the next table ... */
-        get_cpu_var(flowtab_idx) = (get_cpu_var(flowtab_idx) + 1) % pna_tables;
-        put_cpu_var(flowtab_idx);
-        info = &flowtab_info[get_cpu_var(flowtab_idx)];
-        /* don't try a table more than once */
-        i++;
+	/* if it is locked try the next table ... */
+	get_cpu_var(flowtab_idx) =
+	    (get_cpu_var(flowtab_idx) + 1) % pna_tables;
+	put_cpu_var(flowtab_idx);
+	info = &flowtab_info[get_cpu_var(flowtab_idx)];
+	/* don't try a table more than once */
+	i++;
     }
     if (i == pna_tables) {
-        pr_warning("pna: all tables are locked\n");
-        return NULL;
+	pr_warning("pna: all tables are locked\n");
+	return NULL;
     }
 
     /* make sure this table is marked as dirty */
     // XXX: table_dirty should probably be atomic_t
     if (info->table_dirty == 0) {
-        info->first_sec = timeval->tv_sec;
-        info->table_dirty = 1;
-        info->smp_id = smp_processor_id();
+	info->first_sec = timeval->tv_sec;
+	info->table_dirty = 1;
+	info->smp_id = smp_processor_id();
     }
 
     return info;
 }
 
 /* check if flow keys match */
-static inline int flowkey_match(struct pna_flowkey *key_a, struct pna_flowkey *key_b)
+static inline int flowkey_match(struct pna_flowkey *key_a,
+				struct pna_flowkey *key_b)
 {
     /* exploit the fact that keys are 16 bytes = 128 bits wide */
     u64 a_hi, a_lo, b_hi, b_lo;
-    a_hi = *(u64 *)key_a;
-    a_lo = *((u64 *)key_a+1);
-    b_hi = *(u64 *)key_b;
-    b_lo = *((u64 *)key_b+1);
+    a_hi = *(u64 *) key_a;
+    a_lo = *((u64 *) key_a + 1);
+    b_hi = *(u64 *) key_b;
+    b_lo = *((u64 *) key_b + 1);
     return (a_hi == b_hi) && (a_lo == b_lo);
 }
 
 /* Insert/Update this flow */
-int flowmon_hook(struct pna_flowkey *key, int direction, struct sk_buff *skb)
+int flowmon_hook(struct pna_flowkey *key, int direction,
+		 struct sk_buff *skb)
 {
     struct flow_entry *flow;
     struct timeval timeval;
@@ -227,7 +231,7 @@ int flowmon_hook(struct pna_flowkey *key, int direction, struct sk_buff *skb)
     skb_get_timestamp(skb, &timeval);
 
     if (NULL == (info = flowtab_get(&timeval))) {
-        return -1;
+	return -1;
     }
 
     /* hash */
@@ -236,37 +240,37 @@ int flowmon_hook(struct pna_flowkey *key, int direction, struct sk_buff *skb)
     hash_0 = hash_32(hash, PNA_FLOW_BITS);
 
     /* loop through table until we find right entry */
-    for ( i = 0; i < PNA_TABLE_TRIES; i++ ) {
-        /* quadratic probe for next entry */
-        hash = (hash_0 + ((i+i*i) >> 1)) & (PNA_FLOW_ENTRIES-1);
+    for (i = 0; i < PNA_TABLE_TRIES; i++) {
+	/* quadratic probe for next entry */
+	hash = (hash_0 + ((i + i * i) >> 1)) & (PNA_FLOW_ENTRIES - 1);
 
-        /* increment the number of probe tries for the table */
-        info->probes[i]++;
+	/* increment the number of probe tries for the table */
+	info->probes[i]++;
 
-        /* strt testing the waters */
-        flow = &(info->flowtab[hash]);
+	/* strt testing the waters */
+	flow = &(info->flowtab[hash]);
 
-        /* check for match -- update flow entry */
-        if (flowkey_match(&flow->key, key)) {
-            flow->data.bytes[direction] += skb->len + ETH_OVERHEAD;
-            flow->data.packets[direction] += 1;
-            return 0;
-        }
+	/* check for match -- update flow entry */
+	if (flowkey_match(&flow->key, key)) {
+	    flow->data.bytes[direction] += skb->len + ETH_OVERHEAD;
+	    flow->data.packets[direction] += 1;
+	    return 0;
+	}
 
-        /* check for free spot -- insert flow entry */
-        if (flowkey_match(&flow->key, &null_key)) {
-            /* copy over the flow key for this entry */
-            memcpy(&flow->key, key, sizeof(*key));
+	/* check for free spot -- insert flow entry */
+	if (flowkey_match(&flow->key, &null_key)) {
+	    /* copy over the flow key for this entry */
+	    memcpy(&flow->key, key, sizeof(*key));
 
-            /* port specific information */
-            flow->data.bytes[direction] += skb->len + ETH_OVERHEAD;
-            flow->data.packets[direction]++;
-            flow->data.first_tstamp = timeval.tv_sec;
-            flow->data.first_dir = direction;
+	    /* port specific information */
+	    flow->data.bytes[direction] += skb->len + ETH_OVERHEAD;
+	    flow->data.packets[direction]++;
+	    flow->data.first_tstamp = timeval.tv_sec;
+	    flow->data.first_dir = direction;
 
-            info->nflows++;
-            return 1;
-        }
+	    info->nflows++;
+	    return 1;
+	}
     }
 
     info->nflows_missed++;
@@ -286,44 +290,44 @@ int flowmon_init(void)
 
     /* make memory for table meta-information */
     flowtab_info = (struct flowtab_info *)
-                    vmalloc(pna_tables * sizeof(struct flowtab_info));
+	vmalloc(pna_tables * sizeof(struct flowtab_info));
     if (!flowtab_info) {
-        pr_err("insufficient memory for flowtab_info\n");
-        flowmon_cleanup();
-        return -ENOMEM;
+	pr_err("insufficient memory for flowtab_info\n");
+	flowmon_cleanup();
+	return -ENOMEM;
     }
     memset(flowtab_info, 0, pna_tables * sizeof(struct flowtab_info));
 
     /* configure each table for use */
     for (i = 0; i < pna_tables; i++) {
-        info = &flowtab_info[i];
-        info->table_base = vmalloc_user(PNA_SZ_FLOW_ENTRIES);
-        if (!info->table_base) {
-            pr_err("insufficient memory for %d/%d tables (%lu bytes)\n",
-                    i, pna_tables, (pna_tables * PNA_SZ_FLOW_ENTRIES));
-            flowmon_cleanup();
-            return -ENOMEM;
-        }
-        /* set up table pointers */
-        info->flowtab = info->table_base;
-        flowtab_clean(info);
+	info = &flowtab_info[i];
+	info->table_base = vmalloc_user(PNA_SZ_FLOW_ENTRIES);
+	if (!info->table_base) {
+	    pr_err("insufficient memory for %d/%d tables (%lu bytes)\n",
+		   i, pna_tables, (pna_tables * PNA_SZ_FLOW_ENTRIES));
+	    flowmon_cleanup();
+	    return -ENOMEM;
+	}
+	/* set up table pointers */
+	info->flowtab = info->table_base;
+	flowtab_clean(info);
 
-        /* initialize the read_mutec */
-        mutex_init(&info->read_mutex);
+	/* initialize the read_mutec */
+	mutex_init(&info->read_mutex);
 
-        snprintf(table_str, PNA_MAX_STR, PNA_PROCFILE, i);
-        strncpy(info->table_name, table_str, PNA_MAX_STR);
-        proc_node = create_proc_entry(info->table_name, 0644, proc_parent);
-        if (!proc_node) {
-            pr_err("failed to make proc entry: %s\n", table_str);
-            flowmon_cleanup();
-            return -ENOMEM;
-        }
-        proc_node->proc_fops = &flowtab_fops;
-        proc_node->mode = S_IFREG | S_IRUGO | S_IWUSR | S_IWGRP;
-        proc_node->uid = 0;
-        proc_node->gid = 0;
-        proc_node->size = PNA_SZ_FLOW_ENTRIES;
+	snprintf(table_str, PNA_MAX_STR, PNA_PROCFILE, i);
+	strncpy(info->table_name, table_str, PNA_MAX_STR);
+	proc_node = create_proc_entry(info->table_name, 0644, proc_parent);
+	if (!proc_node) {
+	    pr_err("failed to make proc entry: %s\n", table_str);
+	    flowmon_cleanup();
+	    return -ENOMEM;
+	}
+	proc_node->proc_fops = &flowtab_fops;
+	proc_node->mode = S_IFREG | S_IRUGO | S_IWUSR | S_IWGRP;
+	proc_node->uid = 0;
+	proc_node->gid = 0;
+	proc_node->size = PNA_SZ_FLOW_ENTRIES;
     }
 
     /* get packet arrival timestamps */
@@ -341,12 +345,12 @@ void flowmon_cleanup(void)
 
     /* destroy each table file we created */
     for (i = pna_tables - 1; i >= 0; i--) {
-        if (flowtab_info[i].table_name[0] != '\0') {
-            remove_proc_entry(flowtab_info[i].table_name, proc_parent);
-        }
-        if (flowtab_info[i].table_base != NULL) {
-            vfree(flowtab_info[i].table_base);
-        }
+	if (flowtab_info[i].table_name[0] != '\0') {
+	    remove_proc_entry(flowtab_info[i].table_name, proc_parent);
+	}
+	if (flowtab_info[i].table_base != NULL) {
+	    vfree(flowtab_info[i].table_base);
+	}
     }
 
     /* free up table meta-information struct */

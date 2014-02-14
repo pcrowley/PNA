@@ -41,15 +41,15 @@ char *pna_alert_types[] = {
 };
 char *pna_alert_protocols[] = { "none", "tcp", "udp", "both", };
 char *pna_alert_directions[] = { "none", "in", "out", "bi", };
-#endif /* __KERNEL__ */
+#endif				/* __KERNEL__ */
 
 /* various constants */
-#define PNA_DIRECTIONS 2 /* out and in */
-# define PNA_DIR_OUTBOUND 0
-# define PNA_DIR_INBOUND  1
-#define PNA_PROTOCOLS 2 /* tcp and udp */
-# define PNA_PROTO_TCP 0
-# define PNA_PROTO_UDP 1
+#define PNA_DIRECTIONS 2	/* out and in */
+#define PNA_DIR_OUTBOUND 0
+#define PNA_DIR_INBOUND  1
+#define PNA_PROTOCOLS 2		/* tcp and udp */
+#define PNA_PROTO_TCP 0
+#define PNA_PROTO_UDP 1
 
 /* log file format structures */
 struct pna_log_hdr {
@@ -59,19 +59,19 @@ struct pna_log_hdr {
 };
 
 struct pna_log_entry {
-    unsigned int local_ip;                  /* 4 */
-    unsigned int remote_ip;                 /* 4 */
-    unsigned short local_port;              /* 2 */
-    unsigned short remote_port;             /* 2 */
-    unsigned short local_domain;             /* 2 */
-    unsigned short remote_domain;            /* 2 */
-    unsigned int packets[PNA_DIRECTIONS];   /* 8 */
-    unsigned int bytes[PNA_DIRECTIONS];     /* 8 */
-    unsigned int first_tstamp;              /* 4 */
-	unsigned char l4_protocol;              /* 1 */
-    unsigned char first_dir;                /* 1 */
-    char pad[2];                            /* 2 */
-};                                          /* = 40 */
+    unsigned int local_ip;	/* 4 */
+    unsigned int remote_ip;	/* 4 */
+    unsigned short local_port;	/* 2 */
+    unsigned short remote_port;	/* 2 */
+    unsigned short local_domain;	/* 2 */
+    unsigned short remote_domain;	/* 2 */
+    unsigned int packets[PNA_DIRECTIONS];	/* 8 */
+    unsigned int bytes[PNA_DIRECTIONS];	/* 8 */
+    unsigned int first_tstamp;	/* 4 */
+    unsigned char l4_protocol;	/* 1 */
+    unsigned char first_dir;	/* 1 */
+    char pad[2];		/* 2 */
+};				/* = 40 */
 
 /* XXX: bad practice, but it gets the job done */
 /* could be trouble if Linux decides to use more netlink links */
@@ -82,7 +82,7 @@ struct pna_log_entry {
 #define PNA_ALERT_CMD_UNREGISTER 0x0002
 #define PNA_ALERT_CMD_WARN       0x0003
 
-/* PNA alert warning reasons OR'd together: (type | proto | dir) */ 
+/* PNA alert warning reasons OR'd together: (type | proto | dir) */
 #define PNA_ALERT_TYPE_CONNECTIONS 0x0001
 #define PNA_ALERT_TYPE_SESSIONS    0x0002
 #define PNA_ALERT_TYPE_PORTS       0x0003
@@ -146,8 +146,8 @@ struct flow_entry {
 
 /* Account for Ethernet overheads (stripped by sk_buff) */
 #include <linux/if_ether.h>
-#define ETH_INTERFRAME_GAP 12   /* 9.6ms @ 1Gbps */
-#define ETH_PREAMBLE       8    /* preamble + start-of-frame delimiter */
+#define ETH_INTERFRAME_GAP 12	/* 9.6ms @ 1Gbps */
+#define ETH_PREAMBLE       8	/* preamble + start-of-frame delimiter */
 #define ETH_OVERHEAD       (ETH_INTERFRAME_GAP + ETH_PREAMBLE + ETH_HLEN + ETH_FCS_LEN)
 
 /* kernel configuration settings */
@@ -170,7 +170,7 @@ extern bool pna_debug;
 extern bool pna_perfmon;
 extern bool pna_flowmon;
 extern bool pna_rtmon;
-#endif /* __KERNEL__ */
+#endif				/* __KERNEL__ */
 
 /* table meta-information */
 #ifdef __KERNEL__
@@ -183,43 +183,44 @@ struct flowtab_info {
     struct flow_entry *flowtab;
 
     struct mutex read_mutex;
-    int  table_dirty;
+    int table_dirty;
     time_t first_sec;
-    int  smp_id;
+    int smp_id;
     unsigned int nflows;
     unsigned int nflows_missed;
     unsigned int probes[PNA_TABLE_TRIES];
 };
-#endif /* __KERNEL__ */
+#endif				/* __KERNEL__ */
 
 /* some prototypes */
 #ifdef __KERNEL__
 unsigned int pna_hash(unsigned int key, int bits);
 
-int flowmon_hook(struct pna_flowkey *key, int direction, struct sk_buff *skb);
+int flowmon_hook(struct pna_flowkey *key, int direction,
+		 struct sk_buff *skb);
 int flowmon_init(void);
 void flowmon_cleanup(void);
 
 int rtmon_init(void);
 int rtmon_hook(struct pna_flowkey *key, int direction, struct sk_buff *skb,
-               unsigned long data);
+	       unsigned long data);
 void rtmon_release(void);
 
 int conmon_init(void);
-int conmon_hook(struct pna_flowkey *key, int direction, struct sk_buff *skb,
-               unsigned long *data);
+int conmon_hook(struct pna_flowkey *key, int direction,
+		struct sk_buff *skb, unsigned long *data);
 void conmon_clean(void);
 void conmon_release(void);
 
 int lipmon_init(void);
-int lipmon_hook(struct pna_flowkey *key, int direction, struct sk_buff *skb,
-               unsigned long *data);
+int lipmon_hook(struct pna_flowkey *key, int direction,
+		struct sk_buff *skb, unsigned long *data);
 void lipmon_clean(void);
 void lipmon_release(void);
 
 int pna_alert_warn(int reason, int value, struct timeval *time);
 int pna_alert_init(void);
 void pna_alert_cleanup(void);
-#endif /* __KERNEL__ */
+#endif				/* __KERNEL__ */
 
-#endif /* __PNA_H */
+#endif				/* __PNA_H */

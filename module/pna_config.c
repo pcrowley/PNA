@@ -51,7 +51,8 @@ module_param(pna_tables, uint, S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(pna_tables, "Number of <src,dst,port> tables to use");
 
 module_param(pna_connections, uint, S_IRUGO | S_IWUSR);
-MODULE_PARM_DESC(pna_connections, "Number of connections to trigger alert");
+MODULE_PARM_DESC(pna_connections,
+		 "Number of connections to trigger alert");
 module_param(pna_sessions, uint, S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(pna_sessions, "Number of sessions to trigger alert");
 module_param(pna_tcp_ports, uint, S_IRUGO | S_IWUSR);
@@ -59,13 +60,15 @@ MODULE_PARM_DESC(pna_tcp_ports, "Number of TCP ports to trigger alert");
 module_param(pna_tcp_bytes, uint, S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(pna_tcp_bytes, "Number of TCP bytes to trigger alert");
 module_param(pna_tcp_packets, uint, S_IRUGO | S_IWUSR);
-MODULE_PARM_DESC(pna_tcp_packets, "Number of TCP packets to trigger alert");
+MODULE_PARM_DESC(pna_tcp_packets,
+		 "Number of TCP packets to trigger alert");
 module_param(pna_udp_ports, uint, S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(pna_udp_ports, "Number of UDP ports to trigger alert");
 module_param(pna_udp_bytes, uint, S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(pna_udp_bytes, "Number of UDP bytes to trigger alert");
 module_param(pna_udp_packets, uint, S_IRUGO | S_IWUSR);
-MODULE_PARM_DESC(pna_udp_packets, "Number of TCP packets to trigger alert");
+MODULE_PARM_DESC(pna_udp_packets,
+		 "Number of TCP packets to trigger alert");
 module_param(pna_ports, uint, S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(pna_ports, "Number of total ports to trigger alert");
 module_param(pna_bytes, uint, S_IRUGO | S_IWUSR);
@@ -76,8 +79,10 @@ MODULE_PARM_DESC(pna_packets, "Number of total packets to trigger alert");
 module_param(pna_debug, bool, S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(pna_debug, "Enable kernel debug log messages");
 module_param(pna_perfmon, bool, S_IRUGO | S_IWUSR);
-MODULE_PARM_DESC(pna_perfmon, "Enable PNA performance monitoring messages");
+MODULE_PARM_DESC(pna_perfmon,
+		 "Enable PNA performance monitoring messages");
 module_param(pna_flowmon, bool, S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(pna_flowmon, "Enable PNA flow monitoring");
 module_param(pna_rtmon, bool, S_IRUGO | S_IWUSR);
-MODULE_PARM_DESC(pna_rtmon, "Enable PNA real-time monitoring (if pna_flowmon)");
+MODULE_PARM_DESC(pna_rtmon,
+		 "Enable PNA real-time monitoring (if pna_flowmon)");

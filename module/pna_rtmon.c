@@ -32,20 +32,21 @@ static void rtmon_clean(unsigned long data);
  * @release: take-down function for table data and cleanup
  */
 struct pna_rtmon {
-    int (*init)(void);
-    int (*hook)(struct pna_flowkey *, int, struct sk_buff *, unsigned long *);
-    void (*clean)(void);
-    void (*release)(void);
+    int (*init) (void);
+    int (*hook) (struct pna_flowkey *, int, struct sk_buff *,
+		 unsigned long *);
+    void (*clean) (void);
+    void (*release) (void);
 };
 
 /* a NULL .hook signals the end-of-list */
 struct pna_rtmon monitors[] = {
-    { .init = conmon_init, .hook = conmon_hook,
-      .clean = conmon_clean, .release = conmon_release },
-    { .init = lipmon_init, .hook = lipmon_hook,
-      .clean = lipmon_clean, .release = lipmon_release },
+    {.init = conmon_init,.hook = conmon_hook,
+     .clean = conmon_clean,.release = conmon_release},
+    {.init = lipmon_init,.hook = lipmon_hook,
+     .clean = lipmon_clean,.release = lipmon_release},
     /* NULL hook entry is end of list delimited */
-    { .init = NULL, .hook = NULL, .clean = NULL, .release = NULL }
+    {.init = NULL,.hook = NULL,.clean = NULL,.release = NULL}
 };
 
 /* timer for calling clean function */
@@ -57,22 +58,23 @@ static void rtmon_clean(unsigned long data)
     struct pna_rtmon *monitor;
 
     for (monitor = &monitors[0]; monitor->hook != NULL; monitor++) {
-        monitor->clean();
+	monitor->clean();
     }
 
     /* update the timer for the next round */
-    mod_timer(&clean_timer, jiffies + msecs_to_jiffies(RTMON_CLEAN_INTERVAL));
+    mod_timer(&clean_timer,
+	      jiffies + msecs_to_jiffies(RTMON_CLEAN_INTERVAL));
 }
 
 /* hook from main on packet to start real-time monitoring */
 int rtmon_hook(struct pna_flowkey *key, int direction, struct sk_buff *skb,
-               unsigned long data)
+	       unsigned long data)
 {
     int ret;
 
     struct pna_rtmon *monitor;
     for (monitor = &monitors[0]; monitor->hook != NULL; monitor++) {
-        ret = monitor->hook(key, direction, skb, &data);
+	ret = monitor->hook(key, direction, skb, &data);
     }
     return 0;
 }
@@ -84,7 +86,7 @@ int rtmon_init(void)
 
     struct pna_rtmon *monitor;
     for (monitor = &monitors[0]; monitor->hook != NULL; monitor++) {
-        ret += monitor->init();
+	ret += monitor->init();
     }
 
     /* initialize/correct timer */
@@ -105,6 +107,6 @@ void rtmon_release(void)
 
     /* clean up each of the monitors */
     for (monitor = &monitors[0]; monitor->hook != NULL; monitor++) {
-        monitor->release();
+	monitor->release();
     }
 }

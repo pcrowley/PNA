@@ -6,4 +6,4 @@
 /* pointer to the /proc durectiry parent node */
 extern struct proc_dir_entry *proc_parent;
 
-#endif //PNA_MOD_H
+#endif				//PNA_MOD_H

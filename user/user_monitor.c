@@ -38,12 +38,12 @@
 
 /* simple null key */
 static struct pna_flowkey null_key = {
-	.l3_protocol = 0,
-	.l4_protocol = 0,
-	.local_ip = 0,
-	.remote_ip = 0,
-	.local_port = 0,
-	.remote_port = 0,
+    .l3_protocol = 0,
+    .l4_protocol = 0,
+    .local_ip = 0,
+    .remote_ip = 0,
+    .local_port = 0,
+    .remote_port = 0,
 };
 
 
@@ -53,7 +53,7 @@ char *prog_name;
 
 int flowkey_match(struct pna_flowkey *key_a, struct pna_flowkey *key_b)
 {
-	return !memcmp(key_a, key_b, sizeof(*key_a));
+    return !memcmp(key_a, key_b, sizeof(*key_a));
 }
 
 /* flushes a buffer out to the file */
@@ -62,11 +62,11 @@ int buf_flush(int out_fd, char *buffer, int buf_idx)
     int count;
 
     while (buf_idx > 0) {
-        count = write(out_fd, buffer, buf_idx);
-        if (count < 0) {
-            perror("write");
-        }
-        buf_idx -= count;
+	count = write(out_fd, buffer, buf_idx);
+	if (count < 0) {
+	    perror("write");
+	}
+	buf_idx -= count;
     }
 
     return buf_idx;
@@ -79,7 +79,7 @@ void dump_table(void *table_base, char *out_file)
     unsigned int nflows;
     unsigned int start_time;
     uint offset;
-	unsigned int flow_idx;
+    unsigned int flow_idx;
     struct flow_entry *flow;
     struct flow_entry *flow_table;
     struct pna_log_hdr *log_header;
@@ -91,10 +91,10 @@ void dump_table(void *table_base, char *out_file)
     start_time = time(NULL);
 
     /* open up the output file */
-    fd = open(out_file, O_CREAT|O_RDWR);
+    fd = open(out_file, O_CREAT | O_RDWR);
     if (fd < 0) {
-        perror("open out_file");
-        return;
+	perror("open out_file");
+	return;
     }
     fchmod(fd, S_IRUSR | S_IRGRP | S_IROTH);
     lseek(fd, sizeof(struct pna_log_hdr), SEEK_SET);
@@ -102,45 +102,47 @@ void dump_table(void *table_base, char *out_file)
     buf_idx = 0;
     nflows = 0;
 
-	flow_table = (struct flow_entry *)table_base;
+    flow_table = (struct flow_entry *) table_base;
 
     /* now we loop through the tables ... */
-    for (flow_idx = 0 ; flow_idx < PNA_FLOW_ENTRIES; flow_idx++ ) {
-        /* get the first level entry */
-        flow = &flow_table[flow_idx];
+    for (flow_idx = 0; flow_idx < PNA_FLOW_ENTRIES; flow_idx++) {
+	/* get the first level entry */
+	flow = &flow_table[flow_idx];
 
-        /* make sure it is active */
-        if (flowkey_match(&flow->key, &null_key)) {
-            continue;
-        }
+	/* make sure it is active */
+	if (flowkey_match(&flow->key, &null_key)) {
+	    continue;
+	}
 
-		/* set up monitor buffer */
-		log = (struct pna_log_entry *)&buf[buf_idx];
-		buf_idx += sizeof(struct pna_log_entry);
+	/* set up monitor buffer */
+	log = (struct pna_log_entry *) &buf[buf_idx];
+	buf_idx += sizeof(struct pna_log_entry);
 
-		/* copy the flow entry */
-		log->local_ip = flow->key.local_ip;
-		log->remote_ip = flow->key.remote_ip;
-		log->local_port = flow->key.local_port;
-		log->remote_port = flow->key.remote_port;
-                log->local_domain = flow->key.local_domain;
-                log->remote_domain = flow->key.remote_domain;
-		log->packets[PNA_DIR_OUTBOUND] = flow->data.packets[PNA_DIR_OUTBOUND];
-		log->packets[PNA_DIR_INBOUND] = flow->data.packets[PNA_DIR_INBOUND];
-		log->bytes[PNA_DIR_OUTBOUND] = flow->data.bytes[PNA_DIR_OUTBOUND];
-		log->bytes[PNA_DIR_INBOUND] = flow->data.bytes[PNA_DIR_INBOUND];
-		log->first_tstamp = flow->data.first_tstamp;
-		log->l4_protocol = flow->key.l4_protocol;
-		log->first_dir = flow->data.first_dir;
-		log->pad[0] = 0x00;
-		log->pad[1] = 0x00;
-		nflows++;
+	/* copy the flow entry */
+	log->local_ip = flow->key.local_ip;
+	log->remote_ip = flow->key.remote_ip;
+	log->local_port = flow->key.local_port;
+	log->remote_port = flow->key.remote_port;
+	log->local_domain = flow->key.local_domain;
+	log->remote_domain = flow->key.remote_domain;
+	log->packets[PNA_DIR_OUTBOUND] =
+	    flow->data.packets[PNA_DIR_OUTBOUND];
+	log->packets[PNA_DIR_INBOUND] =
+	    flow->data.packets[PNA_DIR_INBOUND];
+	log->bytes[PNA_DIR_OUTBOUND] = flow->data.bytes[PNA_DIR_OUTBOUND];
+	log->bytes[PNA_DIR_INBOUND] = flow->data.bytes[PNA_DIR_INBOUND];
+	log->first_tstamp = flow->data.first_tstamp;
+	log->l4_protocol = flow->key.l4_protocol;
+	log->first_dir = flow->data.first_dir;
+	log->pad[0] = 0x00;
+	log->pad[1] = 0x00;
+	nflows++;
 
-		/* check if we can fit another entry */
-		if (buf_idx + sizeof(struct pna_log_entry) >= BUF_SIZE) {
-			/* flush the buffer */
-			buf_idx = buf_flush(fd, buf, buf_idx);
-		}
+	/* check if we can fit another entry */
+	if (buf_idx + sizeof(struct pna_log_entry) >= BUF_SIZE) {
+	    /* flush the buffer */
+	    buf_idx = buf_flush(fd, buf, buf_idx);
+	}
     }
 
     /* make sure we're flushed */
@@ -148,12 +150,12 @@ void dump_table(void *table_base, char *out_file)
 
     /* display the number of entries we got */
     if (verbose) {
-        printf("%d flows to '%s' ", nflows, out_file);
+	printf("%d flows to '%s' ", nflows, out_file);
     }
 
     /* write out header data */
     lseek(fd, 0, SEEK_SET);
-    log_header = (struct pna_log_hdr *)&buf[buf_idx];
+    log_header = (struct pna_log_hdr *) &buf[buf_idx];
     log_header->start_time = start_time;
     log_header->end_time = time(NULL);
     log_header->size = nflows * sizeof(struct pna_log_entry);
@@ -164,12 +166,13 @@ void dump_table(void *table_base, char *out_file)
 
 void usage(void)
 {
-    printf("usage: %s [-v] [-d <logdir>] [-i <interval] <procfile>\n", prog_name);
+    printf("usage: %s [-v] [-d <logdir>] [-i <interval] <procfile>\n",
+	   prog_name);
     printf("\t-v\tverbose mode (show quantities and time information)\n");
     printf("\t-d <logdir>\tsave logs to <logdir> (default: %s)\n",
-            DEFAULT_LOG_DIR);
+	   DEFAULT_LOG_DIR);
     printf("\t-i <interval>\texecute once per <interval> (default: %d)\n",
-            DEFAULT_INTERVAL);
+	   DEFAULT_INTERVAL);
     printf("\t<procfile>\tfile containing PNA tables to watch\n");
     exit(1);
 }
@@ -194,98 +197,102 @@ int main(int argc, char **argv)
     prog_name = argv[0];
     /* process any arguments */
     while ((opt = getopt(argc, argv, "i:d:v")) != -1) {
-        switch (opt) {
-        case 'd':
-            log_dir = optarg;
-            break;
-        case 'i':
-            interval = atoi(optarg);
-            break;
-        case 'v':
-            verbose = 1;
-            break;
-        case '?':
-        default:
-            usage();
-        }
+	switch (opt) {
+	case 'd':
+	    log_dir = optarg;
+	    break;
+	case 'i':
+	    interval = atoi(optarg);
+	    break;
+	case 'v':
+	    verbose = 1;
+	    break;
+	case '?':
+	default:
+	    usage();
+	}
     }
     argc -= optind;
     argv += optind;
 
     /* get the proc file from command line */
     if (argc != 1) {
-        usage();
+	usage();
     }
     proc_file = argv[0];
 
     /* fetch size of proc file (used for mmap) */
     if (stat(proc_file, &pf_stat) != 0) {
-        perror("stat");
-        return -1;
+	perror("stat");
+	return -1;
     }
     size = pf_stat.st_size;
 
-    snprintf(out_base, MAX_STR, LOG_FILE_FORMAT, log_dir, basename(proc_file));
+    snprintf(out_base, MAX_STR, LOG_FILE_FORMAT, log_dir,
+	     basename(proc_file));
 
     frac = 0;
     while (1) {
-        /* sleep for interval (correct for processing time) */
-        gettimeofday(&stop, NULL);
-        timersub(&stop, &start, &diff);
-        /* show processing time if bigger than 100 microseconds */
-        if (verbose && diff.tv_usec > 100) {
-            printf("processed in %d.%06d seconds (sleeping for %u seconds)\n",
-                    (int)diff.tv_sec, (int)diff.tv_usec,
-                    (unsigned)(interval - diff.tv_sec - frac/USECS_PER_SEC));
-        }
-        fflush(stdout); fflush(stderr);
-        remainder = sleep(interval - diff.tv_sec - frac/USECS_PER_SEC);
-        if (remainder != 0) {
-            continue;
-        }
+	/* sleep for interval (correct for processing time) */
+	gettimeofday(&stop, NULL);
+	timersub(&stop, &start, &diff);
+	/* show processing time if bigger than 100 microseconds */
+	if (verbose && diff.tv_usec > 100) {
+	    printf
+		("processed in %d.%06d seconds (sleeping for %u seconds)\n",
+		 (int) diff.tv_sec, (int) diff.tv_usec,
+		 (unsigned) (interval - diff.tv_sec -
+			     frac / USECS_PER_SEC));
+	}
+	fflush(stdout);
+	fflush(stderr);
+	remainder = sleep(interval - diff.tv_sec - frac / USECS_PER_SEC);
+	if (remainder != 0) {
+	    continue;
+	}
 
-        /* detect accumulating slippage */
-        if ( frac >= USECS_PER_SEC ) {
-            frac -= USECS_PER_SEC;
-        }
-        frac += diff.tv_usec;
+	/* detect accumulating slippage */
+	if (frac >= USECS_PER_SEC) {
+	    frac -= USECS_PER_SEC;
+	}
+	frac += diff.tv_usec;
 
-        /* begin processing */
-        gettimeofday(&start, NULL);
-        /* attempt to proc_open file */
-        fd = open(proc_file, O_RDONLY);
-        if (fd < 0) {
-            if (errno == EACCES) {
-                /* EACCES means the file was not used */
-                /* we can just skip this round */
-                continue;
-            }
-            perror("open proc_file");
-            return -1;
-        }
+	/* begin processing */
+	gettimeofday(&start, NULL);
+	/* attempt to proc_open file */
+	fd = open(proc_file, O_RDONLY);
+	if (fd < 0) {
+	    if (errno == EACCES) {
+		/* EACCES means the file was not used */
+		/* we can just skip this round */
+		continue;
+	    }
+	    perror("open proc_file");
+	    return -1;
+	}
 
-        /* mmap() for access */
-        table_base = mmap(NULL, size, PROT_READ, MAP_SHARED, fd, 0);
-        if (table_base == MAP_FAILED) {
-            perror("mmap");
-            close(fd);
-            continue;
-        }
+	/* mmap() for access */
+	table_base = mmap(NULL, size, PROT_READ, MAP_SHARED, fd, 0);
+	if (table_base == MAP_FAILED) {
+	    perror("mmap");
+	    close(fd);
+	    continue;
+	}
 
-        /* figure out (time based) name of output file */
-        start_tm = localtime((time_t *)&start);
-        strftime(out_file, MAX_STR, out_base, start_tm);
+	/* figure out (time based) name of output file */
+	start_tm = localtime((time_t *) & start);
+	strftime(out_file, MAX_STR, out_base, start_tm);
 
-        /* perform dumping ... */
-        dump_table(table_base, out_file);
+	/* perform dumping ... */
+	dump_table(table_base, out_file);
 
-        /* unmmap() for access */
-        if (munmap(table_base, size) == -1) {
-            perror("munmap");
-        }
+	/* unmmap() for access */
+	if (munmap(table_base, size) == -1) {
+	    perror("munmap");
+	}
 
-        /* close file */
-        close(fd);
+	/* close file */
+	close(fd);
     }
 
     return 0;
