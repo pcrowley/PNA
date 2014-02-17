@@ -33,7 +33,7 @@ status:
 	sudo ./service/pna status
 
 indent:
-	find . -name '*.[ch]' | xargs indent -kr
+	find . -name '*.[ch]' | xargs uncrustify -c linux.cfg --no-backup --replace
 	find . -name '*~' -delete
 
 clean:

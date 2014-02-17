@@ -1,10 +1,10 @@
 /**
  * Copyright 2011 Washington University in St Louis
- * 
+ *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
- * 
+ *
  *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
@@ -27,51 +27,51 @@
 #define PNA_LAG_TIME 2
 
 /* time interval to call real-time monitor "clean" function (milliseconds) */
-#define RTMON_CLEAN_INTERVAL (10*MSEC_PER_SEC)
+#define RTMON_CLEAN_INTERVAL (10 * MSEC_PER_SEC)
 
 /* shared kernel/user space data for alert system */
 #ifndef __KERNEL__
 char *pna_alert_types[] = {
-    "none",
-    "connections",
-    "sessions",
-    "ports",
-    "bytes",
-    "packets",
+	"none",
+	"connections",
+	"sessions",
+	"ports",
+	"bytes",
+	"packets",
 };
 char *pna_alert_protocols[] = { "none", "tcp", "udp", "both", };
 char *pna_alert_directions[] = { "none", "in", "out", "bi", };
-#endif				/* __KERNEL__ */
+#endif                          /* __KERNEL__ */
 
 /* various constants */
-#define PNA_DIRECTIONS 2	/* out and in */
+#define PNA_DIRECTIONS 2        /* out and in */
 #define PNA_DIR_OUTBOUND 0
 #define PNA_DIR_INBOUND  1
-#define PNA_PROTOCOLS 2		/* tcp and udp */
+#define PNA_PROTOCOLS 2         /* tcp and udp */
 #define PNA_PROTO_TCP 0
 #define PNA_PROTO_UDP 1
 
 /* log file format structures */
 struct pna_log_hdr {
-    unsigned int start_time;
-    unsigned int end_time;
-    unsigned int size;
+	unsigned int start_time;
+	unsigned int end_time;
+	unsigned int size;
 };
 
 struct pna_log_entry {
-    unsigned int local_ip;	/* 4 */
-    unsigned int remote_ip;	/* 4 */
-    unsigned short local_port;	/* 2 */
-    unsigned short remote_port;	/* 2 */
-    unsigned short local_domain;	/* 2 */
-    unsigned short remote_domain;	/* 2 */
-    unsigned int packets[PNA_DIRECTIONS];	/* 8 */
-    unsigned int bytes[PNA_DIRECTIONS];	/* 8 */
-    unsigned int first_tstamp;	/* 4 */
-    unsigned char l4_protocol;	/* 1 */
-    unsigned char first_dir;	/* 1 */
-    char pad[2];		/* 2 */
-};				/* = 40 */
+	unsigned int local_ip;                  /* 4 */
+	unsigned int remote_ip;                 /* 4 */
+	unsigned short local_port;              /* 2 */
+	unsigned short remote_port;             /* 2 */
+	unsigned short local_domain;            /* 2 */
+	unsigned short remote_domain;           /* 2 */
+	unsigned int packets[PNA_DIRECTIONS];   /* 8 */
+	unsigned int bytes[PNA_DIRECTIONS];     /* 8 */
+	unsigned int first_tstamp;              /* 4 */
+	unsigned char l4_protocol;              /* 1 */
+	unsigned char first_dir;                /* 1 */
+	char pad[2];                            /* 2 */
+};                                              /* = 40 */
 
 /* XXX: bad practice, but it gets the job done */
 /* could be trouble if Linux decides to use more netlink links */
@@ -104,10 +104,10 @@ struct pna_log_entry {
 #define PNA_ALERT_DIR_SHIFT        12
 
 struct pna_alert_msg {
-    short command;
-    short reason;
-    unsigned int value;
-    struct timeval timeval;
+	short command;
+	short reason;
+	unsigned int value;
+	struct timeval timeval;
 };
 #define PNA_ALERT_MSG_SZ (sizeof(struct pna_alert_msg))
 
@@ -117,28 +117,28 @@ struct pna_alert_msg {
 
 /* definition of a flow for PNA */
 struct pna_flowkey {
-    unsigned short l3_protocol;
-    unsigned char l4_protocol;
-    unsigned int local_ip;
-    unsigned int remote_ip;
-    unsigned short local_port;
-    unsigned short remote_port;
-    unsigned short local_domain;
-    unsigned short remote_domain;
+	unsigned short l3_protocol;
+	unsigned char l4_protocol;
+	unsigned int local_ip;
+	unsigned int remote_ip;
+	unsigned short local_port;
+	unsigned short remote_port;
+	unsigned short local_domain;
+	unsigned short remote_domain;
 };
 
 /* flow data we're interested in off-line */
 struct pna_flow_data {
-    unsigned int bytes[PNA_DIRECTIONS];
-    unsigned int packets[PNA_DIRECTIONS];
-    unsigned int timestamp;
-    unsigned int first_tstamp;
-    unsigned int first_dir;
+	unsigned int bytes[PNA_DIRECTIONS];
+	unsigned int packets[PNA_DIRECTIONS];
+	unsigned int timestamp;
+	unsigned int first_tstamp;
+	unsigned int first_dir;
 };
 
 struct flow_entry {
-    struct pna_flowkey key;
-    struct pna_flow_data data;
+	struct pna_flowkey key;
+	struct pna_flow_data data;
 };
 #define PNA_SZ_FLOW_ENTRIES (PNA_FLOW_ENTRIES * sizeof(struct flow_entry))
 
@@ -146,8 +146,8 @@ struct flow_entry {
 
 /* Account for Ethernet overheads (stripped by sk_buff) */
 #include <linux/if_ether.h>
-#define ETH_INTERFRAME_GAP 12	/* 9.6ms @ 1Gbps */
-#define ETH_PREAMBLE       8	/* preamble + start-of-frame delimiter */
+#define ETH_INTERFRAME_GAP 12   /* 9.6ms @ 1Gbps */
+#define ETH_PREAMBLE       8    /* preamble + start-of-frame delimiter */
 #define ETH_OVERHEAD       (ETH_INTERFRAME_GAP + ETH_PREAMBLE + ETH_HLEN + ETH_FCS_LEN)
 
 /* kernel configuration settings */
@@ -170,7 +170,7 @@ extern bool pna_debug;
 extern bool pna_perfmon;
 extern bool pna_flowmon;
 extern bool pna_rtmon;
-#endif				/* __KERNEL__ */
+#endif                          /* __KERNEL__ */
 
 /* table meta-information */
 #ifdef __KERNEL__
@@ -178,19 +178,19 @@ extern bool pna_rtmon;
 #define PNA_TABLE_TRIES 32
 
 struct flowtab_info {
-    void *table_base;
-    char table_name[PNA_MAX_STR];
-    struct flow_entry *flowtab;
+	void *table_base;
+	char table_name[PNA_MAX_STR];
+	struct flow_entry *flowtab;
 
-    struct mutex read_mutex;
-    int table_dirty;
-    time_t first_sec;
-    int smp_id;
-    unsigned int nflows;
-    unsigned int nflows_missed;
-    unsigned int probes[PNA_TABLE_TRIES];
+	struct mutex read_mutex;
+	int table_dirty;
+	time_t first_sec;
+	int smp_id;
+	unsigned int nflows;
+	unsigned int nflows_missed;
+	unsigned int probes[PNA_TABLE_TRIES];
 };
-#endif				/* __KERNEL__ */
+#endif                          /* __KERNEL__ */
 
 /* some prototypes */
 #ifdef __KERNEL__
@@ -221,6 +221,6 @@ void lipmon_release(void);
 int pna_alert_warn(int reason, int value, struct timeval *time);
 int pna_alert_init(void);
 void pna_alert_cleanup(void);
-#endif				/* __KERNEL__ */
+#endif                          /* __KERNEL__ */
 
-#endif				/* __PNA_H */
+#endif                          /* __PNA_H */
