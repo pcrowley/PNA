@@ -25,7 +25,7 @@ extern struct proc_dir_entry *proc_parent;
 /* locally used structs */
 struct pna_dtrie_entry {
 	int isprefix;
-	unsigned int domain_id;
+	unsigned short domain_id;
 	struct pna_dtrie_entry *children[2];
 };
 
@@ -39,7 +39,7 @@ struct pna_dtrie_entry *pna_dtrie_entry_alloc()
 
 	if (!entry)
 		return NULL;
-	entry->domain_id = 0xFFFFFFFF;
+	entry->domain_id = MAX_DOMAIN;
 	entry->isprefix = 0;
 	memset(entry->children, 0, 2 * sizeof(struct pna_domain_entry *));
 	return entry;
@@ -52,7 +52,7 @@ unsigned int pna_dtrie_lookup(unsigned int ip)
 	unsigned int cur_bit, cur_bit_pos;
 	struct pna_dtrie_entry *next_entry;
 	struct pna_dtrie_entry *entry = pna_dtrie_head;
-	unsigned int curdomain = 0xFFFFFFFF;
+	unsigned int curdomain = MAX_DOMAIN;
 
 	//assume network byte order
 	cur_bit_pos = 0;

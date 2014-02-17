@@ -14,6 +14,7 @@
 
 MODULE := module/pna.ko
 USER := user/user_monitor user/user_alerts
+SERVICE := ./pna-service
 
 all: $(MODULE) $(USER)
 
@@ -24,13 +25,13 @@ $(USER):
 	$(MAKE) -C user/
 
 start: $(MODULE) $(USER)
-	sudo ./service/pna start "$(PARMS)"
+	sudo $(SERVICE) start "$(PARMS)"
 
 stop:
-	sudo ./service/pna stop
+	sudo $(SERVICE) stop
 
 status:
-	sudo ./service/pna status
+	sudo $(SERVICE) status
 
 indent:
 	find . -name '*.[ch]' | xargs uncrustify -c linux.cfg --no-backup --replace

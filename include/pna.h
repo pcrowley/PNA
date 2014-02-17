@@ -51,6 +51,8 @@ char *pna_alert_directions[] = { "none", "in", "out", "bi", };
 #define PNA_PROTO_TCP 0
 #define PNA_PROTO_UDP 1
 
+#define MAX_DOMAIN 0xFFFF
+
 /* log file format structures */
 struct pna_log_hdr {
 	unsigned int start_time;

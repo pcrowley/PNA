@@ -17,27 +17,31 @@
 # # # # # # # # # # # # # # # # # # # # # # # # # #
 SERVICE=pna
 
-SCRIPT_DIR=$(dirname $(readlink -f $0))
+export PNA_DIR=$(dirname $(readlink -f $0))
 
 # Fetch the configuration
-if [ -e $SCRIPT_DIR/config ] ; then
-    source $SCRIPT_DIR/config
+CONFIG_DIR="$PNA_DIR/config"
+
+MONITOR_FILE="${CONFIG_DIR}/monitor"
+NETWORKS_FILE="${CONFIG_DIR}/networks"
+
+if [ -e $MONITOR_FILE ] ; then
+    source $MONITOR_FILE
 else
-    echo "Missing configuration file ($SCRIPT_DIR/config)" >&2
+    echo "Missing monitoring configuration file ($MONITOR_FILE)" >&2
     exit 1
 fi
 
 PNA_MODULE="${PNA_BASE}/module/pna.ko"      # Name of kernel module
 PNA_MONITOR="${PNA_BASE}/user/user_monitor" # Name of logging program
 PNA_ALERTS="${PNA_BASE}/user/user_alerts"   # Name of alerts program
+DOMAIN_TOOL="${PNA_BASE}/user/domain_tool"
 
 # Program Locations
 IFCONFIG="/sbin/ifconfig"
 INSMOD="/sbin/insmod"
 RMMOD="/sbin/rmmod -w"
 LSMOD="/sbin/lsmod"
-DOMAIN_TOOL="${PNA_BASE}/user/domain_tool"
-DOMAIN_FILE="${PNA_BASE}/service/domains"
 
 ip2hex () {
     IP=$1
@@ -55,10 +59,6 @@ start () {
     if [ ! -z "$PARMS" ] ; then
         echo "...with $PARMS"
     fi
-
-    # Turn prefix and mask to hex values
-    PNA_PREFIX=$(ip2hex "$PNA_PREFIX")
-    PNA_MASK=$(ip2hex "$PNA_MASK")
 
     # Make sure PNA interface(s) are up
     echo
@@ -83,11 +83,9 @@ start () {
 
     # load the module
     ARGS="$PARMS pna_iface=\"$PNA_IFACE\""
-    #ARGS="$ARGS pna_prefix=$PNA_PREFIX"
-    #ARGS="$ARGS pna_mask=$PNA_MASK"
     ${INSMOD} ${PNA_MODULE} $ARGS
     RETVAL=$?
-    $DOMAIN_TOOL -f $DOMAIN_FILE
+    $DOMAIN_TOOL -f $NETWORKS_FILE
 
     # log the current interrupt counts
     date +%s.%N >> irq_count.start

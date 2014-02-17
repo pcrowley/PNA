@@ -151,49 +151,60 @@ unsigned int pna_hash(unsigned int key, int bits)
 	return hash;
 }
 
+void pna_session_swap(struct pna_flowkey *key)
+{
+    unsigned int temp;
+
+    temp = key->local_ip;
+    key->local_ip = key->remote_ip;
+    key->remote_ip = temp;
+
+    temp = key->local_port;
+    key->local_port = key->remote_port;
+    key->remote_port = temp;
+
+    temp = key->local_domain;
+    key->local_domain = key->remote_domain;
+    key->remote_domain = temp;
+}
+
 /**
  * Receive Packet Hook (and helpers)
  */
 /* make sure the local and remote values are correct in the key */
 static int pna_localize(struct pna_flowkey *key, int *direction)
 {
-	unsigned int temp;
-
-	key->local_domain = pna_dtrie_lookup((key->local_ip));
-	key->remote_domain = pna_dtrie_lookup((key->remote_ip));
+	key->local_domain = pna_dtrie_lookup(key->local_ip);
+	key->remote_domain = pna_dtrie_lookup(key->remote_ip);
 
 	/* the lowest domain ID is treated as local */
 	if (key->local_domain < key->remote_domain) {
 		/* local ip is local */
-		temp = key->remote_ip & pna_mask;
-		if (temp == (pna_prefix & pna_mask)) {
-			/* remote ip is also local */
-			if (key->local_ip > key->remote_ip) {
-				/* check for canonical ordering */
-				*direction = PNA_DIR_INBOUND;
-				return 1;
-			}
-		}
-	} else {
-		/* remote_ip is smaller, swap! */
+        *direction = PNA_DIR_OUTBOUND;
+        return 1;
+    } else if (key->local_domain > key->remote_domain) {
+        /* remote ip is smaller, swap! */
 		*direction = PNA_DIR_INBOUND;
-
-		temp = key->local_ip;
-		key->local_ip = key->remote_ip;
-		key->remote_ip = temp;
-
-		temp = key->local_port;
-		key->local_port = key->remote_port;
-		key->remote_port = temp;
-
-		temp = key->local_domain;
-		key->local_domain = key->remote_domain;
-		key->remote_domain = temp;
-
+        pna_session_swap(key);
 		return 1;
+	} else {
+        /* neither of these are local, weird and drop */
+        if (key->local_domain == MAX_DOMAIN)
+            return 0;
+        /* local and remote are in same domain, tie break */
+        /* (assume IPs are different) */
+        if (key->local_ip < key->remote_ip) {
+            /* local IP is smaller */
+            *direction = PNA_DIR_OUTBOUND;
+            return 1;
+        } else {
+            /* remote IP is smaller, swap */
+            *direction = PNA_DIR_INBOUND;
+            pna_session_swap(key);
+            return 1;
+        }
 	}
-
-	return 0;
+    return 0;
 }
 
 /* free all te resources we've used */
