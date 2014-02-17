@@ -21,6 +21,7 @@
 #include <linux/kernel.h>
 #include <linux/version.h>
 #include <linux/module.h>
+#include <linux/hash.h>
 #include <linux/mm.h>
 #include <linux/vmalloc.h>
 #include <linux/slab.h>
@@ -36,10 +37,6 @@
 #include <net/tcp.h>
 
 #include "pna.h"
-
-extern unsigned int pna_dtrie_lookup(unsigned int ip);
-extern int pna_dtrie_init();
-extern int pna_dtrie_deinit();
 
 static void pna_perflog(struct sk_buff *skb, int dir);
 static int pna_localize(struct pna_flowkey *key, int *direction);
@@ -111,6 +108,7 @@ unsigned long pna_frag_hash(struct iphdr *iphdr)
 
 struct pna_frag *pna_get_frag(struct iphdr *iphdr)
 {
+    int i;
 	struct pna_frag *entry;
 	unsigned long fingerprint = pna_frag_hash(iphdr);
 
@@ -130,7 +128,7 @@ void pna_set_frag(struct iphdr *iphdr,
 	struct pna_frag *entry;
 
 	/* grab the entry to update */
-	entry = &pna_frag_tab[pna_frag_next_idx];
+	entry = &pna_frag_table[pna_frag_next_idx];
 	/* increment to next index to use */
 	pna_frag_next_idx = (pna_frag_next_idx + 1) % PNA_MAXFRAGS;
 	/* update the entry */
@@ -210,10 +208,12 @@ int pna_hook(struct sk_buff *skb, struct net_device *dev,
 	     struct packet_type *pt, struct net_device *orig_dev)
 {
 	struct pna_flowkey key;
+	struct pna_frag *entry;
 	struct ethhdr *ethhdr;
 	struct iphdr *iphdr;
 	struct tcphdr *tcphdr;
 	struct udphdr *udphdr;
+    unsigned short src_port, dst_port;
 	int ret, direction, offset;
 
 	/* we don't care about outgoing packets */
@@ -236,9 +236,6 @@ int pna_hook(struct sk_buff *skb, struct net_device *dev,
 	ethhdr = eth_hdr(skb);
 	key.l3_protocol = ntohs(ethhdr->h_proto);
 
-	/* check if there are fragments */
-	offset = iphdr->frag_off & IP_OFFSET;
-
 	switch (key.l3_protocol) {
 	case ETH_P_IP:
 		/* this is a supported type, continue */
@@ -247,6 +244,9 @@ int pna_hook(struct sk_buff *skb, struct net_device *dev,
 		key.local_ip = ntohl(iphdr->saddr);
 		key.remote_ip = ntohl(iphdr->daddr);
 		key.l4_protocol = iphdr->protocol;
+
+        /* check if there are fragments */
+        offset = iphdr->frag_off & IP_OFFSET;
 
 		skb_set_transport_header(skb, ip_hdrlen(skb));
 		switch (key.l4_protocol) {
@@ -277,7 +277,7 @@ int pna_hook(struct sk_buff *skb, struct net_device *dev,
 				dst_port = ntohs(udphdr->dest);
 				/* there will be fragments, add to table */
 				if (iphdr->frag_off & IP_MF)
-					pna_set_frag(ip_hdr, src_port, dst_port);
+					pna_set_frag(iphdr, src_port, dst_port);
 			}
 			key.local_port = src_port;
 			key.remote_port = dst_port;

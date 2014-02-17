@@ -201,6 +201,10 @@ int flowmon_hook(struct pna_flowkey *key, int direction,
 int flowmon_init(void);
 void flowmon_cleanup(void);
 
+unsigned int pna_dtrie_lookup(unsigned int ip);
+int pna_dtrie_init(void);
+int pna_dtrie_deinit(void);
+
 int rtmon_init(void);
 int rtmon_hook(struct pna_flowkey *key, int direction, struct sk_buff *skb,
 	       unsigned long data);

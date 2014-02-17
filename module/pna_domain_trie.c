@@ -12,10 +12,17 @@
 #include <linux/slab.h>
 #include <linux/proc_fs.h>
 #include <asm/uaccess.h>
-#include "pna_mod.h"
+#include "pna.h"
 
 #define DTRIE_PROC_STR "dtrie"
 
+/* prototypes */
+struct pna_dtrie_entry *pna_dtrie_entry_alloc(void);
+
+/* proc directory from pna_flowmon */
+extern struct proc_dir_entry *proc_parent;
+
+/* locally used structs */
 struct pna_dtrie_entry {
 	int isprefix;
 	unsigned int domain_id;
@@ -130,13 +137,14 @@ int pna_dtrie_deinit()
 
 int pna_dtrie_init()
 {
-	pna_dtrie_head = pna_dtrie_entry_alloc(0xFFFFFFFF);
+	struct proc_dir_entry *dtrie_proc_node;
+
+	pna_dtrie_head = pna_dtrie_entry_alloc();
 	if (!pna_dtrie_head) {
 		printk("failed to init dtrie head\n");
 		return -1;
 	}
 
-	struct proc_dir_entry *dtrie_proc_node;
 	dtrie_proc_node = create_proc_entry(DTRIE_PROC_STR, 0644, proc_parent);
 	if (!dtrie_proc_node) {
 		pr_err("failed to make proc entry for %s\n", DTRIE_PROC_STR);

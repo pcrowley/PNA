@@ -1,6 +1,25 @@
 .svn
+
+*.py[co]
+
+*.o
+*.ko
+*.ko.unsigned
+*.ko.cmd
+*.ko.unsigned.cmd
+*.o.cmd
+*.mod.c
+.tmp_versions/
+Module.symvers
+modules.order
+
+logs/*
+*.log
+irq_count.*
+
 service/config
 service/domains
-logs/*
-*.pyc
 
+user/domain_tool
+user/user_alerts
+user/user_monitor
