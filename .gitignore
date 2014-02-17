@@ -17,9 +17,9 @@ logs/*
 *.log
 irq_count.*
 
-service/config
-service/domains
+config/monitor
+config/network
 
-user/domain_tool
 user/user_alerts
 user/user_monitor
+user/network_tool

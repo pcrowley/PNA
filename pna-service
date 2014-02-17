@@ -15,7 +15,7 @@
 # # # # # # # # # # # # # # # # # # # # # # # # # #
 #  Nothing below this point should need to change #
 # # # # # # # # # # # # # # # # # # # # # # # # # #
-SERVICE=pna
+SERVICE=pna-service
 
 export PNA_DIR=$(dirname $(readlink -f $0))
 
@@ -32,21 +32,16 @@ else
     exit 1
 fi
 
-PNA_MODULE="${PNA_BASE}/module/pna.ko"      # Name of kernel module
-PNA_MONITOR="${PNA_BASE}/user/user_monitor" # Name of logging program
-PNA_ALERTS="${PNA_BASE}/user/user_alerts"   # Name of alerts program
-DOMAIN_TOOL="${PNA_BASE}/user/domain_tool"
+PNA_MODULE="${PNA_DIR}/module/pna.ko"      # Name of kernel module
+PNA_MONITOR="${PNA_DIR}/user/user_monitor" # Name of logging program
+PNA_ALERTS="${PNA_DIR}/user/user_alerts"   # Name of alerts program
+NETWORK_TOOL="${PNA_DIR}/user/network_tool"
 
 # Program Locations
 IFCONFIG="/sbin/ifconfig"
 INSMOD="/sbin/insmod"
 RMMOD="/sbin/rmmod -w"
 LSMOD="/sbin/lsmod"
-
-ip2hex () {
-    IP=$1
-    printf "0x%02x%02x%02x%02x\n" $(echo "$IP" | sed "s/\./ /g")
-}
 
 start () {
     PARMS=$1
@@ -85,7 +80,7 @@ start () {
     ARGS="$PARMS pna_iface=\"$PNA_IFACE\""
     ${INSMOD} ${PNA_MODULE} $ARGS
     RETVAL=$?
-    $DOMAIN_TOOL -f $NETWORKS_FILE
+    $NETWORK_TOOL -f $NETWORKS_FILE
 
     # log the current interrupt counts
     date +%s.%N >> irq_count.start
@@ -113,11 +108,6 @@ start () {
         RETVAL=$(($RETVAL+$?))
     done
 
-    # start the alerts monitor
-    # TODO...
-
-    # in theory I should add entry to cron...
-    
     # finish up with script-y stuff
     [ $RETVAL = 0 ] && touch /var/run/${SERVICE}.kmod
     [ $RETVAL = 0 ] && echo $PID_LIST > /var/run/${SERVICE}.pids
@@ -138,8 +128,6 @@ stop () {
     # log the current interrupt counts
     date +%s.%N >> irq_count.stop
     grep "\(${PNA_IFACE/,/\|}\)" /proc/interrupts >> irq_count.stop
-
-    # in theory I should remove entry from cron...
 
     # kill all the monitors and alerts
     kill $(cat /var/run/${SERVICE}.pids)

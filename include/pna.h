@@ -16,6 +16,11 @@
 #ifndef __PNA_H
 #define __PNA_H
 
+#ifdef __KERNEL__
+# include <linux/jiffies.h>
+#endif
+
+
 /* /proc directory PNA tables will be stored in */
 #define PNA_PROCDIR  "pna"
 

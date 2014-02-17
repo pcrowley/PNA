@@ -15,21 +15,18 @@
 # user-space programs
 user-monitor := user_monitor
 user-alerts := user_alerts
-domain-tool := domain_tool
-user-progs := $(user-monitor) $(user-alerts) $(domain-tool)
+network-tool := network_tool
+user-progs := $(user-monitor) $(user-alerts) $(network-tool)
 
 CFLAGS += -I../include/
 
 all: $(user-progs)
 
 $(user-monitor): $(user-monitor).c
-	$(CC) $(CFLAGS) -o $@ $^
 
 $(user-alerts): $(user-alerts).c
-	$(CC) -ggdb $(CFLAGS) -o $@ $^
 
-$(domain_tool): $(domain_tool).c
-	$(CC) -ggdb $(CFLAGS) -o $@ $^
+$(network_tool): $(network_tool).c
 
 clean:
 	rm -f $(user-progs)

@@ -128,13 +128,6 @@ static int flowtab_release(struct inode *inode, struct file *filep)
 	/* zero out the table */
 	memset(info->table_base, 0, PNA_SZ_FLOW_ENTRIES);
 
-#if 0
-	for (i = 0; i < PNA_TABLE_TRIES; i++) {
-		printk("tries\t%d\t%u\n", i, info->probes[i]);
-		info->probes[i] = 0;
-	}
-#endif                          /* 0 */
-
 	/* this table is safe to use again */
 	flowtab_clean(info);
 
