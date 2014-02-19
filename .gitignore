@@ -18,7 +18,7 @@ logs/*
 irq_count.*
 
 config/monitor
-config/network
+config/networks
 
 user/user_alerts
 user/user_monitor
