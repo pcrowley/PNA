@@ -108,7 +108,7 @@ unsigned long pna_frag_hash(struct iphdr *iphdr)
 
 struct pna_frag *pna_get_frag(struct iphdr *iphdr)
 {
-    int i;
+	int i;
 	struct pna_frag *entry;
 	unsigned long fingerprint = pna_frag_hash(iphdr);
 
@@ -153,19 +153,19 @@ unsigned int pna_hash(unsigned int key, int bits)
 
 void pna_session_swap(struct pna_flowkey *key)
 {
-    unsigned int temp;
+	unsigned int temp;
 
-    temp = key->local_ip;
-    key->local_ip = key->remote_ip;
-    key->remote_ip = temp;
+	temp = key->local_ip;
+	key->local_ip = key->remote_ip;
+	key->remote_ip = temp;
 
-    temp = key->local_port;
-    key->local_port = key->remote_port;
-    key->remote_port = temp;
+	temp = key->local_port;
+	key->local_port = key->remote_port;
+	key->remote_port = temp;
 
-    temp = key->local_domain;
-    key->local_domain = key->remote_domain;
-    key->remote_domain = temp;
+	temp = key->local_domain;
+	key->local_domain = key->remote_domain;
+	key->remote_domain = temp;
 }
 
 /**
@@ -180,31 +180,31 @@ static int pna_localize(struct pna_flowkey *key, int *direction)
 	/* the lowest domain ID is treated as local */
 	if (key->local_domain < key->remote_domain) {
 		/* local ip is local */
-        *direction = PNA_DIR_OUTBOUND;
-        return 1;
-    } else if (key->local_domain > key->remote_domain) {
-        /* remote ip is smaller, swap! */
+		*direction = PNA_DIR_OUTBOUND;
+		return 1;
+	} else if (key->local_domain > key->remote_domain) {
+		/* remote ip is smaller, swap! */
 		*direction = PNA_DIR_INBOUND;
-        pna_session_swap(key);
+		pna_session_swap(key);
 		return 1;
 	} else {
-        /* neither of these are local, weird and drop */
-        if (key->local_domain == MAX_DOMAIN)
-            return 0;
-        /* local and remote are in same domain, tie break */
-        /* (assume IPs are different) */
-        if (key->local_ip < key->remote_ip) {
-            /* local IP is smaller */
-            *direction = PNA_DIR_OUTBOUND;
-            return 1;
-        } else {
-            /* remote IP is smaller, swap */
-            *direction = PNA_DIR_INBOUND;
-            pna_session_swap(key);
-            return 1;
-        }
+		/* neither of these are local, weird and drop */
+		if (key->local_domain == MAX_DOMAIN)
+			return 0;
+		/* local and remote are in same domain, tie break */
+		/* (assume IPs are different) */
+		if (key->local_ip < key->remote_ip) {
+			/* local IP is smaller */
+			*direction = PNA_DIR_OUTBOUND;
+			return 1;
+		} else {
+			/* remote IP is smaller, swap */
+			*direction = PNA_DIR_INBOUND;
+			pna_session_swap(key);
+			return 1;
+		}
 	}
-    return 0;
+	return 0;
 }
 
 /* free all te resources we've used */
@@ -224,7 +224,7 @@ int pna_hook(struct sk_buff *skb, struct net_device *dev,
 	struct iphdr *iphdr;
 	struct tcphdr *tcphdr;
 	struct udphdr *udphdr;
-    unsigned short src_port, dst_port;
+	unsigned short src_port, dst_port, frag_off;
 	int ret, direction, offset;
 
 	/* we don't care about outgoing packets */
@@ -256,8 +256,9 @@ int pna_hook(struct sk_buff *skb, struct net_device *dev,
 		key.remote_ip = ntohl(iphdr->daddr);
 		key.l4_protocol = iphdr->protocol;
 
-        /* check if there are fragments */
-        offset = iphdr->frag_off & IP_OFFSET;
+		/* check if there are fragments */
+		frag_off = ntohs(iphdr->frag_off);
+		offset = frag_off & IP_OFFSET;
 
 		skb_set_transport_header(skb, ip_hdrlen(skb));
 		switch (key.l4_protocol) {
@@ -287,7 +288,7 @@ int pna_hook(struct sk_buff *skb, struct net_device *dev,
 				src_port = ntohs(udphdr->source);
 				dst_port = ntohs(udphdr->dest);
 				/* there will be fragments, add to table */
-				if (iphdr->frag_off & IP_MF)
+				if (frag_off & IP_MF)
 					pna_set_frag(iphdr, src_port, dst_port);
 			}
 			key.local_port = src_port;
