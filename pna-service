@@ -93,7 +93,7 @@ start () {
     PID_LIST=""
     rm -f verbose-*.log
     i=0
-    for f in /proc/pna/*; do
+    for f in /proc/pna/table*; do
         ARGS="-v -d $PNA_LOGDIR"
         nohup ${PNA_MONITOR} $ARGS $f >> verbose-$(basename $f).log 2>&1 &
         PID=$!
