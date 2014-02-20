@@ -247,6 +247,7 @@ int flowmon_hook(struct pna_flowkey *key, int direction, unsigned short flags,
 			flow->data.bytes[direction] += skb->len + ETH_OVERHEAD;
 			flow->data.packets[direction] += 1;
 			flow->data.flags[direction] |= flags;
+			flow->data.last_tstamp = timeval.tv_sec;
 			return 0;
 		}
 
@@ -260,6 +261,7 @@ int flowmon_hook(struct pna_flowkey *key, int direction, unsigned short flags,
 			flow->data.packets[direction]++;
 			flow->data.flags[direction] |= flags;
 			flow->data.first_tstamp = timeval.tv_sec;
+			flow->data.last_tstamp = timeval.tv_sec;
 			flow->data.first_dir = direction;
 
 			info->nflows++;

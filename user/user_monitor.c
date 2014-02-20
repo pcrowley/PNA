@@ -132,6 +132,7 @@ void dump_table(void *table_base, char *out_file)
 		log->flags[PNA_DIR_OUTBOUND] = flow->data.flags[PNA_DIR_OUTBOUND];
 		log->flags[PNA_DIR_INBOUND] = flow->data.flags[PNA_DIR_INBOUND];
 		log->first_tstamp = flow->data.first_tstamp;
+		log->last_tstamp = flow->data.last_tstamp;
 		log->l4_protocol = flow->key.l4_protocol;
 		log->first_dir = flow->data.first_dir;
 		log->pad[0] = 0x00;
