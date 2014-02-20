@@ -35,6 +35,7 @@
 
 #include <net/ip.h>
 #include <net/tcp.h>
+#include <linux/sctp.h>
 
 #include "pna.h"
 
@@ -224,6 +225,7 @@ int pna_hook(struct sk_buff *skb, struct net_device *dev,
 	struct iphdr *iphdr;
 	struct tcphdr *tcphdr;
 	struct udphdr *udphdr;
+	struct sctphdr *sctphdr;
 	unsigned short src_port, dst_port, frag_off;
 	int ret, direction, offset;
 
@@ -293,6 +295,16 @@ int pna_hook(struct sk_buff *skb, struct net_device *dev,
 			}
 			key.local_port = src_port;
 			key.remote_port = dst_port;
+			break;
+		case IPPROTO_SCTP:
+			if (offset != 0) {
+				pr_warn("Unknown IP-fragmented SCTP, dropping");
+				return pna_done(skb);
+			}
+			sctphdr = sctp_hdr(skb);
+			key.local_port = ntohs(sctphdr->source);
+			key.remote_port = ntohs(sctphdr->dest);
+			break;
 			break;
 		default:
 			return pna_done(skb);
