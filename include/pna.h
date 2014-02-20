@@ -82,10 +82,11 @@ struct pna_log_entry {
 	unsigned int bytes[PNA_DIRECTIONS];     /* 8 */
 	unsigned short flags[PNA_DIRECTIONS];   /* 4 */
 	unsigned int first_tstamp;              /* 4 */
+	unsigned int last_tstamp;               /* 4 */
 	unsigned char l4_protocol;              /* 1 */
 	unsigned char first_dir;                /* 1 */
 	char pad[2];                            /* 2 */
-};                                              /* = 44 */
+};                                              /* = 48 */
 
 /* XXX: bad practice, but it gets the job done */
 /* could be trouble if Linux decides to use more netlink links */
@@ -148,6 +149,7 @@ struct pna_flow_data {
 	unsigned short flags[PNA_DIRECTIONS];
 	unsigned int timestamp;
 	unsigned int first_tstamp;
+	unsigned int last_tstamp;
 	unsigned int first_dir;
 };
 

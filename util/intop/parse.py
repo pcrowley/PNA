@@ -60,7 +60,8 @@ class PNALogParser(object):
                      ('packets_out', U_INT4), ('packets_in', U_INT4),
                      ('octets_out', U_INT4), ('octets_in', U_INT4),
                      ('local_flags', U_INT2), ('remote_flags', U_INT2),
-                     ('begin_time', U_INT4), ('l4_protocol', U_INT1),
+                     ('begin_time', U_INT4), ('end_time', U_INT4),
+                     ('l4_protocol', U_INT1),
                      ('first_direction', U_INT1),
                      ('blank0', U_INT1), ('blank1', U_INT1))}
 
