@@ -12,7 +12,7 @@ dump file with all the data in it.
 ## Instructions ##
 
 The Passive Network Appliance (PNA) software has been built against Linux
-kernel 2.6.34 and 2.6.37 without error, it should work against other kernel
+kernel 2.6.34, 2.6.37, and 3.2 without error, it should work against other kernel
 versions as well--assuming there have not been major changes.
 
 Building can be done by typing `make` in the top level directory.  This
@@ -20,14 +20,15 @@ will build the kernel module (found in `module/`) and the user-space programs
 (found in `user/`).
 
 Loading the kernel module and user-space programs is done with a script
-(`service/pna`).  This script has a few configuration parameters that should
-be set:
+(`pna-service`).  This script has a few configuration parameters that should
+be set (in `config/monitor`):
 
- - `BASE` sets the base directory of the PNA software (i.e. `pwd` of this file)
  - `PNA_IFACE` sets the interface on which traffic will be monitored
- - `PNA_PREFIX` sets the IP prefix of the monitored network (local network)
- - `PNA_MASK` sets the subnet mask of the monitored network
  - `PNA_LOGDIR` sets the location to store the logged statistics
+
+Depending on your network, you can also set the `config/networks` file to
+include the networks to monitor. By default this is the three private
+networks (`10.0.0.0/8`, `172.16.0.0/12`, and `192.168.0.0/16`).
 
 Nothing else should need modification.
 
@@ -60,7 +61,7 @@ this project.
    - `pna_alert.c` is code to send messages to a user-space process when a
      real-time monitor detects anomalous behavior
    - `pna_config.c` handles run-time configuration parameters
- - `service/pna` is the script to start and stop all the PNA software
+ - `pna-service` is the script to start and stop all the PNA software
  - `user/` has the user-space software
    - `user_monitor.c` interacts with the flow tables to export them to a
      log file
