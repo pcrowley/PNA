@@ -226,7 +226,7 @@ int pna_hook(struct sk_buff *skb, struct net_device *dev,
 	struct tcphdr *tcphdr;
 	struct udphdr *udphdr;
 	struct sctphdr *sctphdr;
-	unsigned short src_port, dst_port, frag_off;
+	unsigned short src_port, dst_port, frag_off, flags;
 	int ret, direction, offset;
 
 	/* we don't care about outgoing packets */
@@ -244,6 +244,9 @@ int pna_hook(struct sk_buff *skb, struct net_device *dev,
 
 	/* make sure the key is all zeros before we start */
 	memset(&key, 0, sizeof(key));
+
+	/* by default assume no flags */
+	flags = 0;
 
 	/* we now have exclusive access, so let's decode the skb */
 	ethhdr = eth_hdr(skb);
@@ -272,6 +275,7 @@ int pna_hook(struct sk_buff *skb, struct net_device *dev,
 			tcphdr = tcp_hdr(skb);
 			key.local_port = ntohs(tcphdr->source);
 			key.remote_port = ntohs(tcphdr->dest);
+			flags = ntohs(tcp_flag_word(tcphdr) & ~TCP_DATA_OFFSET);
 			break;
 		case IPPROTO_UDP:
 			/* this is an IP fragmented UDP packet */
@@ -327,7 +331,7 @@ int pna_hook(struct sk_buff *skb, struct net_device *dev,
 
 	/* insert into flow table */
 	if (pna_flowmon == true) {
-		ret = flowmon_hook(&key, direction, skb);
+		ret = flowmon_hook(&key, direction, flags, skb);
 		if (ret < 0)
 			/* failed to insert -- cleanup */
 			return pna_done(skb);

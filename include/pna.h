@@ -59,7 +59,13 @@ char *pna_alert_directions[] = { "none", "in", "out", "bi", };
 #define MAX_DOMAIN 0xFFFF
 
 /* log file format structures */
+#define PNA_LOG_MAGIC0   'P'
+#define PNA_LOG_MAGIC1   'N'
+#define PNA_LOG_MAGIC2   'A'
+#define PNA_LOG_VERSION  2
 struct pna_log_hdr {
+	unsigned char magic[3];
+	unsigned char version;
 	unsigned int start_time;
 	unsigned int end_time;
 	unsigned int size;
@@ -74,11 +80,12 @@ struct pna_log_entry {
 	unsigned short remote_domain;           /* 2 */
 	unsigned int packets[PNA_DIRECTIONS];   /* 8 */
 	unsigned int bytes[PNA_DIRECTIONS];     /* 8 */
+	unsigned short flags[PNA_DIRECTIONS];   /* 4 */
 	unsigned int first_tstamp;              /* 4 */
 	unsigned char l4_protocol;              /* 1 */
 	unsigned char first_dir;                /* 1 */
 	char pad[2];                            /* 2 */
-};                                              /* = 40 */
+};                                              /* = 44 */
 
 /* XXX: bad practice, but it gets the job done */
 /* could be trouble if Linux decides to use more netlink links */
@@ -138,6 +145,7 @@ struct pna_flowkey {
 struct pna_flow_data {
 	unsigned int bytes[PNA_DIRECTIONS];
 	unsigned int packets[PNA_DIRECTIONS];
+	unsigned short flags[PNA_DIRECTIONS];
 	unsigned int timestamp;
 	unsigned int first_tstamp;
 	unsigned int first_dir;
@@ -203,7 +211,7 @@ struct flowtab_info {
 #ifdef __KERNEL__
 unsigned int pna_hash(unsigned int key, int bits);
 
-int flowmon_hook(struct pna_flowkey *key, int direction,
+int flowmon_hook(struct pna_flowkey *key, int direction, unsigned short flags,
 		 struct sk_buff *skb);
 int flowmon_init(void);
 void flowmon_cleanup(void);

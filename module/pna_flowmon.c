@@ -212,7 +212,7 @@ static inline int flowkey_match(struct pna_flowkey *key_a,
 }
 
 /* Insert/Update this flow */
-int flowmon_hook(struct pna_flowkey *key, int direction,
+int flowmon_hook(struct pna_flowkey *key, int direction, unsigned short flags,
 		 struct sk_buff *skb)
 {
 	struct flow_entry *flow;
@@ -246,6 +246,7 @@ int flowmon_hook(struct pna_flowkey *key, int direction,
 		if (flowkey_match(&flow->key, key)) {
 			flow->data.bytes[direction] += skb->len + ETH_OVERHEAD;
 			flow->data.packets[direction] += 1;
+			flow->data.flags[direction] |= flags;
 			return 0;
 		}
 
@@ -257,6 +258,7 @@ int flowmon_hook(struct pna_flowkey *key, int direction,
 			/* port specific information */
 			flow->data.bytes[direction] += skb->len + ETH_OVERHEAD;
 			flow->data.packets[direction]++;
+			flow->data.flags[direction] |= flags;
 			flow->data.first_tstamp = timeval.tv_sec;
 			flow->data.first_dir = direction;
 

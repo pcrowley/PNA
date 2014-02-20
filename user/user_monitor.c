@@ -129,6 +129,8 @@ void dump_table(void *table_base, char *out_file)
 			flow->data.packets[PNA_DIR_INBOUND];
 		log->bytes[PNA_DIR_OUTBOUND] = flow->data.bytes[PNA_DIR_OUTBOUND];
 		log->bytes[PNA_DIR_INBOUND] = flow->data.bytes[PNA_DIR_INBOUND];
+		log->flags[PNA_DIR_OUTBOUND] = flow->data.flags[PNA_DIR_OUTBOUND];
+		log->flags[PNA_DIR_INBOUND] = flow->data.flags[PNA_DIR_INBOUND];
 		log->first_tstamp = flow->data.first_tstamp;
 		log->l4_protocol = flow->key.l4_protocol;
 		log->first_dir = flow->data.first_dir;
@@ -152,10 +154,14 @@ void dump_table(void *table_base, char *out_file)
 	/* write out header data */
 	lseek(fd, 0, SEEK_SET);
 	log_header = (struct pna_log_hdr*)&buf[buf_idx];
+	log_header->magic[0] = PNA_LOG_MAGIC0;
+	log_header->magic[1] = PNA_LOG_MAGIC1;
+	log_header->magic[2] = PNA_LOG_MAGIC2;
+	log_header->version = PNA_LOG_VERSION;
 	log_header->start_time = start_time;
 	log_header->end_time = time(NULL);
 	log_header->size = nflows * sizeof(struct pna_log_entry);
-	write(fd, log_header, sizeof(log_header));
+	write(fd, log_header, sizeof(*log_header));
 
 	close(fd);
 }
