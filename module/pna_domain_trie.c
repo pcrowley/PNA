@@ -147,7 +147,7 @@ int pna_dtrie_init()
 
 	dtrie_proc_node = create_proc_entry(DTRIE_PROC_STR, 0644, proc_parent);
 	if (!dtrie_proc_node) {
-		pr_err("failed to make proc entry for %s\n", DTRIE_PROC_STR);
+		pna_err("failed to make proc entry for %s\n", DTRIE_PROC_STR);
 		return -ENOMEM;
 	}
 
