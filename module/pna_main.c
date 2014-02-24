@@ -269,7 +269,7 @@ int pna_hook(struct sk_buff *skb, struct net_device *dev,
 		switch (key.l4_protocol) {
 		case IPPROTO_TCP:
 			if (offset != 0) {
-				pr_warn("Unknown IP-fragmented TCP, dropping");
+				pna_warn("Unknown IP-fragmented TCP, dropping");
 				return pna_done(skb);
 			}
 			tcphdr = tcp_hdr(skb);
@@ -283,7 +283,7 @@ int pna_hook(struct sk_buff *skb, struct net_device *dev,
 				/* offset is set, get the appropriate entry */
 				entry = pna_get_frag(iphdr);
 				if (!entry) {
-					pr_warn("Unknown IP-fragmented UDP, dropping");
+					pna_warn("Unknown IP-fragmented UDP, dropping");
 					return pna_done(skb);
 				}
 				src_port = entry->src_port;
@@ -302,7 +302,7 @@ int pna_hook(struct sk_buff *skb, struct net_device *dev,
 			break;
 		case IPPROTO_SCTP:
 			if (offset != 0) {
-				pr_warn("Unknown IP-fragmented SCTP, dropping");
+				pna_warn("Unknown IP-fragmented SCTP, dropping");
 				return pna_done(skb);
 			}
 			sctphdr = sctp_hdr(skb);
@@ -394,7 +394,7 @@ static void pna_perflog(struct sk_buff *skb, int dir)
 
 		/* report the numbers */
 		if (fps_in + fps_out > 1000) {
-			pr_info("pna throughput smpid:%d, "
+			pna_info("pna throughput smpid:%d, "
 				"in:{fps:%u,Mbps:%u,avg:%u}, "
 				"out:{fps:%u,Mbps:%u,avg:%u}\n", smp_processor_id(),
 				fps_in, Mbps_in, avg_in, fps_out, Mbps_out, avg_out);
@@ -407,7 +407,7 @@ static void pna_perflog(struct sk_buff *skb, int dir)
 #if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 34)
 				/* numbers from the NIC */
 				stats = dev_get_stats(dev);
-				pr_info
+				pna_info
 					("pna %s rx_stats: packets:%lu, fifo_overruns:%lu\n",
 					dev->name, stats->rx_packets - perf->dev_last_rx[i],
 					stats->rx_fifo_errors - perf->dev_last_fifo[i]);
@@ -416,7 +416,7 @@ static void pna_perflog(struct sk_buff *skb, int dir)
 #else
 				/* numbers from the NIC */
 				dev_get_stats(dev, &stats);
-				pr_info
+				pna_info
 					("pna %s rx_stats: packets:%llu, fifo_overruns:%llu\n",
 					dev->name, stats.rx_packets - perf->dev_last_rx[i],
 					stats.rx_fifo_errors - perf->dev_last_fifo[i]);
@@ -473,7 +473,7 @@ int __init pna_init(void)
 		next = strnchr(pna_iface, IFNAMSIZ, ',');
 		if (NULL != next)
 			*next = '\0';
-		pr_info("pna: capturing on %s", pna_iface);
+		pna_info("pna: capturing on %s", pna_iface);
 		pna_packet_type[i].dev = dev_get_by_name(&init_net, pna_iface);
 		dev_add_pack(&pna_packet_type[i]);
 		pna_iface = next + 1;
@@ -485,7 +485,7 @@ int __init pna_init(void)
 	next = "";
 #endif                          /* PIPELINE_MODE */
 
-	pr_info("pna: module is initialized %s\n", next);
+	pna_info("pna: module is initialized %s\n", next);
 
 	return ret;
 }
@@ -497,14 +497,14 @@ void pna_cleanup(void)
 
 	for (i = 0; (i < PNA_MAXIF) && (pna_packet_type[i].dev != NULL); i++) {
 		dev_remove_pack(&pna_packet_type[i]);
-		pr_info("pna: released %s\n", pna_packet_type[i].dev->name);
+		pna_info("pna: released %s\n", pna_packet_type[i].dev->name);
 	}
 	rtmon_release();
 	pna_alert_cleanup();
 	//dtrie deinit should be called before flowmon_cleanup for proc file reasons
 	pna_dtrie_deinit();
 	flowmon_cleanup();
-	pr_info("pna: module is inactive\n");
+	pna_info("pna: module is inactive\n");
 }
 
 module_init(pna_init);

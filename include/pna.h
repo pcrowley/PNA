@@ -18,6 +18,12 @@
 
 #ifdef __KERNEL__
 # include <linux/jiffies.h>
+
+/* some print aliases */
+# define pna_warn pr_warning
+# define pna_warning pr_warning
+# define pna_err pr_err
+# define pna_info pr_info
 #endif
 
 

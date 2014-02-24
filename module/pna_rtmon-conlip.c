@@ -80,7 +80,7 @@ int conmon_init(void)
 	/* allocate memory for contab */
 	contab = vmalloc(PNA_CONMON_TABLE_SZ);
 	if (!contab) {
-		pr_err("insufficient memory for conmon (%ld)",
+		pna_err("insufficient memory for conmon (%ld)",
 		       PNA_CONMON_TABLE_SZ);
 		return -ENOMEM;
 	}
@@ -265,7 +265,7 @@ int lipmon_init(void)
 	/* allocate memory for liptab */
 	liptab = vmalloc(PNA_LIPMON_TABLE_SZ);
 	if (!liptab) {
-		pr_err("insufficient memory for lipmon (%ld)",
+		pna_err("insufficient memory for lipmon (%ld)",
 		       PNA_LIPMON_TABLE_SZ);
 		return -ENOMEM;
 	}

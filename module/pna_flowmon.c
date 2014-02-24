@@ -122,7 +122,7 @@ static int flowtab_release(struct inode *inode, struct file *filep)
 
 	/* dump a little info about that table */
 	if (pna_perfmon)
-		pr_info("pna table%d: flows_inserted:%u ; flows_dropped:%u\n",
+		pna_info("pna table%d: flows_inserted:%u ; flows_dropped:%u\n",
 			i, info->nflows, info->nflows_missed);
 
 	/* zero out the table */
@@ -144,7 +144,7 @@ static int flowtab_mmap(struct file *filep, struct vm_area_struct *vma)
 	struct flowtab_info *info = filep->private_data;
 
 	if (remap_vmalloc_range(vma, info->table_base, 0)) {
-		pr_warning("remap_vmalloc_range failed\n");
+		pna_warning("remap_vmalloc_range failed\n");
 		return -EAGAIN;
 	}
 
@@ -182,7 +182,7 @@ static struct flowtab_info *flowtab_get(struct timeval *timeval)
 		i++;
 	}
 	if (i == pna_tables) {
-		pr_warning("pna: all tables are locked\n");
+		pna_warning("pna: all tables are locked\n");
 		return NULL;
 	}
 
@@ -288,7 +288,7 @@ int flowmon_init(void)
 	flowtab_info = (struct flowtab_info*)
 		       vmalloc(pna_tables * sizeof(struct flowtab_info));
 	if (!flowtab_info) {
-		pr_err("insufficient memory for flowtab_info\n");
+		pna_err("insufficient memory for flowtab_info\n");
 		flowmon_cleanup();
 		return -ENOMEM;
 	}
@@ -299,7 +299,7 @@ int flowmon_init(void)
 		info = &flowtab_info[i];
 		info->table_base = vmalloc_user(PNA_SZ_FLOW_ENTRIES);
 		if (!info->table_base) {
-			pr_err("insufficient memory for %d/%d tables (%lu bytes)\n",
+			pna_err("insufficient memory for %d/%d tables (%lu bytes)\n",
 			       i, pna_tables, (pna_tables * PNA_SZ_FLOW_ENTRIES));
 			flowmon_cleanup();
 			return -ENOMEM;
@@ -315,7 +315,7 @@ int flowmon_init(void)
 		strncpy(info->table_name, table_str, PNA_MAX_STR);
 		proc_node = create_proc_entry(info->table_name, 0644, proc_parent);
 		if (!proc_node) {
-			pr_err("failed to make proc entry: %s\n", table_str);
+			pna_err("failed to make proc entry: %s\n", table_str);
 			flowmon_cleanup();
 			return -ENOMEM;
 		}
