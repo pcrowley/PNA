@@ -65,7 +65,7 @@ static struct packet_type pna_packet_type[PNA_MAXIF] = {
 };
 
 /* define a fragment table for reconstruction */
-#define PNA_MAXFRAGS 8
+#define PNA_MAXFRAGS 512
 struct pna_frag {
 	unsigned long fingerprint;
 	unsigned short src_port;
@@ -73,6 +73,8 @@ struct pna_frag {
 };
 static struct pna_frag pna_frag_table[PNA_MAXFRAGS];
 static int pna_frag_next_idx = 0;
+static int pna_frag_packets_missed = 0;
+static int pna_frag_bytes_missed = 0;
 
 /* for performance measurement */
 struct pna_perf {
@@ -127,6 +129,11 @@ void pna_set_frag(struct iphdr *iphdr,
 {
 	/* this is in the handler, so it is serial (for now) */
 	struct pna_frag *entry;
+
+	/* verify fragment doesn't already exist */
+	entry = pna_get_frag(iphdr);
+	if (entry)
+		return;
 
 	/* grab the entry to update */
 	entry = &pna_frag_table[pna_frag_next_idx];
@@ -282,8 +289,10 @@ int pna_hook(struct sk_buff *skb, struct net_device *dev,
 			if (offset != 0) {
 				/* offset is set, get the appropriate entry */
 				entry = pna_get_frag(iphdr);
+				/* no entry means we can't record - UDP can arrive out of order */
 				if (!entry) {
-					pna_warn("Unknown IP-fragmented UDP, dropping");
+					pna_frag_packets_missed += 1;
+					pna_frag_bytes_missed += skb->len + ETH_OVERHEAD;
 					return pna_done(skb);
 				}
 				src_port = entry->src_port;
@@ -395,9 +404,10 @@ static void pna_perflog(struct sk_buff *skb, int dir)
 		/* report the numbers */
 		if (fps_in + fps_out > 1000) {
 			pna_info("pna throughput smpid:%d, "
-				"in:{fps:%u,Mbps:%u,avg:%u}, "
-				"out:{fps:%u,Mbps:%u,avg:%u}\n", smp_processor_id(),
-				fps_in, Mbps_in, avg_in, fps_out, Mbps_out, avg_out);
+				 "in:{fps:%u,Mbps:%u,avg:%u}, "
+				 "out:{fps:%u,Mbps:%u,avg:%u}\n", smp_processor_id(),
+				 fps_in, Mbps_in, avg_in, fps_out, Mbps_out, avg_out);
+			pna_info("pna missed frags: {packets:%d, bytes:%d}\n", pna_frag_packets_missed, pna_frag_bytes_missed);
 
 			for (i = 0; i < PNA_MAXIF; i++) {
 				dev = pna_packet_type[i].dev;
@@ -426,7 +436,8 @@ static void pna_perflog(struct sk_buff *skb, int dir)
 			}
 		}
 
-		/* set updated counters */
+		/* reset updated counters */
+		pna_frag_missed = 0;
 		perf->p_interval[PNA_DIR_INBOUND] = 0;
 		perf->B_interval[PNA_DIR_INBOUND] = 0;
 		perf->p_interval[PNA_DIR_OUTBOUND] = 0;

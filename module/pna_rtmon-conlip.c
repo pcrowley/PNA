@@ -81,7 +81,7 @@ int conmon_init(void)
 	contab = vmalloc(PNA_CONMON_TABLE_SZ);
 	if (!contab) {
 		pna_err("insufficient memory for conmon (%ld)",
-		       PNA_CONMON_TABLE_SZ);
+			PNA_CONMON_TABLE_SZ);
 		return -ENOMEM;
 	}
 
@@ -266,7 +266,7 @@ int lipmon_init(void)
 	liptab = vmalloc(PNA_LIPMON_TABLE_SZ);
 	if (!liptab) {
 		pna_err("insufficient memory for lipmon (%ld)",
-		       PNA_LIPMON_TABLE_SZ);
+			PNA_LIPMON_TABLE_SZ);
 		return -ENOMEM;
 	}
 

@@ -123,7 +123,7 @@ static int flowtab_release(struct inode *inode, struct file *filep)
 	/* dump a little info about that table */
 	if (pna_perfmon)
 		pna_info("pna table%d: flows_inserted:%u ; flows_dropped:%u\n",
-			i, info->nflows, info->nflows_missed);
+			 i, info->nflows, info->nflows_missed);
 
 	/* zero out the table */
 	memset(info->table_base, 0, PNA_SZ_FLOW_ENTRIES);
@@ -300,7 +300,7 @@ int flowmon_init(void)
 		info->table_base = vmalloc_user(PNA_SZ_FLOW_ENTRIES);
 		if (!info->table_base) {
 			pna_err("insufficient memory for %d/%d tables (%lu bytes)\n",
-			       i, pna_tables, (pna_tables * PNA_SZ_FLOW_ENTRIES));
+				i, pna_tables, (pna_tables * PNA_SZ_FLOW_ENTRIES));
 			flowmon_cleanup();
 			return -ENOMEM;
 		}
