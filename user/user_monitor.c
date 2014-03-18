@@ -190,7 +190,7 @@ int main(int argc, char **argv)
 	size_t size;
 	void *table_base;
 	struct timeval start, stop, diff;
-	unsigned int remainder, frac;
+	unsigned int remainder, frac, sleep_time;
 	struct tm *start_tm;
 	char *log_dir = DEFAULT_LOG_DIR;
 	int interval = DEFAULT_INTERVAL;
@@ -238,17 +238,20 @@ int main(int argc, char **argv)
 		/* sleep for interval (correct for processing time) */
 		gettimeofday(&stop, NULL);
 		timersub(&stop, &start, &diff);
+        sleep_time = interval - diff.tv_sec - frac / USECS_PER_SEC;
+        /* make sure we never sleep too long */
+        if (sleep_time > 10) {
+            sleep_time = 10;
+        }
 		/* show processing time if bigger than 100 microseconds */
 		if (verbose && diff.tv_usec > 100) {
-			printf
-				("processed in %d.%06d seconds (sleeping for %u seconds)\n",
-				(int)diff.tv_sec, (int)diff.tv_usec,
-				(unsigned)(interval - diff.tv_sec -
-					   frac / USECS_PER_SEC));
+			printf(
+                "processed in %d.%06d seconds (sleeping for %u seconds)\n",
+				(int)diff.tv_sec, (int)diff.tv_usec, sleep_time);
 		}
 		fflush(stdout);
 		fflush(stderr);
-		remainder = sleep(interval - diff.tv_sec - frac / USECS_PER_SEC);
+		remainder = sleep(sleep_time);
 		if (remainder != 0)
 			continue;
 
