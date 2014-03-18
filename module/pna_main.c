@@ -437,7 +437,8 @@ static void pna_perflog(struct sk_buff *skb, int dir)
 		}
 
 		/* reset updated counters */
-		pna_frag_missed = 0;
+		pna_frag_packets_missed = 0;
+		pna_frag_bytes_missed = 0;
 		perf->p_interval[PNA_DIR_INBOUND] = 0;
 		perf->B_interval[PNA_DIR_INBOUND] = 0;
 		perf->p_interval[PNA_DIR_OUTBOUND] = 0;
