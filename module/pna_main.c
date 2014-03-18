@@ -275,10 +275,8 @@ int pna_hook(struct sk_buff *skb, struct net_device *dev,
 		skb_set_transport_header(skb, ip_hdrlen(skb));
 		switch (key.l4_protocol) {
 		case IPPROTO_TCP:
-			if (offset != 0) {
-				pna_warn("Unknown IP-fragmented TCP, dropping");
+			if (offset != 0)
 				return pna_done(skb);
-			}
 			tcphdr = tcp_hdr(skb);
 			key.local_port = ntohs(tcphdr->source);
 			key.remote_port = ntohs(tcphdr->dest);
@@ -310,10 +308,8 @@ int pna_hook(struct sk_buff *skb, struct net_device *dev,
 			key.remote_port = dst_port;
 			break;
 		case IPPROTO_SCTP:
-			if (offset != 0) {
-				pna_warn("Unknown IP-fragmented SCTP, dropping");
+			if (offset != 0)
 				return pna_done(skb);
-			}
 			sctphdr = sctp_hdr(skb);
 			key.local_port = ntohs(sctphdr->source);
 			key.remote_port = ntohs(sctphdr->dest);
