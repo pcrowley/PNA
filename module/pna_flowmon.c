@@ -164,6 +164,7 @@ static void flowtab_clean(struct flowtab_info *info)
 /* determine which flow table to use */
 static struct flowtab_info *flowtab_get(struct timeval *timeval)
 {
+    static unsigned int lock_misses = 0;
 	int i;
 	struct flowtab_info *info;
 
@@ -182,7 +183,11 @@ static struct flowtab_info *flowtab_get(struct timeval *timeval)
 		i++;
 	}
 	if (i == pna_tables) {
-		pna_warning("pna: all tables are locked\n");
+        lock_misses += 1;
+        if (lock_misses >= 1000) {
+    		pna_warning("pna: all tables are locked, missed %d packets\n", lock_misses);
+            lock_misses = 0;
+        }
 		return NULL;
 	}
 
