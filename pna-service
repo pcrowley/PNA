@@ -57,7 +57,7 @@ start () {
 
     # Make sure PNA interface(s) are up
     echo
-    for iface in ${PNA_IFACE/,/ } ; do
+    for iface in ${PNA_IFACE//,/ } ; do
         ${IFCONFIG} ${iface} up
         ${IFCONFIG} ${iface} promisc
 
