@@ -56,7 +56,7 @@ typedef unsigned long long pna_stat_uword;
 #endif                          /* LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,37) */
 
 /* define a new packet type to hook on */
-#define PNA_MAXIF 4
+#define PNA_MAXIF 16
 static struct packet_type pna_packet_type[PNA_MAXIF] = {
 	{ .type = htons(ETH_P_ALL), .func = pna_hook, .dev = NULL, },
 	{ .type = htons(ETH_P_ALL), .func = pna_hook, .dev = NULL, },
@@ -481,9 +481,14 @@ int __init pna_init(void)
 		next = strnchr(pna_iface, IFNAMSIZ, ',');
 		if (NULL != next)
 			*next = '\0';
-		pna_info("pna: capturing on %s", pna_iface);
 		pna_packet_type[i].dev = dev_get_by_name(&init_net, pna_iface);
-		dev_add_pack(&pna_packet_type[i]);
+		if (pna_packet_type[i].dev) {
+			pna_info("pna: capturing on %s", pna_iface);
+			dev_add_pack(&pna_packet_type[i]);
+		}
+		else {
+			pna_err("pna: no interface %s", pna_iface);
+		}
 		pna_iface = next + 1;
 	}
 
