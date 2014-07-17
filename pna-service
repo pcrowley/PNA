@@ -57,7 +57,7 @@ start () {
 
     # Make sure PNA interface(s) are up
     echo
-    for iface in ${PNA_IFACE/,/ } ; do
+    for iface in ${PNA_IFACE//,/ } ; do
         ${IFCONFIG} ${iface} up
         ${IFCONFIG} ${iface} promisc
 
@@ -84,7 +84,7 @@ start () {
 
     # log the current interrupt counts
     date +%s.%N >> irq_count.start
-    grep "\(${PNA_IFACE/,/\|}\)" /proc/interrupts >> irq_count.start
+    grep "\(${PNA_IFACE//,/\|}\)" /proc/interrupts >> irq_count.start
 
     # make sure we have some place to save log files
     mkdir -p "$PNA_LOGDIR"
@@ -127,7 +127,7 @@ stop () {
 
     # log the current interrupt counts
     date +%s.%N >> irq_count.stop
-    grep "\(${PNA_IFACE/,/\|}\)" /proc/interrupts >> irq_count.stop
+    grep "\(${PNA_IFACE//,/\|}\)" /proc/interrupts >> irq_count.stop
 
     # kill all the monitors and alerts
     kill $(cat /var/run/${SERVICE}.pids)
@@ -136,7 +136,7 @@ stop () {
     ${RMMOD} ${PNA_MODULE}
     RETVAL=$?
 
-    for iface in ${PNA_IFACE/,/ } ; do
+    for iface in ${PNA_IFACE//,/ } ; do
         # unset CPU affinities
         for f in /proc/irq/*/${iface}*/../smp_affinity ; do
             cat /proc/irq/default_smp_affinity > $f

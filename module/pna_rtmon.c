@@ -41,12 +41,12 @@ struct pna_rtmon {
 
 /* a NULL .hook signals the end-of-list */
 struct pna_rtmon monitors[] = {
-	{ .init = conmon_init, .hook				 = conmon_hook,
+	{ .init = conmon_init, .hook						      = conmon_hook,
 	  .clean = conmon_clean, .release = conmon_release },
-	{ .init = lipmon_init, .hook				 = lipmon_hook,
+	{ .init = lipmon_init, .hook						      = lipmon_hook,
 	  .clean = lipmon_clean, .release = lipmon_release },
 	/* NULL hook entry is end of list delimited */
-	{ .init = NULL,	       .hook				 = NULL,       .clean= NULL, .release = NULL }
+	{ .init = NULL,	       .hook						      = NULL,	    .clean= NULL, .release = NULL }
 };
 
 /* timer for calling clean function */
