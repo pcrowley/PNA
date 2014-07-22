@@ -155,7 +155,7 @@ int pna_dtrie_init()
 	dtrie_proc_node->mode = S_IFREG | S_IRUGO | S_IWUSR | S_IWGRP;
 	dtrie_proc_node->uid = 0;
 	dtrie_proc_node->gid = 0;
-	dtrie_proc_node->gid = sizeof(unsigned int) * 3;
+	dtrie_proc_node->size = sizeof(unsigned int) * 3;
 
 	return 0;
 }
