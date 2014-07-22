@@ -57,12 +57,7 @@ typedef unsigned long long pna_stat_uword;
 
 /* define a new packet type to hook on */
 #define PNA_MAXIF 16
-static struct packet_type pna_packet_type[PNA_MAXIF] = {
-	{ .type = htons(ETH_P_ALL), .func = pna_hook, .dev = NULL, },
-	{ .type = htons(ETH_P_ALL), .func = pna_hook, .dev = NULL, },
-	{ .type = htons(ETH_P_ALL), .func = pna_hook, .dev = NULL, },
-	{ .type = htons(ETH_P_ALL), .func = pna_hook, .dev = NULL, },
-};
+static struct packet_type *pna_packet_type;
 
 /* define a fragment table for reconstruction */
 #define PNA_MAXFRAGS 512
@@ -476,11 +471,21 @@ int __init pna_init(void)
 		return -1;
 	}
 
+	/* allocate memory for packet type processing */
+	pna_packet_type = (struct packet_type *)kmalloc(PNA_MAXIF * sizeof(struct packet_type), GFP_KERNEL);
+	if (!pna_packet_type) {
+		pna_err("failed to allocate memory for packet types\n");
+		pna_alert_cleanup();
+		pna_cleanup();
+		return -1;
+	}
 	/* everything is set up, register the packet hook */
 	for (i = 0; (i < PNA_MAXIF) && (next != NULL); i++) {
 		next = strnchr(pna_iface, IFNAMSIZ, ',');
 		if (NULL != next)
 			*next = '\0';
+		pna_packet_type[i].type = htons(ETH_P_ALL);
+		pna_packet_type[i].func = pna_hook;
 		pna_packet_type[i].dev = dev_get_by_name(&init_net, pna_iface);
 		if (pna_packet_type[i].dev) {
 			pna_info("pna: capturing on %s", pna_iface);
@@ -511,6 +516,9 @@ void pna_cleanup(void)
 	for (i = 0; (i < PNA_MAXIF) && (pna_packet_type[i].dev != NULL); i++) {
 		dev_remove_pack(&pna_packet_type[i]);
 		pna_info("pna: released %s\n", pna_packet_type[i].dev->name);
+		pna_packet_type[i].type = 0;
+		pna_packet_type[i].func = NULL;
+		pna_packet_type[i].dev = NULL;
 	}
 	rtmon_release();
 	pna_alert_cleanup();

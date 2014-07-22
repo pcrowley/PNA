@@ -41,6 +41,9 @@ clean:
 	$(MAKE) -C module clean
 	$(MAKE) -C user clean
 
+tag:
+	git tag $(shell cat VERSION)
+
 realclean: clean
 	rm -f irq_count.start irq_count.stop
 	rm -f verbose-*.log

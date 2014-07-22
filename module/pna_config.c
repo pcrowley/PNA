@@ -22,6 +22,7 @@
 /* configuration parameters */
 char *pna_iface = "eth0";
 uint pna_tables = 2;
+uint pna_bits = 16;
 uint pna_connections = 0xffffffff;
 uint pna_sessions = 0xffffffff;
 uint pna_tcp_ports = 0xffffffff;
@@ -37,12 +38,14 @@ bool pna_debug = false;
 bool pna_perfmon = true;
 
 bool pna_flowmon = true;
-bool pna_rtmon = true;
+bool pna_rtmon = false;
 
 module_param(pna_iface, charp, S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(pna_iface, "Interface on which we listen to packets");
 module_param(pna_tables, uint, S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(pna_tables, "Number of <src,dst,port> tables to use");
+module_param(pna_bits, uint, S_IRUGO | S_IWUSR);
+MODULE_PARM_DESC(pna_bits, "Bits to use for hash table sizing (2^n)");
 
 module_param(pna_connections, uint, S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(pna_connections,
