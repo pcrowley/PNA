@@ -37,7 +37,7 @@ bool pna_debug = false;
 bool pna_perfmon = true;
 
 bool pna_flowmon = true;
-bool pna_rtmon = true;
+bool pna_rtmon = false;
 
 module_param(pna_iface, charp, S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(pna_iface, "Interface on which we listen to packets");
