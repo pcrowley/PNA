@@ -126,7 +126,7 @@ static int flowtab_release(struct inode *inode, struct file *filep)
 			 i, info->nflows, info->nflows_missed);
 
 	/* zero out the table */
-	memset(info->table_base, 0, PNA_SZ_FLOW_ENTRIES);
+	memset(info->table_base, 0, PNA_SZ_FLOW_ENTRIES(pna_bits));
 
 	/* this table is safe to use again */
 	flowtab_clean(info);
@@ -234,12 +234,12 @@ int flowmon_hook(struct pna_flowkey *key, int direction, unsigned short flags,
 	/* hash */
 	hash = key->local_ip ^ key->remote_ip;
 	hash ^= ((key->remote_port << 16) | key->local_port);
-	hash_0 = hash_32(hash, PNA_FLOW_BITS);
+	hash_0 = hash_32(hash, pna_bits);
 
 	/* loop through table until we find right entry */
 	for (i = 0; i < PNA_TABLE_TRIES; i++) {
 		/* quadratic probe for next entry */
-		hash = (hash_0 + ((i + i * i) >> 1)) & (PNA_FLOW_ENTRIES - 1);
+		hash = (hash_0 + ((i + i * i) >> 1)) & (PNA_FLOW_ENTRIES(pna_bits) - 1);
 
 		/* increment the number of probe tries for the table */
 		info->probes[i]++;
@@ -282,6 +282,7 @@ int flowmon_hook(struct pna_flowkey *key, int direction, unsigned short flags,
 int flowmon_init(void)
 {
 	int i;
+	long unsigned int pna_table_size;
 	struct flowtab_info *info;
 	char table_str[PNA_MAX_STR];
 	struct proc_dir_entry *proc_node;
@@ -300,12 +301,13 @@ int flowmon_init(void)
 	memset(flowtab_info, 0, pna_tables * sizeof(struct flowtab_info));
 
 	/* configure each table for use */
+	pna_table_size = PNA_SZ_FLOW_ENTRIES(pna_bits);
 	for (i = 0; i < pna_tables; i++) {
 		info = &flowtab_info[i];
-		info->table_base = vmalloc_user(PNA_SZ_FLOW_ENTRIES);
+		info->table_base = vmalloc_user(pna_table_size);
 		if (!info->table_base) {
 			pna_err("insufficient memory for %d/%d tables (%lu bytes)\n",
-				i, pna_tables, (pna_tables * PNA_SZ_FLOW_ENTRIES));
+				i, pna_tables, (pna_tables * pna_table_size));
 			flowmon_cleanup();
 			return -ENOMEM;
 		}
@@ -328,7 +330,7 @@ int flowmon_init(void)
 		proc_node->mode = S_IFREG | S_IRUGO | S_IWUSR | S_IWGRP;
 		proc_node->uid = 0;
 		proc_node->gid = 0;
-		proc_node->size = PNA_SZ_FLOW_ENTRIES;
+		proc_node->size = pna_table_size;
 	}
 
 	/* get packet arrival timestamps */

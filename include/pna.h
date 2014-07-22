@@ -132,10 +132,6 @@ struct pna_alert_msg {
 };
 #define PNA_ALERT_MSG_SZ (sizeof(struct pna_alert_msg))
 
-/* settings/structures for storing <src,dst,port> entries */
-#define PNA_FLOW_BITS    16
-#define PNA_FLOW_ENTRIES (1 << PNA_FLOW_BITS)
-
 /* definition of a flow for PNA */
 struct pna_flowkey {
 	unsigned short l3_protocol;
@@ -163,7 +159,10 @@ struct flow_entry {
 	struct pna_flowkey key;
 	struct pna_flow_data data;
 };
-#define PNA_SZ_FLOW_ENTRIES (PNA_FLOW_ENTRIES * sizeof(struct flow_entry))
+
+/* settings/structures for storing <src,dst,port> entries */
+#define PNA_FLOW_ENTRIES(bits) (1 << (bits))
+#define PNA_SZ_FLOW_ENTRIES(bits) (PNA_FLOW_ENTRIES((bits)) * sizeof(struct flow_entry))
 
 #ifdef __KERNEL__
 
@@ -178,6 +177,7 @@ extern char *pna_iface;
 extern uint pna_prefix;
 extern uint pna_mask;
 extern uint pna_tables;
+extern uint pna_bits;
 extern uint pna_connections;
 extern uint pna_sessions;
 extern uint pna_tcp_ports;
