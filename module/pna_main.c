@@ -472,7 +472,7 @@ int __init pna_init(void)
 	}
 
 	/* allocate memory for packet type processing */
-	pna_packet_type = (struct packet_type *)kmalloc(PNA_MAXIF * sizeof(struct packet_type), GFP_KERNEL);
+	pna_packet_type = (struct packet_type *)kzalloc(PNA_MAXIF * sizeof(struct packet_type), GFP_KERNEL);
 	if (!pna_packet_type) {
 		pna_err("failed to allocate memory for packet types\n");
 		pna_alert_cleanup();
