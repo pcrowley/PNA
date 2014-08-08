@@ -34,7 +34,7 @@ struct pna_dtrie_entry *pna_dtrie_head;
 struct pna_dtrie_entry *pna_dtrie_entry_alloc()
 {
 	struct pna_dtrie_entry *entry =
-		(struct pna_dtrie_entry*)kmalloc(sizeof(struct pna_dtrie_entry),
+		(struct pna_dtrie_entry*)kzalloc(sizeof(struct pna_dtrie_entry),
 						 GFP_KERNEL);
 
 	if (!entry)
