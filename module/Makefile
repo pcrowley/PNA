@@ -30,8 +30,5 @@ ${MAIN_PROG}: ${MAIN_PROG}.o ${COMMON_OBJS}
 %.o: %.c
 	$(CC) $(CFLAGS) $(EXTRA_CFLAGS) -c $< -o $@
 
-example: example.o util.o
-	$(CC) $(CFLAGS) $(LDFLAGS) example.o util.o -o $@
-
 clean:
 	rm -f *.o
