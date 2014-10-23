@@ -40,9 +40,6 @@ IFCONFIG="/sbin/ifconfig"
 start () {
     PARMS=$1
 
-    # prevent irqbalance from changing interrupts
-    service irqbalance stop
-
     echo "Starting $SERVICE: "
 
     if [ ! -z "$PARMS" ] ; then
@@ -54,13 +51,14 @@ start () {
 
     # Make sure PNA interface(s) are up
     PID_LIST=""
+    RETVAL=0
     for iface in ${PNA_IFACE//,/ } ; do
         ${IFCONFIG} ${iface} up
         ${IFCONFIG} ${iface} promisc
         ARGS="-v -n $NETWORKS_FILE -i $iface"
         nohup ${PNA_PROGRAM} ${ARGS} &
         pid=$!
-        retval=$?
+        RETVAL=$(($RETVAL + $?))
         PID_LIST="$PID_LIST $pid"
         # set affinity if requested
         if [ $PNA_MONPROCS ] ; then
@@ -92,8 +90,8 @@ stop () {
     done
 
     # End with script-y stuff
-    [ $RETVAL = 0 ] && rm -f /var/run/${SERVICE}.pids
-    [ $RETVAL = 0 ] && echo "$SERVICE stopped" || echo "Failed to stop $SERVICE"
+    rm -f /var/run/${SERVICE}.pids
+    echo "$SERVICE stopped" || echo "Failed to stop $SERVICE"
 
     # allow irqbalance to change interrupts
     #service irqbalance start

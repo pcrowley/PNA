@@ -18,12 +18,12 @@ MAIN_PROG := pna
 COMMON_OBJS := pna_main.o pna_config.o pna_flowmon.o pna_domain_trie.o
 COMMON_OBJS += pna_rtmon.o util.o dump_table.o
 
-LDFLAGS := -lpcap
+LDFLAGS := -lpcap -lpthread
 
 all: ${MAIN_PROG}
 
 ${MAIN_PROG}: ${MAIN_PROG}.o ${COMMON_OBJS}
-	$(CC) $(CFLAGS) $(LDFLAGS) $< ${COMMON_OBJS} -o $@
+	$(CC) $(CFLAGS) $< ${COMMON_OBJS} $(LDFLAGS) -o $@
 
 %.o: %.c
 	$(CC) $(CFLAGS) -c $< -o $@
