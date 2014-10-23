@@ -21,6 +21,7 @@
 #include <string.h>
 #include <sys/time.h>
 
+#define __FAVOR_BSD
 #include <netinet/in.h>
 #include <netinet/if_ether.h>
 #include <netinet/ip.h>
