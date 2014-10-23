@@ -191,7 +191,7 @@ int flowmon_init(void)
 		}
 		/* set up table pointers */
 		info->flowtab = info->table_base;
-		flowtab_clean(info);
+		//flowtab_clean(info);
 
 		/* initialize the read_mutec */
 		pthread_mutex_init(&info->read_mutex, NULL);

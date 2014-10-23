@@ -8,10 +8,6 @@
 
 #include "util.h"
 
-typedef int cpu_set_t;
-#define CPU_ZERO(x)   *(x) = 0
-#define CPU_SET(c, x) *(x) = (c)
-
 /**************************************
  * The time difference in millisecond *
  **************************************/
@@ -221,21 +217,4 @@ int32_t gmt2local(time_t t) {
     dt += dir * 24 * 60 * 60;
 
     return (dt);
-}
-
-/* *************************************** */
-/* Bind this thread to a specific core */
-
-int bind2core(u_int core_id) {
-    cpu_set_t cpuset;
-    int s;
-
-    CPU_ZERO(&cpuset);
-    CPU_SET(core_id, &cpuset);
-    if ((s = pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpuset)) != 0) {
-        fprintf(stderr, "Error while binding to core %u: errno=%i\n", core_id, s);
-        return(-1);
-    } else {
-        return(0);
-    }
 }

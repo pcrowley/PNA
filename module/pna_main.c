@@ -31,9 +31,9 @@
 static void pna_perflog(char *pkt, int dir);
 static int pna_localize(struct pna_flowkey *key, int *direction);
 static int pna_done(char *pkt);
-int pna_hook(unsigned int pkt_len, struct timeval tv, char *pkt);
-static int pna_init(void);
-static void pna_cleanup(void);
+int pna_hook(unsigned int pkt_len, struct timeval *tv, char *pkt);
+int pna_init(void);
+void pna_cleanup(void);
 
 typedef unsigned long pna_stat_uword;
 
@@ -61,14 +61,22 @@ static int pna_frag_bytes_missed = 0;
 #endif
 #define PERF_INTERVAL      10
 
+#define GOLDEN_RATIO_PRIME_32  0x9e370001UL
+
+unsigned int hash_32(unsigned int val, unsigned int bits)
+{
+    unsigned int hash = val * GOLDEN_RATIO_PRIME_32;
+    return hash >> (32 - bits);
+}
+
 /* handle IP fragmented packets */
 unsigned long pna_frag_hash(struct ip *iphdr)
 {
 	unsigned long hash = 0;
 
 	/* note: don't care about byte ordering here since we're hashing */
-	hash ^= hash_32(iphdr->ip_src, 32);
-	hash ^= hash_32(iphdr->ip_dst, 32);
+	hash ^= hash_32(iphdr->ip_src.s_addr, 32);
+	hash ^= hash_32(iphdr->ip_dst.s_addr, 32);
 	hash ^= (hash_32(iphdr->ip_p, 16) << 16);
 	hash ^= hash_32(iphdr->ip_id, 16);
 	return hash;
@@ -187,7 +195,7 @@ static int pna_done(char *pkt)
 }
 
 /* per-packet hook that begins pna processing */
-int pna_hook(unsigned int pkt_len, struct timeval tv, char *pkt)
+int pna_hook(unsigned int pkt_len, struct timeval *tv, char *pkt)
 {
 	struct pna_flowkey key;
 	struct pna_frag *entry;

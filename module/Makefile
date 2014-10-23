@@ -25,10 +25,10 @@ EXTRA_CFLAGS += -I$(PWD)/../include/ $(LIBS)
 all: ${MAIN_PROG}
 
 ${MAIN_PROG}: ${MAIN_PROG}.o ${COMMON_OBJS}
-	$(CC) $< ${COMMON_OBJS} -o $@
+	$(CC) $(EXTRA_CFLAGS) $< ${COMMON_OBJS} -o $@
 
 %.o: %.c
 	$(CC) $(CFLAGS) $(EXTRA_CFLAGS) -c $< -o $@
 
 clean:
-	rm -f Module.markers
+	rm -f *.o

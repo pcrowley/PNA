@@ -32,11 +32,12 @@ unsigned int pna_udp_packets = 0xffffffff;
 unsigned int pna_ports = 0xffffffff;
 unsigned int pna_bytes = 0xffffffff;
 unsigned int pna_packets = 0xffffffff;
-bool pna_debug = false;
-bool pna_perfmon = true;
+char pna_debug = false;
 
-bool pna_flowmon = true;
-bool pna_rtmon = false;
+//char pna_perfmon = true;
+//char pna_flowmon = true;
+
+char pna_rtmon = false;
 
 /*
 MODULE_PARM_DESC(pna_iface, "Interface on which we listen to packets");

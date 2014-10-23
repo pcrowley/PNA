@@ -151,7 +151,7 @@ int main(int argc, char* argv[]) {
         return(-1);
     }
 
-    pcap_set_application_name(pd, "ppna");
+    //pcap_set_application_name(pd, "pna");
 
     signal(SIGINT, sigproc);
 

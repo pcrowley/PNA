@@ -21,7 +21,10 @@
 
 #define true  1
 #define false 0
-typedef int bool;
+
+#define pna_err     printf
+#define pna_warning printf
+#define pna_info    printf
 
 #define NET_RX_DROP (-1)
 
@@ -134,10 +137,10 @@ extern unsigned int pna_udp_packets;
 extern unsigned int pna_ports;
 extern unsigned int pna_bytes;
 extern unsigned int pna_packets;
-extern bool pna_debug;
-extern bool pna_perfmon;
-extern bool pna_flowmon;
-extern bool pna_rtmon;
+extern char pna_debug;
+extern char pna_perfmon;
+extern char pna_flowmon;
+extern char pna_rtmon;
 
 /* number of attempts to insert before giving up */
 #define PNA_TABLE_TRIES 32
@@ -159,6 +162,9 @@ struct flowtab_info {
 
 /* some prototypes */
 unsigned int pna_hash(unsigned int key, int bits);
+
+int pna_init(void);
+void pna_cleanup(void);
 
 int flowmon_hook(struct pna_flowkey *key, int direction, unsigned short flags,
 		 char *pkt, unsigned int pkt_len, struct timeval *tv);
