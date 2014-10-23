@@ -29,4 +29,4 @@ ${MAIN_PROG}: ${MAIN_PROG}.o ${COMMON_OBJS}
 	$(CC) $(CFLAGS) -c $< -o $@
 
 clean:
-	rm -f *.o
+	rm -f *.o ${MAIN_PROG}
