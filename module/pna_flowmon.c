@@ -28,11 +28,14 @@
 #include "pna_mod.h"
 
 /* functions for flow monitoring */
-static struct flowtab_info *flowtab_get(struct timeval *tv);
+static struct flowtab_info *flowtab_get(struct timeval tv);
 static int flowkey_match(struct pna_flowkey *key_a,
 			 struct pna_flowkey *key_b);
 int flowmon_init(void);
 void flowmon_cleanup(void);
+static void flowtab_clean(struct flowtab_info *info);
+
+unsigned int hash_32(unsigned int, unsigned int);
 
 /* pointer to information about the flow tables */
 static struct flowtab_info *flowtab_info;
@@ -49,15 +52,45 @@ static struct pna_flowkey null_key = {
 
 static unsigned int flowtab_idx = 0;
 
+static void flowtab_dump(struct flowtab_info *info)
+{
+    printf("dumping table\n");
+
+    /* dump a table to the file system and unlock it once complete */
+    flowtab_clean(info);
+    pthread_mutex_unlock(&info->read_mutex);
+}
+
+/* clear out all the mflowtable data from a flowtab entry */
+static void flowtab_clean(struct flowtab_info *info)
+{
+    memset(info->table_base, 0, PNA_SZ_FLOW_ENTRIES(pna_bits));
+    info->table_dirty = 0;
+    info->first_sec = 0;
+    info->smp_id = 0;
+    info->nflows = 0;
+    info->nflows_missed = 0;
+}
+
 /* determine which flow table to use */
-static struct flowtab_info *flowtab_get(struct timeval *tv)
+static struct flowtab_info *flowtab_get(struct timeval tv)
 {
     static unsigned int lock_misses = 0;
 	int i;
 	struct flowtab_info *info;
 
 	/* figure out which flow table to use */
+    /* assume we're pointing to the right one for now */
 	info = &flowtab_info[flowtab_idx];
+
+    /* dump the table if 10 seconds has passed to keep memory in check */
+    if (info->table_dirty != 0 && tv.tv_sec - info->first_sec >= 10) {
+        /* spin off thread to handle this */
+        flowtab_dump(info);
+        /* move to next table */
+		flowtab_idx = (flowtab_idx + 1) % pna_tables;
+    	info = &flowtab_info[flowtab_idx];
+    }
 
 	/* check if table is locked */
 	i = 0;
@@ -80,7 +113,7 @@ static struct flowtab_info *flowtab_get(struct timeval *tv)
 	/* make sure this table is marked as dirty */
 	// XXX: table_dirty should probably be atomic_t
 	if (info->table_dirty == 0) {
-		info->first_sec = tv->tv_sec;
+		info->first_sec = tv.tv_sec;
 		info->table_dirty = 1;
 		info->smp_id = 0;
 	}
@@ -104,11 +137,16 @@ static inline int flowkey_match(struct pna_flowkey *key_a,
 
 /* Insert/Update this flow */
 int flowmon_hook(struct pna_flowkey *key, int direction, unsigned short flags,
-		 char *pkt, unsigned int pkt_len, struct timeval *tv)
+                 const unsigned char *pkt, unsigned int pkt_len,
+                 struct timeval tv)
 {
 	struct flow_entry *flow;
 	struct flowtab_info *info;
 	unsigned int i, hash_0, hash;
+
+    printf("working on (0x%08x:%d, 0x%08x:%d, %d, %d)\n",
+           key->local_ip, key->local_port, key->remote_ip, key->remote_port, 
+           key->l3_protocol, key->l4_protocol);
 
 	if (NULL == (info = flowtab_get(tv)))
 		return -1;
@@ -134,7 +172,7 @@ int flowmon_hook(struct pna_flowkey *key, int direction, unsigned short flags,
 			flow->data.bytes[direction] += pkt_len + ETH_OVERHEAD;
 			flow->data.packets[direction] += 1;
 			flow->data.flags[direction] |= flags;
-			flow->data.last_tstamp = tv->tv_sec;
+			flow->data.last_tstamp = tv.tv_sec;
 			return 0;
 		}
 
@@ -147,8 +185,8 @@ int flowmon_hook(struct pna_flowkey *key, int direction, unsigned short flags,
 			flow->data.bytes[direction] += pkt_len + ETH_OVERHEAD;
 			flow->data.packets[direction]++;
 			flow->data.flags[direction] |= flags;
-			flow->data.first_tstamp = tv->tv_sec;
-			flow->data.last_tstamp = tv->tv_sec;
+			flow->data.first_tstamp = tv.tv_sec;
+			flow->data.last_tstamp = tv.tv_sec;
 			flow->data.first_dir = direction;
 
 			info->nflows++;
@@ -191,9 +229,9 @@ int flowmon_init(void)
 		}
 		/* set up table pointers */
 		info->flowtab = info->table_base;
-		//flowtab_clean(info);
+		flowtab_clean(info);
 
-		/* initialize the read_mutec */
+		/* initialize the read_mutex */
 		pthread_mutex_init(&info->read_mutex, NULL);
 	}
 

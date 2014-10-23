@@ -37,9 +37,13 @@ unsigned long long numPkts = 0, numBytes = 0;
 
 #define DEFAULT_DEVICE "eth1" /* "e1000" */
 
-char pna_perfmon = 1;
-char pna_flowmon = 0;
+char pna_perfmon = 0;
+char pna_flowmon = 1;
 unsigned int pna_flow_entries = (1 << 23);
+
+int pna_dtrie_init(void);
+int pna_dtrie_deinit(void);
+int pna_dtrie_build(char *networks_file);
 
 int pcap_set_cluster(pcap_t *ring, u_int clusterId);
 int pcap_set_application_name(pcap_t *handle, char *name);
@@ -54,6 +58,7 @@ void sigproc(int sig) {
 
     //print_stats(PCAP, pd, &startTime, numPkts, numBytes);
     pcap_close(pd);
+    pna_dtrie_deinit();
     pna_cleanup();
     exit(0);
 }
@@ -74,6 +79,11 @@ void pkt_hook(u_char *_deviceId, const struct pcap_pkthdr *h, const u_char *p)
 {
     if (numPkts == 0) gettimeofday(&startTime, NULL);
 
+    if (h->len == 0) {
+        // nothing here, carry on
+        return;
+    }
+
     pna_hook(h->len, h->ts, p);
 
     numPkts++;
@@ -89,6 +99,7 @@ void printHelp(void) {
     printf("ppna\n(C) 2012 Michael J Schultz <mjschultz@gmail.com>\n");
     printf("-h                  [Print help]\n");
     printf("-i <device>         [Device name]\n");
+    printf("-n <networks_file>  [File of networks to process]\n");
     printf("-f <entries>    Number of flow table entries (default %u)\n", pna_flow_entries);
     printf("-v                  [Verbose]\n");
 
@@ -108,12 +119,17 @@ void printHelp(void) {
 int main(int argc, char* argv[]) {
     char *device = NULL, c;
     char errbuf[PCAP_ERRBUF_SIZE];
-    int promisc, snaplen = DEFAULT_SNAPLEN;;
+    int promisc, snaplen = DEFAULT_SNAPLEN;
+    int ret;
 
     startTime.tv_sec = 0;
     thiszone = gmt2local(0);
 
-    while((c = getopt(argc,argv,"hi:vf:")) != '?') {
+    /* initialize needed pna components */
+    pna_init();
+    pna_dtrie_init();
+
+    while((c = getopt(argc,argv,"hi:n:vf:")) != '?') {
         if (-1 == c) break;
 
         switch(c) {
@@ -123,6 +139,12 @@ int main(int argc, char* argv[]) {
             break;
         case 'i':
             device = strdup(optarg);
+            break;
+        case 'n':
+            ret = pna_dtrie_build(optarg);
+            if (ret != 0) {
+                exit(1);
+            }
             break;
         case 'v':
             verbose = 1;
@@ -159,8 +181,6 @@ int main(int argc, char* argv[]) {
         signal(SIGALRM, my_sigalarm);
         alarm(ALARM_SLEEP);
     }
-
-    pna_init();
 
     pcap_loop(pd, -1, pkt_hook, NULL);
     pcap_close(pd);

@@ -4,6 +4,10 @@
 
  */
 
+#include <string.h>
+#include <stdlib.h>
+#include <arpa/inet.h>
+
 #include "pna.h"
 
 /* locally used structs */
@@ -15,7 +19,54 @@ struct pna_dtrie_entry {
 
 struct pna_dtrie_entry *pna_dtrie_head;
 
-struct pna_dtrie_entry *pna_dtrie_entry_alloc()
+
+int pna_dtrie_add(unsigned int prefix, unsigned int max_bit_pos,
+                  unsigned int domain_id);
+
+int pna_dtrie_build(char *networks_file)
+{
+	char buffer[100];
+    char *ipstring;
+    char *prefix_string;
+    char *domain_string;
+	FILE *infile;
+    unsigned int prefix, mask, netid;
+
+    infile = fopen(networks_file, "r");
+	if (!infile) {
+		printf("failed to open %s\n", networks_file);
+		return -1;
+	}
+
+	while (fgets(buffer, 100, infile)) {
+		if (buffer[0] == '#')
+			continue;
+		if (buffer[0] == '\n')
+			continue;
+		if (buffer[0] == ' ')
+			continue;
+		ipstring = strtok(buffer, "/\n");
+		prefix_string = strtok(NULL, "/\n");
+		domain_string = strtok(NULL, "/\n");
+		if (!ipstring || !prefix_string || !domain_string) {
+			printf("bad string: '%s'\n", buffer);
+			return -1;
+		}
+		mask = atoi(prefix_string);
+		netid = atoi(domain_string);
+		if (!mask || !netid) {
+			printf("bad string %s or %s\n", prefix_string, domain_string);
+			return -1;
+		}
+
+		prefix = htonl(inet_addr(ipstring));
+        pna_dtrie_add(prefix, mask, netid);
+	}
+
+    return 0;
+}
+
+struct pna_dtrie_entry *pna_dtrie_entry_alloc(void)
 {
 	struct pna_dtrie_entry *entry =
 		(struct pna_dtrie_entry*)malloc(sizeof(struct pna_dtrie_entry));
@@ -27,8 +78,6 @@ struct pna_dtrie_entry *pna_dtrie_entry_alloc()
 	memset(entry->children, 0, 2 * sizeof(struct pna_domain_entry *));
 	return entry;
 }
-
-
 
 unsigned int pna_dtrie_lookup(unsigned int ip)
 {
@@ -92,14 +141,14 @@ int pna_dtrie_rm_node(struct pna_dtrie_entry *entry)
 	return 0;
 }
 
-int pna_dtrie_deinit()
+int pna_dtrie_deinit(void)
 {
 	pna_dtrie_rm_node(pna_dtrie_head);
 	printf("pna dtrie freed\n");
 	return 0;
 }
 
-int pna_dtrie_init()
+int pna_dtrie_init(void)
 {
 	pna_dtrie_head = pna_dtrie_entry_alloc();
 	if (!pna_dtrie_head) {

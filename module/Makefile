@@ -18,17 +18,20 @@ MAIN_PROG := pna
 COMMON_OBJS := pna_main.o pna_config.o pna_flowmon.o pna_domain_trie.o
 COMMON_OBJS += pna_rtmon.o util.o
 
-LIBS := -lpcap
+LDFLAGS := -lpcap
 
-EXTRA_CFLAGS += -I$(PWD)/../include/ $(LIBS)
+EXTRA_CFLAGS += -I$(PWD)/../include/
 
 all: ${MAIN_PROG}
 
 ${MAIN_PROG}: ${MAIN_PROG}.o ${COMMON_OBJS}
-	$(CC) $(EXTRA_CFLAGS) $< ${COMMON_OBJS} -o $@
+	$(CC) $(CFLAGS) $(LDFLAGS) $(EXTRA_CFLAGS) $< ${COMMON_OBJS} -o $@
 
 %.o: %.c
 	$(CC) $(CFLAGS) $(EXTRA_CFLAGS) -c $< -o $@
+
+example: example.o util.o
+	$(CC) $(CFLAGS) $(LDFLAGS) example.o util.o -o $@
 
 clean:
 	rm -f *.o

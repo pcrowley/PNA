@@ -16,6 +16,7 @@
 #ifndef __PNA_H
 #define __PNA_H
 
+#include <stdio.h>
 #include <pthread.h>
 #include <sys/time.h>
 
@@ -165,9 +166,12 @@ unsigned int pna_hash(unsigned int key, int bits);
 
 int pna_init(void);
 void pna_cleanup(void);
+int pna_hook(unsigned int pkt_len, const struct timeval tv,
+                     const unsigned char *pkt);
 
 int flowmon_hook(struct pna_flowkey *key, int direction, unsigned short flags,
-		 char *pkt, unsigned int pkt_len, struct timeval *tv);
+                 const unsigned char *pkt, unsigned int pkt_len,
+                 const struct timeval tv);
 int flowmon_init(void);
 void flowmon_cleanup(void);
 
@@ -176,8 +180,9 @@ int pna_dtrie_init(void);
 int pna_dtrie_deinit(void);
 
 int rtmon_init(void);
-int rtmon_hook(struct pna_flowkey *key, int direction, char *pkt,
-               unsigned int pkt_len, struct timeval *tv, unsigned long data);
+int rtmon_hook(struct pna_flowkey *key, int direction, const unsigned char *pkt,
+               unsigned int pkt_len, const struct timeval tv,
+               unsigned long data);
 void rtmon_release(void);
 
 #endif                          /* __PNA_H */

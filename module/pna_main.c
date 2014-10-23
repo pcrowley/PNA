@@ -17,6 +17,7 @@
 /* main PNA initialization (where the kernel module starts) */
 /* functions: pna_init, pna_cleanup, pna_hook */
 
+#include <stdio.h>
 #include <string.h>
 #include <sys/time.h>
 
@@ -30,8 +31,7 @@
 
 static void pna_perflog(char *pkt, int dir);
 static int pna_localize(struct pna_flowkey *key, int *direction);
-static int pna_done(char *pkt);
-int pna_hook(unsigned int pkt_len, struct timeval *tv, char *pkt);
+static int pna_done(const unsigned char *pkt);
 int pna_init(void);
 void pna_cleanup(void);
 
@@ -189,13 +189,13 @@ static int pna_localize(struct pna_flowkey *key, int *direction)
 }
 
 /* free all te resources we've used */
-static int pna_done(char *pkt)
+static int pna_done(const unsigned char *pkt)
 {
 	return NET_RX_DROP;
 }
 
 /* per-packet hook that begins pna processing */
-int pna_hook(unsigned int pkt_len, struct timeval *tv, char *pkt)
+int pna_hook(unsigned int pkt_len, const struct timeval tv, const unsigned char *pkt)
 {
 	struct pna_flowkey key;
 	struct pna_frag *entry;
@@ -214,28 +214,32 @@ int pna_hook(unsigned int pkt_len, struct timeval *tv, char *pkt)
 
 	/* we now have exclusive access, so let's decode the pkt */
 	ethhdr = eth_hdr(pkt);
-	key.l3_protocol = ethhdr->ether_type;
+	key.l3_protocol = ntohs(ethhdr->ether_type);
 
+    // bump the pkt pointer for ethernet
+    pkt = pkt + sizeof(struct ether_header);
 	switch (key.l3_protocol) {
 	case ETHERTYPE_IP:
 		/* this is a supported type, continue */
 		iphdr = ip_hdr(pkt);
 		/* assume for now that src is local */
-		key.local_ip = iphdr->ip_src.s_addr;
-		key.remote_ip = iphdr->ip_dst.s_addr;
 		key.l4_protocol = iphdr->ip_p;
+		key.local_ip = ntohl(iphdr->ip_src.s_addr);
+		key.remote_ip = ntohl(iphdr->ip_dst.s_addr);
 
 		/* check if there are fragments */
 		frag_off = iphdr->ip_off;
 		offset = frag_off & IP_OFFMASK;
 
+        // bump the pkt pointer for ip
+        pkt = pkt + sizeof(struct ip);
 		switch (key.l4_protocol) {
 		case IPPROTO_TCP:
 			if (offset != 0)
 				return pna_done(pkt);
 			tcphdr = tcp_hdr(pkt);
-			key.local_port = tcphdr->th_sport;
-			key.remote_port = tcphdr->th_dport;
+			key.local_port = ntohs(tcphdr->th_sport);
+			key.remote_port = ntohs(tcphdr->th_dport);
 			flags = tcphdr->th_flags;
 			break;
 		case IPPROTO_UDP:
@@ -254,8 +258,8 @@ int pna_hook(unsigned int pkt_len, struct timeval *tv, char *pkt)
 			} else {
 				/* no offset */
 				udphdr = udp_hdr(pkt);
-				src_port = udphdr->uh_sport;
-				dst_port = udphdr->uh_dport;
+				src_port = ntohs(udphdr->uh_sport);
+				dst_port = ntohs(udphdr->uh_dport);
 				/* there will be fragments, add to table */
 				if (frag_off & IP_MF)
 					pna_set_frag(iphdr, src_port, dst_port);
@@ -327,8 +331,6 @@ int pna_init(void)
 void pna_cleanup(void)
 {
 	rtmon_release();
-	//dtrie deinit should be called before flowmon_cleanup for proc file reasons
-	pna_dtrie_deinit();
 	flowmon_cleanup();
 	pna_info("pna: module is inactive\n");
 }

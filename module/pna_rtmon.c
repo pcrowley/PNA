@@ -30,8 +30,8 @@ static void rtmon_clean(unsigned long data);
  */
 struct pna_rtmon {
 	int (*init)(void);
-	int (*hook)(struct pna_flowkey *, int, char *, unsigned int,
-                struct timeval *,unsigned long *);
+	int (*hook)(struct pna_flowkey *, int, const unsigned char *,
+                unsigned int, const struct timeval, unsigned long *);
 	void (*clean)(void);
 	void (*release)(void);
 };
@@ -39,7 +39,7 @@ struct pna_rtmon {
 /* a NULL .hook signals the end-of-list */
 struct pna_rtmon monitors[] = {
 	/* NULL hook entry is end of list delimited */
-	{ .init = NULL,	       .hook						      = NULL,	    .clean= NULL, .release = NULL }
+	{ .init = NULL, .hook = NULL, .clean = NULL, .release = NULL }
 };
 
 /* reset each rtmon for next round of processing -- once per */
@@ -52,8 +52,9 @@ static void rtmon_clean(unsigned long data)
 }
 
 /* hook from main on packet to start real-time monitoring */
-int rtmon_hook(struct pna_flowkey *key, int direction, char *pkt,
-               unsigned int pkt_len, struct timeval *tv, unsigned long data)
+int rtmon_hook(struct pna_flowkey *key, int direction, const unsigned char *pkt,
+               unsigned int pkt_len, const struct timeval tv,
+               unsigned long data)
 {
 	int ret;
 
@@ -85,4 +86,5 @@ void rtmon_release(void)
 	/* clean up each of the monitors */
 	for (monitor = &monitors[0]; monitor->hook != NULL; monitor++)
 		monitor->release();
+    printf("release rtmon\n");
 }
