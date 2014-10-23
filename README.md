@@ -2,33 +2,30 @@
 
 This software is designed to monitor all traffic arriving at a network
 card, extract summary statistics, insert that packet into a flow table, and
-periodically dump that flow table to a file on disk.  The Linux kernel
-module found in `module/` handles the packet reception and table insertion
-routines.  It also allows arbitrary real-time monitors to be executed for
-each packet received.  Every 10 seconds a user-space program (in `user/`)
-executes and extracts the previously logged summary statistics, creating a
-dump file with all the data in it.
+periodically dump that flow table to a file on disk.
+
+This is a user-space version that generates a binary compatible format with
+the higher-performance kernel-space version.
 
 ## Instructions ##
 
-The Passive Network Appliance (PNA) software has been built against Linux
-kernel 2.6.34, 2.6.37, and 3.2 without error, it should work against other kernel
-versions as well--assuming there have not been major changes.
-
 Building can be done by typing `make` in the top level directory.  This
-will build the kernel module (found in `module/`) and the user-space programs
-(found in `user/`).
+will build the user-space module (found in `module/`).
 
 Loading the kernel module and user-space programs is done with a script
 (`pna-service`).  This script has a few configuration parameters that should
 be set (in `config/monitor`):
 
- - `PNA_IFACE` sets the interface on which traffic will be monitored
+ - `PNA_IFACE` sets the interfaces on which traffic will be monitored
  - `PNA_LOGDIR` sets the location to store the logged statistics
 
 Depending on your network, you can also set the `config/networks` file to
 include the networks to monitor. By default this is the three private
 networks (`10.0.0.0/8`, `172.16.0.0/12`, and `192.168.0.0/16`).
+
+Multiple interfaces are supported by setting `PNA_IFACE` to a
+comma-separated list. For example, `PNA_IFACE=eth0,eth1,eth2` will start a
+separate process listening on each of those interfaces.
 
 Nothing else should need modification.
 
@@ -51,21 +48,15 @@ this project.
 
  - `include/` contains the header file(s) for the PNA software
  - `module/` contains the kernel module source code
-   - `pna_main.c` is the entry point for the kernel module (initialization
-     and hooking
+   - `pna.c` is the main entry point for the program, it handle the libpcap
+     wrapping
+   - `pna_main.c` is the entry point for the dispatching packets to
+     sub-routines (initialization and hooking)
    - `pna_flowmon.c` has routines to insert the packet into a flow entry
      and deals with exporting the summary statistics to user-space
    - `pna_rtmon.c` is the handler for real-time monitors
-   - `pna_rtmon-conlip.c` are two included real-time monitors (connections
-     and local IPs)
-   - `pna_alert.c` is code to send messages to a user-space process when a
-     real-time monitor detects anomalous behavior
    - `pna_config.c` handles run-time configuration parameters
  - `pna-service` is the script to start and stop all the PNA software
- - `user/` has the user-space software
-   - `user_monitor.c` interacts with the flow tables to export them to a
-     log file
-   - `user_alerts.c` is the alert handler for real-time monitors
  - `util/cron/` contains scripts and crontabs that help move files off-site
  - `util/intop/` contains software to help read and process the log files
 

@@ -3,22 +3,11 @@
 *.py[co]
 
 *.o
-*.ko
-*.ko.unsigned
-*.ko.cmd
-*.ko.unsigned.cmd
-*.o.cmd
-*.mod.c
 .tmp_versions/
-Module.symvers
-modules.order
+module/pna
 
 logs/*
 *.log
 irq_count.*
 
 config/monitor
-
-user/user_alerts
-user/user_monitor
-user/network_tool

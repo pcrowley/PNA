@@ -20,15 +20,13 @@ COMMON_OBJS += pna_rtmon.o util.o dump_table.o
 
 LDFLAGS := -lpcap
 
-EXTRA_CFLAGS += -I$(PWD)/../include/
-
 all: ${MAIN_PROG}
 
 ${MAIN_PROG}: ${MAIN_PROG}.o ${COMMON_OBJS}
-	$(CC) $(CFLAGS) $(LDFLAGS) $(EXTRA_CFLAGS) $< ${COMMON_OBJS} -o $@
+	$(CC) $(CFLAGS) $(LDFLAGS) $< ${COMMON_OBJS} -o $@
 
 %.o: %.c
-	$(CC) $(CFLAGS) $(EXTRA_CFLAGS) -c $< -o $@
+	$(CC) $(CFLAGS) -c $< -o $@
 
 clean:
 	rm -f *.o

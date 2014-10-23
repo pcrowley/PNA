@@ -13,18 +13,14 @@
 # limitations under the License.
 
 MODULE := module/pna
-USER := user/user_monitor user/user_alerts
 SERVICE := ./pna-service
 
-all: $(MODULE) $(USER)
+all: $(MODULE)
 
 $(MODULE):
 	$(MAKE) -C module/
 
-$(USER):
-	$(MAKE) -C user/
-
-start: $(MODULE) $(USER)
+start: $(MODULE)
 	sudo $(SERVICE) start "$(PARMS)"
 
 stop:
@@ -39,7 +35,6 @@ indent:
 
 clean:
 	$(MAKE) -C module clean
-	$(MAKE) -C user clean
 
 tag:
 	git tag $(shell cat VERSION)
