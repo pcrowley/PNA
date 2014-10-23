@@ -113,6 +113,10 @@ static struct flowtab_info *flowtab_get(struct timeval tv)
 		flowtab_idx = (flowtab_idx + 1) % pna_tables;
     	info = &flowtab_info[flowtab_idx];
     }
+    else if (info->table_dirty) {
+        /* table is dirty but still active, everything is awesome */
+        return info;
+    }
 
 	/* check if table is locked */
 	i = 0;
@@ -165,10 +169,6 @@ int flowmon_hook(struct pna_flowkey *key, int direction, unsigned short flags,
 	struct flow_entry *flow;
 	struct flowtab_info *info;
 	unsigned int i, hash_0, hash;
-
-    printf("working on (0x%08x:%d, 0x%08x:%d, %d, %d)\n",
-           key->local_ip, key->local_port, key->remote_ip, key->remote_port, 
-           key->l3_protocol, key->l4_protocol);
 
 	if (NULL == (info = flowtab_get(tv)))
 		return -1;
