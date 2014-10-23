@@ -142,6 +142,7 @@ extern char pna_debug;
 extern char pna_perfmon;
 extern char pna_flowmon;
 extern char pna_rtmon;
+extern int verbose;
 
 /* number of attempts to insert before giving up */
 #define PNA_TABLE_TRIES 32
@@ -154,6 +155,7 @@ struct flowtab_info {
     pthread_mutex_t read_mutex;
 
 	int table_dirty;
+    int table_id;
 	unsigned int first_sec;
 	int smp_id;
 	unsigned int nflows;

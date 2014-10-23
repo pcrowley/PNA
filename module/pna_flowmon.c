@@ -27,6 +27,10 @@
 #include "pna.h"
 #include "pna_mod.h"
 
+#define DEFAULT_LOG_DIR  "./logs"
+#define LOG_FILE_FORMAT  "%s/pna-%%Y%%m%%d%%H%%M%%S-table%d.log"
+#define MAX_STR          1024
+
 /* functions for flow monitoring */
 static struct flowtab_info *flowtab_get(struct timeval tv);
 static int flowkey_match(struct pna_flowkey *key_a,
@@ -34,6 +38,8 @@ static int flowkey_match(struct pna_flowkey *key_a,
 int flowmon_init(void);
 void flowmon_cleanup(void);
 static void flowtab_clean(struct flowtab_info *info);
+void dump_table(void *table_base, char *out_file, unsigned int size);
+
 
 unsigned int hash_32(unsigned int, unsigned int);
 
@@ -54,7 +60,23 @@ static unsigned int flowtab_idx = 0;
 
 static void flowtab_dump(struct flowtab_info *info)
 {
-    printf("dumping table\n");
+	struct timeval start;
+    char *log_dir = DEFAULT_LOG_DIR;
+    struct tm *start_tm;
+    char out_base[MAX_STR], out_file[MAX_STR];
+
+    /* determine where to dump the file
+     * - for backward compat we use current time to decide filename
+     */
+	gettimeofday(&start, NULL);
+    start_tm = localtime((time_t*)&start);
+	snprintf(out_base, MAX_STR, LOG_FILE_FORMAT, log_dir, info->table_id);
+    strftime(out_file, MAX_STR, out_base, start_tm);
+
+    printf("dumping to: '%s'\n", out_file);
+
+    /* actually dump the table */
+    dump_table(info->table_base, out_file, PNA_SZ_FLOW_ENTRIES(pna_bits));
 
     /* dump a table to the file system and unlock it once complete */
     flowtab_clean(info);
@@ -229,6 +251,7 @@ int flowmon_init(void)
 		}
 		/* set up table pointers */
 		info->flowtab = info->table_base;
+        info->table_id = i;
 		flowtab_clean(info);
 
 		/* initialize the read_mutex */
