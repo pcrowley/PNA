@@ -12,20 +12,23 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# kernel module files
+# userspace module files
 
-obj-m += pna.o
-pna-objs := pna_main.o pna_config.o pna_flowmon.o pna_domain_trie.o
-pna-objs += pna_rtmon.o pna_rtmon-conlip.o pna_alerts.o
+MAIN_PROG := pna
+COMMON_OBJS := pna_main.o pna_config.o pna_flowmon.o pna_domain_trie.o
+COMMON_OBJS += pna_rtmon.o util.o
 
-KDIR := /lib/modules/`uname -r`/build
-EXTRA_CFLAGS += -I$(PWD)/../include/
+LIBS := -lpcap
 
-all: module $(user-progs)
+EXTRA_CFLAGS += -I$(PWD)/../include/ $(LIBS)
 
-module:
-	$(MAKE) -C $(KDIR) M=`pwd` modules
+all: ${MAIN_PROG}
+
+${MAIN_PROG}: ${MAIN_PROG}.o ${COMMON_OBJS}
+	$(CC) $< ${COMMON_OBJS} -o $@
+
+%.o: %.c
+	$(CC) $(CFLAGS) $(EXTRA_CFLAGS) -c $< -o $@
 
 clean:
-	$(MAKE) -C $(KDIR) M=`pwd` clean
 	rm -f Module.markers

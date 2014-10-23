@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-MODULE := module/pna.ko
+MODULE := module/pna
 USER := user/user_monitor user/user_alerts
 SERVICE := ./pna-service
 
