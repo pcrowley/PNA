@@ -148,7 +148,7 @@ void dump_table(void *table_base, char *out_file, unsigned int file_size)
 
 	/* display the number of entries we got */
 	if (verbose)
-		printf("%d flows to '%s' ", nflows, out_file);
+		printf("%d flows to '%s'\n", nflows, out_file);
 
 	/* write out header data */
 	lseek(fd, 0, SEEK_SET);
