@@ -37,8 +37,10 @@ unsigned long long numPkts = 0, numBytes = 0;
 
 #define ENV_PNA_LOGDIR "PNA_LOGDIR"
 #define DEFAULT_LOG_DIR  "./logs"
-#define DEFAULT_DEVICE "eth1" /* "e1000" */
 char *log_dir;
+
+#define DEFAULT_DEVICE "eth1" /* "e1000" */
+char *listen_device = NULL;
 
 char pna_perfmon = 0;
 char pna_flowmon = 1;
@@ -120,7 +122,7 @@ void printHelp(void) {
 /* *************************************** */
 
 int main(int argc, char* argv[]) {
-    char *device = NULL, c;
+    char c;
     char errbuf[PCAP_ERRBUF_SIZE];
     int promisc, snaplen = DEFAULT_SNAPLEN;
     int ret;
@@ -150,7 +152,7 @@ int main(int argc, char* argv[]) {
             log_dir = strdup(optarg);
             break;
         case 'i':
-            device = strdup(optarg);
+            listen_device = strdup(optarg);
             break;
         case 'n':
             ret = pna_dtrie_build(optarg);
@@ -169,17 +171,17 @@ int main(int argc, char* argv[]) {
         }
     }
 
-    if (device == NULL) {
-        if ((device = pcap_lookupdev(errbuf)) == NULL) {
+    if (listen_device == NULL) {
+        if ((listen_device = pcap_lookupdev(errbuf)) == NULL) {
             printf("pcap_lookup: %s", errbuf);
             return(-1);
         }
     }
-    printf("Capturing from %s\n", device);
+    printf("Capturing from %s\n", listen_device);
 
     /* hardcode: promisc=1, to_ms=500 */
     promisc = 1;
-    if ((pd = pcap_open_live(device, snaplen, 
+    if ((pd = pcap_open_live(listen_device, snaplen, 
                             promisc, 500, errbuf)) == NULL) {
         printf("pcap_open_live: %s\n", errbuf);
         return(-1);
