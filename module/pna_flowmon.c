@@ -27,7 +27,6 @@
 #include "pna.h"
 #include "pna_mod.h"
 
-#define DEFAULT_LOG_DIR  "./logs"
 #define LOG_FILE_FORMAT  "%s/pna-%%Y%%m%%d%%H%%M%%S-table%d.log"
 #define MAX_STR          1024
 
@@ -45,6 +44,7 @@ unsigned int hash_32(unsigned int, unsigned int);
 
 /* pointer to information about the flow tables */
 static struct flowtab_info *flowtab_info;
+extern char *log_dir;
 
 /* simple null key */
 static struct pna_flowkey null_key = {
@@ -61,7 +61,6 @@ static unsigned int flowtab_idx = 0;
 static void flowtab_dump(struct flowtab_info *info)
 {
 	struct timeval start;
-    char *log_dir = DEFAULT_LOG_DIR;
     struct tm *start_tm;
     char out_base[MAX_STR], out_file[MAX_STR];
 

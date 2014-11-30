@@ -35,7 +35,10 @@ struct pcap_stat pcapStats;
 static struct timeval startTime;
 unsigned long long numPkts = 0, numBytes = 0;
 
+#define ENV_PNA_LOGDIR "PNA_LOGDIR"
+#define DEFAULT_LOG_DIR  "./logs"
 #define DEFAULT_DEVICE "eth1" /* "e1000" */
+char *log_dir;
 
 char pna_perfmon = 0;
 char pna_flowmon = 1;
@@ -125,17 +128,26 @@ int main(int argc, char* argv[]) {
     startTime.tv_sec = 0;
     thiszone = gmt2local(0);
 
+    /* load some environment variables */
+    log_dir = getenv(ENV_PNA_LOGDIR);
+    if (!log_dir) {
+        log_dir = DEFAULT_LOG_DIR;
+    }
+
     /* initialize needed pna components */
     pna_init();
     pna_dtrie_init();
 
-    while((c = getopt(argc,argv,"hi:n:vf:")) != '?') {
+    while((c = getopt(argc, argv, "o:hi:n:vf:")) != '?') {
         if (-1 == c) break;
 
         switch(c) {
         case 'h':
             printHelp();
             exit(0);
+            break;
+        case 'o':
+            log_dir = strdup(optarg);
             break;
         case 'i':
             device = strdup(optarg);
