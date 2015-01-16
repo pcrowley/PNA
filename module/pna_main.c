@@ -236,8 +236,10 @@ int pna_hook(unsigned int pkt_len, const struct timeval tv, const unsigned char 
         pkt = pkt + sizeof(struct ip);
 		switch (key.l4_protocol) {
 		case IPPROTO_TCP:
-			if (offset != 0)
+			if (offset != 0) {
+                printf("ipproto_tcp, offset: %d\n", offset);
 				return pna_done(pkt);
+            }
 			tcphdr = tcp_hdr(pkt);
 			key.local_port = ntohs(tcphdr->th_sport);
 			key.remote_port = ntohs(tcphdr->th_dport);
@@ -269,6 +271,7 @@ int pna_hook(unsigned int pkt_len, const struct timeval tv, const unsigned char 
 			key.remote_port = dst_port;
 			break;
 		default:
+            printf("unknown ipproto: %d\n", key.l4_protocol);
 			return pna_done(pkt);
 		}
 		break;
