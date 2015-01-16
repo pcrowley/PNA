@@ -229,7 +229,7 @@ int pna_hook(unsigned int pkt_len, const struct timeval tv, const unsigned char 
 		key.remote_ip = ntohl(iphdr->ip_dst.s_addr);
 
 		/* check if there are fragments */
-		frag_off = iphdr->ip_off;
+		frag_off = ntohs(iphdr->ip_off);
 		offset = frag_off & IP_OFFMASK;
 
         // bump the pkt pointer for ip
