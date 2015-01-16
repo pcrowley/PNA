@@ -18,7 +18,6 @@
 #include "pna.h"
 
 /* configuration parameters */
-char *pna_iface = "eth0";
 unsigned int pna_tables = 2;
 unsigned int pna_bits = 16;
 unsigned int pna_connections = 0xffffffff;
@@ -40,7 +39,6 @@ char pna_debug = false;
 char pna_rtmon = false;
 
 /*
-MODULE_PARM_DESC(pna_iface, "Interface on which we listen to packets");
 MODULE_PARM_DESC(pna_tables, "Number of <src,dst,port> tables to use");
 MODULE_PARM_DESC(pna_bits, "Bits to use for hash table sizing (2^n)");
 

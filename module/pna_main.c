@@ -306,7 +306,6 @@ int pna_hook(unsigned int pkt_len, const struct timeval tv, const unsigned char 
 /* Initialization hook */
 int pna_init(void)
 {
-	char *next = pna_iface;
 	int i;
 	int ret = 0;
 
@@ -322,8 +321,7 @@ int pna_init(void)
 	}
 
 	/* everything is set up, register the packet hook */
-	pna_info("pna: capturing on %s", pna_iface);
-	pna_info("pna: module is initialized %s\n", next);
+	pna_info("pna: capturing is available\n");
 
 	return ret;
 }
