@@ -66,8 +66,8 @@ static int pna_frag_bytes_missed = 0;
 
 unsigned int hash_32(unsigned int val, unsigned int bits)
 {
-    unsigned int hash = val * GOLDEN_RATIO_PRIME_32;
-    return hash >> (32 - bits);
+	unsigned int hash = val * GOLDEN_RATIO_PRIME_32;
+	return hash >> (32 - bits);
 }
 
 /* handle IP fragmented packets */
@@ -217,13 +217,13 @@ int pna_hook(unsigned int pkt_len, const struct timeval tv, const unsigned char 
 	ethhdr = eth_hdr(pkt);
 	key.l3_protocol = ntohs(ethhdr->ether_type);
 
-    /* we don't care about VLAN tag(s)s - there may be multiple level */
-    if (key.l3_protocol == ETHERTYPE_VLAN) {
-        bump = 4;
-    }
+	/* we don't care about VLAN tag(s)s - there may be multiple level */
+	if (key.l3_protocol == ETHERTYPE_VLAN) {
+		bump = 4;
+	}
 
-    // bump the pkt pointer for ethernet
-    pkt = sizeof(struct ether_header) + pkt + bump;
+	// bump the pkt pointer for ethernet
+	pkt = sizeof(struct ether_header) + pkt + bump;
 	switch (key.l3_protocol) {
 	case ETHERTYPE_IP:
 		/* this is a supported type, continue */
@@ -237,14 +237,14 @@ int pna_hook(unsigned int pkt_len, const struct timeval tv, const unsigned char 
 		frag_off = ntohs(iphdr->ip_off);
 		offset = frag_off & IP_OFFMASK;
 
-        // bump the pkt pointer for ip
-        pkt = pkt + sizeof(struct ip);
+		// bump the pkt pointer for ip
+		pkt = pkt + sizeof(struct ip);
 		switch (key.l4_protocol) {
 		case IPPROTO_TCP:
 			if (offset != 0) {
-                printf("ipproto_tcp, offset: %d\n", offset);
+				printf("ipproto_tcp, offset: %d\n", offset);
 				return pna_done(pkt);
-            }
+			}
 			tcphdr = tcp_hdr(pkt);
 			key.local_port = ntohs(tcphdr->th_sport);
 			key.remote_port = ntohs(tcphdr->th_dport);
@@ -276,7 +276,7 @@ int pna_hook(unsigned int pkt_len, const struct timeval tv, const unsigned char 
 			key.remote_port = dst_port;
 			break;
 		default:
-            printf("unknown ipproto: %d\n", key.l4_protocol);
+			printf("unknown ipproto: %d\n", key.l4_protocol);
 			return pna_done(pkt);
 		}
 		break;
