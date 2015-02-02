@@ -205,7 +205,7 @@ int pna_hook(unsigned int pkt_len, const struct timeval tv, const unsigned char 
 	struct tcphdr *tcphdr;
 	struct udphdr *udphdr;
 	unsigned short src_port, dst_port, frag_off, flags;
-	int ret, direction, offset, bump;
+	int ret, direction, offset;
 
 	/* make sure the key is all zeros before we start */
 	memset(&key, 0, sizeof(key));
@@ -219,11 +219,16 @@ int pna_hook(unsigned int pkt_len, const struct timeval tv, const unsigned char 
 
 	/* we don't care about VLAN tag(s)s - there may be multiple level */
 	if (key.l3_protocol == ETHERTYPE_VLAN) {
-		bump = 4;
+		// bump packet forward 4 bytes for 1 VLAN header
+		pkt += 4;
+		// recast the ethhdr and extract the l3_protocol
+		// XXX: this breaks the mac addresses, but we don't use them
+		ethhdr = eth_hdr(pkt);
+		key.l3_protocol = ntohs(ethhdr->ether_type);
 	}
 
 	// bump the pkt pointer for ethernet
-	pkt = sizeof(struct ether_header) + pkt + bump;
+	pkt = sizeof(struct ether_header) + pkt;
 	switch (key.l3_protocol) {
 	case ETHERTYPE_IP:
 		/* this is a supported type, continue */
