@@ -202,29 +202,132 @@ static int pna_done(const unsigned char *pkt)
 	return NET_RX_DROP;
 }
 
+/* handle the understanding of IP protocols */
+int ip_hook(
+	struct pna_flowkey *key, unsigned int pkt_len, const unsigned char *pkt,
+	struct ip *iphdr, unsigned short *flags)
+{
+	struct tcphdr *tcphdr;
+	struct udphdr *udphdr;
+	struct pna_sctpcommonhdr *sctphdr;
+	struct icmp *icmphdr;
+	struct pna_frag *entry;
+
+	unsigned short src_port, dst_port, frag_off, offset;
+
+	// check if there are fragments
+	frag_off = ntohs(iphdr->ip_off);
+	offset = frag_off & IP_OFFMASK;
+
+	switch (key->l4_protocol) {
+	case IPPROTO_TCP:
+		if (offset != 0) {
+			printf("ipproto_tcp, offset: %d\n", offset);
+			return pna_done(pkt);
+		}
+		tcphdr = tcp_hdr(pkt);
+		src_port = ntohs(tcphdr->th_sport);
+		dst_port = ntohs(tcphdr->th_dport);
+		*flags = tcphdr->th_flags;
+		break;
+	case IPPROTO_UDP:
+		/* this is an IP fragmented UDP packet */
+		if (offset != 0) {
+			/* offset is set, get the appropriate entry */
+			entry = pna_get_frag(iphdr);
+			/* no entry means we can't record - arrived out of order */
+			if (!entry) {
+				pna_frag_packets_missed += 1;
+				pna_frag_bytes_missed += pkt_len + ETH_OVERHEAD;
+				return pna_done(pkt);
+			}
+			src_port = entry->src_port;
+			dst_port = entry->dst_port;
+		} else {
+			/* no offset */
+			udphdr = udp_hdr(pkt);
+			src_port = ntohs(udphdr->uh_sport);
+			dst_port = ntohs(udphdr->uh_dport);
+			/* there will be fragments, add to table */
+			if (frag_off & IP_MF)
+				pna_set_frag(iphdr, src_port, dst_port);
+		}
+		break;
+	case IPPROTO_SCTP:
+		/* this is an SCTP packet, extract ports */
+		if (offset != 0) {
+			printf("ipproto_sctp, offset: %d\n", offset);
+			return pna_done(pkt);
+		}
+		sctphdr = sctp_hdr(pkt);
+		src_port = ntohs(sctphdr->src_port);
+		dst_port = ntohs(sctphdr->dst_port);
+	case IPPROTO_ICMP:
+		/* this is designed to mimic the NetFlow encoding for ICMP */
+		// - src port is 0
+		// - dst port is type and code (icmp_type*256 + icmp_code)
+		icmphdr = icmp_hdr(pkt);
+		src_port = 0;
+		dst_port = (icmphdr->icmp_type << 8) + icmphdr->icmp_code;
+	default:
+		printf("unknown ipproto: %d\n", key->l4_protocol);
+	case IPPROTO_OSPFIGP:  // don't care about OSPF
+	case 253: case 254:  // IANA reserved for experimentation and testing
+		return pna_done(pkt);
+	}
+
+	// now put the ports in the key
+	key->local_port = src_port;
+	key->remote_port = dst_port;
+
+	return 0;
+}
+
+/* handle the understanding of ethernet */
+int ether_hook(
+	struct pna_flowkey *key, unsigned int pkt_len, const unsigned char *pkt,
+	unsigned short *flags)
+{
+	int ret;
+	struct ip *iphdr;
+
+	switch (key->l3_protocol) {
+	case ETHERTYPE_IP:
+		// this is a supported type, continue
+		iphdr = ip_hdr(pkt);
+		// assume for now that src is local
+		key->l4_protocol = iphdr->ip_p;
+		key->local_ip = ntohl(iphdr->ip_src.s_addr);
+		key->remote_ip = ntohl(iphdr->ip_dst.s_addr);
+
+		// bump the pkt pointer for ip
+		pkt = pkt + sizeof(struct ip);
+		ret = ip_hook(key, pkt_len, pkt, iphdr, flags);
+		if (ret != 0) {
+			return pna_done(pkt);
+		}
+		break;
+	default:
+		return pna_done(pkt);
+	}
+
+	return 0;
+}
+
 /* per-packet hook that begins pna processing */
 int pna_hook(
 	unsigned int pkt_len, const struct timeval tv, const unsigned char *pkt)
 {
 	struct pna_flowkey key;
-	struct pna_frag *entry;
 	struct ether_header *ethhdr;
-	struct ip *iphdr;
-	struct tcphdr *tcphdr;
-	struct udphdr *udphdr;
-	struct pna_sctpcommonhdr *sctphdr;
-	struct icmp *icmphdr;
-	unsigned short src_port, dst_port, frag_off, flags;
-	int ret, direction, offset;
+	int ret, direction;
 	int check_depth;
+	unsigned short flags = 0;
 
 	/* make sure the key is all zeros before we start */
 	memset(&key, 0, sizeof(key));
 
-	/* by default assume no flags */
-	flags = 0;
-
-	/* we now have exclusive access, so let's decode the pkt */
+	/* let's decode the pkt (assume it's ethernet!) */
 	ethhdr = eth_hdr(pkt);
 	key.l3_protocol = ntohs(ethhdr->ether_type);
 
@@ -246,85 +349,10 @@ int pna_hook(
 
 	// bump the pkt pointer for ethernet
 	pkt = sizeof(struct ether_header) + pkt;
-	switch (key.l3_protocol) {
-	case ETHERTYPE_IP:
-		/* this is a supported type, continue */
-		iphdr = ip_hdr(pkt);
-		/* assume for now that src is local */
-		key.l4_protocol = iphdr->ip_p;
-		key.local_ip = ntohl(iphdr->ip_src.s_addr);
-		key.remote_ip = ntohl(iphdr->ip_dst.s_addr);
-
-		/* check if there are fragments */
-		frag_off = ntohs(iphdr->ip_off);
-		offset = frag_off & IP_OFFMASK;
-
-		// bump the pkt pointer for ip
-		pkt = pkt + sizeof(struct ip);
-		switch (key.l4_protocol) {
-		case IPPROTO_TCP:
-			if (offset != 0) {
-				printf("ipproto_tcp, offset: %d\n", offset);
-				return pna_done(pkt);
-			}
-			tcphdr = tcp_hdr(pkt);
-			src_port = ntohs(tcphdr->th_sport);
-			dst_port = ntohs(tcphdr->th_dport);
-			flags = tcphdr->th_flags;
-			break;
-		case IPPROTO_UDP:
-			/* this is an IP fragmented UDP packet */
-			if (offset != 0) {
-				/* offset is set, get the appropriate entry */
-				entry = pna_get_frag(iphdr);
-				/* no entry means we can't record - arrived out of order */
-				if (!entry) {
-					pna_frag_packets_missed += 1;
-					pna_frag_bytes_missed += pkt_len + ETH_OVERHEAD;
-					return pna_done(pkt);
-				}
-				src_port = entry->src_port;
-				dst_port = entry->dst_port;
-			} else {
-				/* no offset */
-				udphdr = udp_hdr(pkt);
-				src_port = ntohs(udphdr->uh_sport);
-				dst_port = ntohs(udphdr->uh_dport);
-				/* there will be fragments, add to table */
-				if (frag_off & IP_MF)
-					pna_set_frag(iphdr, src_port, dst_port);
-			}
-			break;
-		case IPPROTO_SCTP:
-			/* this is an SCTP packet, extract ports */
-			if (offset != 0) {
-				printf("ipproto_sctp, offset: %d\n", offset);
-				return pna_done(pkt);
-			}
-			sctphdr = sctp_hdr(pkt);
-			src_port = ntohs(sctphdr->src_port);
-			dst_port = ntohs(sctphdr->dst_port);
-		case IPPROTO_ICMP:
-			/* this is designed to mimic the NetFlow encoding for ICMP */
-			// - src port is 0
-			// - dst port is type and code (icmp_type*256 + icmp_code)
-			icmphdr = icmp_hdr(pkt);
-			src_port = 0;
-			dst_port = (icmphdr->icmp_type << 8) + icmphdr->icmp_code;
-		default:
-			printf("unknown ipproto: %d\n", key.l4_protocol);
-		case IPPROTO_OSPFIGP:  // don't care about OSPF
-		case 253: case 254:  // IANA reserved for experimentation and testing
-			return pna_done(pkt);
-		}
-		break;
-	default:
+	ret = ether_hook(&key, pkt_len, pkt, &flags);
+	if (ret != 0) {
 		return pna_done(pkt);
 	}
-
-	// now put the ports in the key
-	key.local_port = src_port;
-	key.remote_port = dst_port;
 
 	/* entire key should now be filled in and we have a flow, localize it */
 	if (!pna_localize(&key, &direction))
