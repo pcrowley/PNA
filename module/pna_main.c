@@ -27,6 +27,7 @@
 #include <netinet/ip.h>
 #include <netinet/tcp.h>
 #include <netinet/udp.h>
+#include <netinet/ip_icmp.h>
 
 #include "pna.h"
 
@@ -51,6 +52,7 @@ struct pna_sctpcommonhdr {
 #define tcp_hdr(pkt) (struct tcphdr *)(pkt)
 #define udp_hdr(pkt) (struct udphdr *)(pkt)
 #define sctp_hdr(pkt) (struct pna_sctpcommonhdr *)(pkt)
+#define icmp_hdr(pkt) (struct icmp *)(pkt)
 
 // maximum number of protocol encapsulations (e.g., VLAN, GRE)
 #define PNA_MAX_CHECKS 8
@@ -211,6 +213,7 @@ int pna_hook(
 	struct tcphdr *tcphdr;
 	struct udphdr *udphdr;
 	struct pna_sctpcommonhdr *sctphdr;
+	struct icmp *icmphdr;
 	unsigned short src_port, dst_port, frag_off, flags;
 	int ret, direction, offset;
     int check_depth;
@@ -301,6 +304,13 @@ int pna_hook(
 			sctphdr = sctp_hdr(pkt);
             src_port = ntohs(sctphdr->src_port);
             dst_port = ntohs(sctphdr->dst_port);
+        case IPPROTO_ICMP:
+            /* this is designed to mimic the NetFlow encoding for ICMP */
+            // - src port is 0
+            // - dst port is type and code (icmp_type*256 + icmp_code)
+            icmphdr = icmp_hdr(pkt);
+            src_port = 0;
+            dst_port = (icmphdr->icmp_type << 8) + icmphdr->icmp_code;
 		default:
 			printf("unknown ipproto: %d\n", key.l4_protocol);
 			return pna_done(pkt);
