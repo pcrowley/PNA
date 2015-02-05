@@ -43,9 +43,15 @@ char *log_dir;
 
 char *listen_device = NULL;
 
+/* PNA configuration parameters */
+unsigned int pna_flow_entries = (1 << 23);
+unsigned int pna_tables = 2;
+unsigned int pna_bits = 16;
+
+char pna_debug = false;
 char pna_perfmon = 0;
 char pna_flowmon = 1;
-unsigned int pna_flow_entries = (1 << 23);
+char pna_rtmon = false;
 
 int pna_dtrie_init(void);
 int pna_dtrie_deinit(void);

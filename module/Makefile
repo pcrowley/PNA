@@ -15,7 +15,7 @@
 # userspace module files
 
 MAIN_PROG := pna
-COMMON_OBJS := pna_main.o pna_config.o pna_flowmon.o pna_domain_trie.o
+COMMON_OBJS := pna_main.o pna_flowmon.o pna_domain_trie.o
 COMMON_OBJS += pna_rtmon.o util.o dump_table.o
 
 LDFLAGS := -lpcap -lpthread
