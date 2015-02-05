@@ -38,10 +38,19 @@ void pna_cleanup(void);
 
 typedef unsigned long pna_stat_uword;
 
+// not all hosts have sctp structs, make a simple one for our needs
+struct pna_sctpcommonhdr {
+    unsigned short src_port;
+    unsigned short dst_port;
+    unsigned long verification_tag;
+    unsigned long checksum;
+};
+
 #define eth_hdr(pkt) (struct ether_header *)(pkt)
 #define ip_hdr(pkt) (struct ip *)(pkt)
 #define tcp_hdr(pkt) (struct tcphdr *)(pkt)
 #define udp_hdr(pkt) (struct udphdr *)(pkt)
+#define sctp_hdr(pkt) (struct pna_sctpcommonhdr *)(pkt)
 
 // maximum number of protocol encapsulations (e.g., VLAN, GRE)
 #define PNA_MAX_CHECKS 8
@@ -201,6 +210,7 @@ int pna_hook(
 	struct ip *iphdr;
 	struct tcphdr *tcphdr;
 	struct udphdr *udphdr;
+	struct pna_sctpcommonhdr *sctphdr;
 	unsigned short src_port, dst_port, frag_off, flags;
 	int ret, direction, offset;
     int check_depth;
@@ -264,7 +274,7 @@ int pna_hook(
 			if (offset != 0) {
 				/* offset is set, get the appropriate entry */
 				entry = pna_get_frag(iphdr);
-				/* no entry means we can't record - UDP can arrive out of order */
+				/* no entry means we can't record - arrived out of order */
 				if (!entry) {
 					pna_frag_packets_missed += 1;
 					pna_frag_bytes_missed += pkt_len + ETH_OVERHEAD;
@@ -282,6 +292,15 @@ int pna_hook(
 					pna_set_frag(iphdr, src_port, dst_port);
 			}
 			break;
+        case IPPROTO_SCTP:
+            /* this is an SCTP packet, extract ports */
+			if (offset != 0) {
+				printf("ipproto_sctp, offset: %d\n", offset);
+				return pna_done(pkt);
+			}
+			sctphdr = sctp_hdr(pkt);
+            src_port = ntohs(sctphdr->src_port);
+            dst_port = ntohs(sctphdr->dst_port);
 		default:
 			printf("unknown ipproto: %d\n", key.l4_protocol);
 			return pna_done(pkt);
