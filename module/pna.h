@@ -122,21 +122,8 @@ struct flow_entry {
 #define ETH_OVERHEAD       (ETH_INTERFRAME_GAP + ETH_PREAMBLE + ETH_HLEN + ETH_FCS_LEN)
 
 /* configuration settings */
-extern unsigned int pna_prefix;
-extern unsigned int pna_mask;
 extern unsigned int pna_tables;
 extern unsigned int pna_bits;
-extern unsigned int pna_connections;
-extern unsigned int pna_sessions;
-extern unsigned int pna_tcp_ports;
-extern unsigned int pna_tcp_bytes;
-extern unsigned int pna_tcp_packets;
-extern unsigned int pna_udp_ports;
-extern unsigned int pna_udp_bytes;
-extern unsigned int pna_udp_packets;
-extern unsigned int pna_ports;
-extern unsigned int pna_bytes;
-extern unsigned int pna_packets;
 extern char pna_debug;
 extern char pna_perfmon;
 extern char pna_flowmon;
