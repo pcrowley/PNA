@@ -1,7 +1,7 @@
-/*
-   Code to peform longest prefix match on an IP and return the domain to
-   which it belongs.  All inputs must be in network byte order
-
+/**
+ * pna_domain_trie.c
+ * Code to peform longest prefix match on an IP and return the domain to
+ * which it belongs.  All inputs must be in network byte order
  */
 
 #include <string.h>
