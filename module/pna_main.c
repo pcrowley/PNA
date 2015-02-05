@@ -47,8 +47,22 @@ struct pna_sctpcommonhdr {
 	unsigned long checksum;
 };
 
+// pna wants a basic understanding of GRE tunnels to decapsulate them
+struct pna_grehdr {
+	unsigned char checksum_present : 1;
+	unsigned char routing_present : 1;
+	unsigned char key_present : 1;
+	unsigned char sequence_present : 1;
+	unsigned char strict_route : 1;
+	unsigned char recur : 3;
+	unsigned char flags : 5;
+	unsigned char version : 3;
+	unsigned short protocol;
+};
+
 #define eth_hdr(pkt) (struct ether_header *)(pkt)
 #define ip_hdr(pkt) (struct ip *)(pkt)
+#define gre_hdr(pkt) (struct pna_grehdr *)(pkt)
 #define tcp_hdr(pkt) (struct tcphdr *)(pkt)
 #define udp_hdr(pkt) (struct udphdr *)(pkt)
 #define sctp_hdr(pkt) (struct pna_sctpcommonhdr *)(pkt)
@@ -285,14 +299,20 @@ int ip_hook(
 
 /* handle the understanding of ethernet */
 int ether_hook(
-	struct pna_flowkey *key, unsigned int pkt_len, const unsigned char *pkt,
-	unsigned short *flags)
+	struct pna_flowkey *key, unsigned int pkt_remains,
+	const unsigned char *pkt, unsigned short *flags)
 {
 	int ret;
+	unsigned int pad;
 	struct ip *iphdr;
+	struct pna_grehdr *grehdr;
 
 	switch (key->l3_protocol) {
 	case ETHERTYPE_IP:
+		// not enough to process
+		if (pkt_remains < sizeof(struct ip)) {
+			return pna_done(pkt);
+		}
 		// this is a supported type, continue
 		iphdr = ip_hdr(pkt);
 		// assume for now that src is local
@@ -302,7 +322,31 @@ int ether_hook(
 
 		// bump the pkt pointer for ip
 		pkt = pkt + sizeof(struct ip);
-		ret = ip_hook(key, pkt_len, pkt, iphdr, flags);
+		pkt_remains -= sizeof(struct ip);
+
+		// GRE: It's not who you are but what you do that defines you.
+		// dis-encapsulate GRE
+		if (key->l4_protocol == IPPROTO_GRE) {
+			grehdr = gre_hdr(pkt);
+			if (grehdr->routing_present) {
+				// cannot handle routing information in packet
+				return pna_done(pkt);
+			}
+			pad = 4;  // base header
+			// we bailed on routing_present, but checksum is okay and
+			// implies the offset field exists, account for it
+			pad += (grehdr->checksum_present ? 4 : 0);
+			pad += (grehdr->key_present ? 4 : 0);
+			pad += (grehdr->sequence_present ? 4 : 0);
+			// update to the encapsulated protocol
+			key->l3_protocol = ntohs(grehdr->protocol);
+			pkt = pkt + sizeof(struct pna_grehdr) + pad;
+			pkt_remains -= (sizeof(struct pna_grehdr) + pad);
+			return ether_hook(key, pkt_remains, pkt, flags);
+		}
+
+		// otherwise we hook onto IP layer
+		ret = ip_hook(key, pkt_remains, pkt, iphdr, flags);
 		if (ret != 0) {
 			return pna_done(pkt);
 		}
@@ -323,6 +367,7 @@ int pna_hook(
 	int ret, direction;
 	int check_depth;
 	unsigned short flags = 0;
+	unsigned int pkt_remains = pkt_len;
 
 	/* make sure the key is all zeros before we start */
 	memset(&key, 0, sizeof(key));
@@ -337,6 +382,7 @@ int pna_hook(
 		check_depth += 1;
 		// bump packet forward 4 bytes for 1 VLAN header
 		pkt += 4;
+		pkt_remains -= 4;
 		// recast the ethhdr and extract the l3_protocol
 		// XXX: this breaks the mac addresses, but we don't use them
 		ethhdr = eth_hdr(pkt);
@@ -349,6 +395,7 @@ int pna_hook(
 
 	// bump the pkt pointer for ethernet
 	pkt = sizeof(struct ether_header) + pkt;
+	pkt_remains -= sizeof(struct ether_header);
 	ret = ether_hook(&key, pkt_len, pkt, &flags);
 	if (ret != 0) {
 		return pna_done(pkt);
