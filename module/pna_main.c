@@ -313,6 +313,8 @@ int pna_hook(
             dst_port = (icmphdr->icmp_type << 8) + icmphdr->icmp_code;
 		default:
 			printf("unknown ipproto: %d\n", key.l4_protocol);
+        case IPPROTO_OSPFIGP:  // don't care about OSPF
+        case 253: case 254:    // IANA reserved for experimentation and testing
 			return pna_done(pkt);
 		}
 		break;
