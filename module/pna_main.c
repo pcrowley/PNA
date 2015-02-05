@@ -41,10 +41,10 @@ typedef unsigned long pna_stat_uword;
 
 // not all hosts have sctp structs, make a simple one for our needs
 struct pna_sctpcommonhdr {
-    unsigned short src_port;
-    unsigned short dst_port;
-    unsigned long verification_tag;
-    unsigned long checksum;
+	unsigned short src_port;
+	unsigned short dst_port;
+	unsigned long verification_tag;
+	unsigned long checksum;
 };
 
 #define eth_hdr(pkt) (struct ether_header *)(pkt)
@@ -204,7 +204,7 @@ static int pna_done(const unsigned char *pkt)
 
 /* per-packet hook that begins pna processing */
 int pna_hook(
-    unsigned int pkt_len, const struct timeval tv, const unsigned char *pkt)
+	unsigned int pkt_len, const struct timeval tv, const unsigned char *pkt)
 {
 	struct pna_flowkey key;
 	struct pna_frag *entry;
@@ -216,7 +216,7 @@ int pna_hook(
 	struct icmp *icmphdr;
 	unsigned short src_port, dst_port, frag_off, flags;
 	int ret, direction, offset;
-    int check_depth;
+	int check_depth;
 
 	/* make sure the key is all zeros before we start */
 	memset(&key, 0, sizeof(key));
@@ -229,9 +229,9 @@ int pna_hook(
 	key.l3_protocol = ntohs(ethhdr->ether_type);
 
 	/* we don't care about VLAN tag(s)s - there may be multiple level */
-    check_depth = 0  // limit the number of VLAN encapsulations
+	check_depth = 0;  // limit the number of VLAN encapsulations
 	while (key.l3_protocol == ETHERTYPE_VLAN && check_depth < PNA_MAX_CHECKS) {
-        check_depth += 1;
+		check_depth += 1;
 		// bump packet forward 4 bytes for 1 VLAN header
 		pkt += 4;
 		// recast the ethhdr and extract the l3_protocol
@@ -239,10 +239,10 @@ int pna_hook(
 		ethhdr = eth_hdr(pkt);
 		key.l3_protocol = ntohs(ethhdr->ether_type);
 	}
-    if (check_depth == PNA_MAX_CHECKS) {
-        // we never got to the actual packet data
-        return pna_done(pkt);
-    }
+	if (check_depth == PNA_MAX_CHECKS) {
+		// we never got to the actual packet data
+		return pna_done(pkt);
+	}
 
 	// bump the pkt pointer for ethernet
 	pkt = sizeof(struct ether_header) + pkt;
@@ -295,26 +295,26 @@ int pna_hook(
 					pna_set_frag(iphdr, src_port, dst_port);
 			}
 			break;
-        case IPPROTO_SCTP:
-            /* this is an SCTP packet, extract ports */
+		case IPPROTO_SCTP:
+			/* this is an SCTP packet, extract ports */
 			if (offset != 0) {
 				printf("ipproto_sctp, offset: %d\n", offset);
 				return pna_done(pkt);
 			}
 			sctphdr = sctp_hdr(pkt);
-            src_port = ntohs(sctphdr->src_port);
-            dst_port = ntohs(sctphdr->dst_port);
-        case IPPROTO_ICMP:
-            /* this is designed to mimic the NetFlow encoding for ICMP */
-            // - src port is 0
-            // - dst port is type and code (icmp_type*256 + icmp_code)
-            icmphdr = icmp_hdr(pkt);
-            src_port = 0;
-            dst_port = (icmphdr->icmp_type << 8) + icmphdr->icmp_code;
+			src_port = ntohs(sctphdr->src_port);
+			dst_port = ntohs(sctphdr->dst_port);
+		case IPPROTO_ICMP:
+			/* this is designed to mimic the NetFlow encoding for ICMP */
+			// - src port is 0
+			// - dst port is type and code (icmp_type*256 + icmp_code)
+			icmphdr = icmp_hdr(pkt);
+			src_port = 0;
+			dst_port = (icmphdr->icmp_type << 8) + icmphdr->icmp_code;
 		default:
 			printf("unknown ipproto: %d\n", key.l4_protocol);
-        case IPPROTO_OSPFIGP:  // don't care about OSPF
-        case 253: case 254:    // IANA reserved for experimentation and testing
+		case IPPROTO_OSPFIGP:  // don't care about OSPF
+		case 253: case 254:  // IANA reserved for experimentation and testing
 			return pna_done(pkt);
 		}
 		break;
@@ -322,9 +322,9 @@ int pna_hook(
 		return pna_done(pkt);
 	}
 
-    // now put the ports in the key
-    key.local_port = src_port;
-    key.remote_port = dst_port;
+	// now put the ports in the key
+	key.local_port = src_port;
+	key.remote_port = dst_port;
 
 	/* entire key should now be filled in and we have a flow, localize it */
 	if (!pna_localize(&key, &direction))

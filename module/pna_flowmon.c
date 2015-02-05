@@ -25,7 +25,6 @@
 #include <netinet/ip.h>
 
 #include "pna.h"
-#include "pna_mod.h"
 
 #define LOG_FILE_FORMAT  "%s/pna-%%Y%%m%%d%%H%%M%%S-%s.t%d.log"
 #define MAX_STR          1024
