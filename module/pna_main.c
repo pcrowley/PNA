@@ -58,13 +58,6 @@ static int pna_frag_next_idx = 0;
 static int pna_frag_packets_missed = 0;
 static int pna_frag_bytes_missed = 0;
 
-/* taken from linux/jiffies.h in kernel v2.6.21 */
-#ifndef time_after_eq64
-#define time_after_eq64(a, b) \
-	(typecheck(__u64, a) && typecheck(__u64, b) && ((__s64)(a) - (__s64)(b) >= 0))
-#endif
-#define PERF_INTERVAL      10
-
 #define GOLDEN_RATIO_PRIME_32  0x9e370001UL
 
 unsigned int hash_32(unsigned int val, unsigned int bits)
