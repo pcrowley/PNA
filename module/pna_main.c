@@ -43,6 +43,9 @@ typedef unsigned long pna_stat_uword;
 #define tcp_hdr(pkt) (struct tcphdr *)(pkt)
 #define udp_hdr(pkt) (struct udphdr *)(pkt)
 
+// maximum number of protocol encapsulations (e.g., VLAN, GRE)
+#define PNA_MAX_CHECKS 8
+
 /* define a fragment table for reconstruction */
 #define PNA_MAXFRAGS 512
 struct pna_frag {
@@ -196,7 +199,8 @@ static int pna_done(const unsigned char *pkt)
 }
 
 /* per-packet hook that begins pna processing */
-int pna_hook(unsigned int pkt_len, const struct timeval tv, const unsigned char *pkt)
+int pna_hook(
+    unsigned int pkt_len, const struct timeval tv, const unsigned char *pkt)
 {
 	struct pna_flowkey key;
 	struct pna_frag *entry;
@@ -206,6 +210,7 @@ int pna_hook(unsigned int pkt_len, const struct timeval tv, const unsigned char 
 	struct udphdr *udphdr;
 	unsigned short src_port, dst_port, frag_off, flags;
 	int ret, direction, offset;
+    int check_depth;
 
 	/* make sure the key is all zeros before we start */
 	memset(&key, 0, sizeof(key));
@@ -218,7 +223,9 @@ int pna_hook(unsigned int pkt_len, const struct timeval tv, const unsigned char 
 	key.l3_protocol = ntohs(ethhdr->ether_type);
 
 	/* we don't care about VLAN tag(s)s - there may be multiple level */
-	if (key.l3_protocol == ETHERTYPE_VLAN) {
+    check_depth = 0  // limit the number of VLAN encapsulations
+	while (key.l3_protocol == ETHERTYPE_VLAN && check_depth < PNA_MAX_CHECKS) {
+        check_depth += 1;
 		// bump packet forward 4 bytes for 1 VLAN header
 		pkt += 4;
 		// recast the ethhdr and extract the l3_protocol
@@ -226,6 +233,10 @@ int pna_hook(unsigned int pkt_len, const struct timeval tv, const unsigned char 
 		ethhdr = eth_hdr(pkt);
 		key.l3_protocol = ntohs(ethhdr->ether_type);
 	}
+    if (check_depth == PNA_MAX_CHECKS) {
+        // we never got to the actual packet data
+        return pna_done(pkt);
+    }
 
 	// bump the pkt pointer for ethernet
 	pkt = sizeof(struct ether_header) + pkt;
@@ -251,8 +262,8 @@ int pna_hook(unsigned int pkt_len, const struct timeval tv, const unsigned char 
 				return pna_done(pkt);
 			}
 			tcphdr = tcp_hdr(pkt);
-			key.local_port = ntohs(tcphdr->th_sport);
-			key.remote_port = ntohs(tcphdr->th_dport);
+			src_port = ntohs(tcphdr->th_sport);
+			dst_port = ntohs(tcphdr->th_dport);
 			flags = tcphdr->th_flags;
 			break;
 		case IPPROTO_UDP:
@@ -277,8 +288,6 @@ int pna_hook(unsigned int pkt_len, const struct timeval tv, const unsigned char 
 				if (frag_off & IP_MF)
 					pna_set_frag(iphdr, src_port, dst_port);
 			}
-			key.local_port = src_port;
-			key.remote_port = dst_port;
 			break;
 		default:
 			printf("unknown ipproto: %d\n", key.l4_protocol);
@@ -288,6 +297,10 @@ int pna_hook(unsigned int pkt_len, const struct timeval tv, const unsigned char 
 	default:
 		return pna_done(pkt);
 	}
+
+    // now put the ports in the key
+    key.local_port = src_port;
+    key.remote_port = dst_port;
 
 	/* entire key should now be filled in and we have a flow, localize it */
 	if (!pna_localize(&key, &direction))
