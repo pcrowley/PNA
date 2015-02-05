@@ -1,18 +1,13 @@
-/*
- *
- *
+/**
+ * user-space PNA
+ * This is the driver for the PNA software, it is process-level parallel
+ * per interface.
  */
 
 #include <pcap.h>
 #include <signal.h>
 #include <sched.h>
 #include <stdlib.h>
-
-#define ALARM_SLEEP     10
-#define DEFAULT_SNAPLEN 256
-pcap_t    *pd;
-int verbose = 0;
-struct pcap_stat pcapStats;
 
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -32,6 +27,13 @@ struct pcap_stat pcapStats;
 #include "pna.h"
 #include "util.h"
 
+#define ALARM_SLEEP     10   // seconds between stat printouts
+#define DEFAULT_SNAPLEN 256  // big enough for all the headers
+#define PROMISC_MODE    1    // give us everything
+
+pcap_t    *pd;
+int verbose = 0;
+
 static struct timeval startTime;
 unsigned long long numPkts = 0, numBytes = 0;
 
@@ -39,7 +41,6 @@ unsigned long long numPkts = 0, numBytes = 0;
 #define DEFAULT_LOG_DIR  "./logs"
 char *log_dir;
 
-#define DEFAULT_DEVICE "eth1" /* "e1000" */
 char *listen_device = NULL;
 
 char pna_perfmon = 0;
@@ -50,85 +51,92 @@ int pna_dtrie_init(void);
 int pna_dtrie_deinit(void);
 int pna_dtrie_build(char *networks_file);
 
-int pcap_set_cluster(pcap_t *ring, u_int clusterId);
-int pcap_set_application_name(pcap_t *handle, char *name);
-char* pfring_format_numbers(double val, char *buf, u_int buf_len, u_int8_t add_decimals);
-
-/* ******************************** */
-
+/**
+ * signal handler to terminate app
+ */
 void sigproc(int sig) {
     static int called = 0;
 
-    if (called) return; else called = 1;
+    if (called) {
+        return;
+    }
+    else {
+        called = 1;
+    }
 
-    //print_stats(PCAP, pd, &startTime, numPkts, numBytes);
     pcap_close(pd);
     pna_dtrie_deinit();
     pna_cleanup();
     exit(0);
 }
 
-/* ******************************** */
-
-void my_sigalarm(int sig) {
+/**
+ * periodic stats report for input/output numbers
+ */
+void stats_report(int sig) {
     print_stats(PCAP, pd, &startTime, numPkts, numBytes);
     alarm(ALARM_SLEEP);
-    signal(SIGALRM, my_sigalarm);
+    signal(SIGALRM, stats_report);
 }
 
-/* ****************************************************** */
-
-static int32_t thiszone;
-
-void pkt_hook(u_char *_deviceId, const struct pcap_pkthdr *h, const u_char *p)
+/**
+ * This is the pcap callback hook that will grab the relevant info and pass
+ * it on to the PNA software for handling
+ */
+void pkt_hook(u_char *device, const struct pcap_pkthdr *h, const u_char *p)
 {
-    if (numPkts == 0) gettimeofday(&startTime, NULL);
+    // first packet we've seen, capture the time for stats
+    if (numPkts == 0) {
+        gettimeofday(&startTime, NULL);
+    }
 
+    // it appears to be an empty packet, skip it
     if (h->len == 0) {
-        // nothing here, carry on
         return;
     }
 
+    // call the hook
     pna_hook(h->len, h->ts, p);
 
+    // update stats
     numPkts++;
     numBytes += h->len;
 }
 
-/* *************************************** */
-
+/**
+ * command line help
+ */
 void printHelp(void) {
     char errbuf[PCAP_ERRBUF_SIZE];
     pcap_if_t *devpointer;
 
-    printf("ppna\n(C) 2012 Michael J Schultz <mjschultz@gmail.com>\n");
-    printf("-h                  [Print help]\n");
-    printf("-i <device>         [Device name]\n");
-    printf("-n <networks_file>  [File of networks to process]\n");
-    printf("-f <entries>    Number of flow table entries (default %u)\n", pna_flow_entries);
-    printf("-v                  [Verbose]\n");
+    printf("uPNA\n");
+    printf("-h             Print help\n");
+    printf("-i <device>    Device name\n");
+    printf("-n <net_file>  File of networks to process\n");
+    printf("-f <entries>   Number of flow table entries (default %u)\n",
+           pna_flow_entries);
+    printf("-v             Verbose mode\n");
 
     if (pcap_findalldevs(&devpointer, errbuf) == 0) {
-        int i = 0;
-        
         printf("\nAvailable devices (-i):\n");
-        while(devpointer) {
-            printf(" %d. %s\n", i++, devpointer->name);
+        while (devpointer) {
+            printf("- %s\n", devpointer->name);
             devpointer = devpointer->next;
         }
     }
 }
 
-/* *************************************** */
-
-int main(int argc, char* argv[]) {
+/**
+ * Main driver
+ */
+int main(int argc, char **argv) {
     char c;
     char errbuf[PCAP_ERRBUF_SIZE];
-    int promisc, snaplen = DEFAULT_SNAPLEN;
+    int promisc;
     int ret;
 
     startTime.tv_sec = 0;
-    thiszone = gmt2local(0);
 
     /* load some environment variables */
     log_dir = getenv(ENV_PNA_LOGDIR);
@@ -140,10 +148,12 @@ int main(int argc, char* argv[]) {
     pna_init();
     pna_dtrie_init();
 
-    while((c = getopt(argc, argv, "o:hi:n:vf:")) != '?') {
-        if (-1 == c) break;
+    while ((c = getopt(argc, argv, "o:hi:n:vf:")) != '?') {
+        if (c == -1) {
+            break;
+        }
 
-        switch(c) {
+        switch (c) {
         case 'h':
             printHelp();
             exit(0);
@@ -172,32 +182,37 @@ int main(int argc, char* argv[]) {
     }
 
     if (listen_device == NULL) {
-        if ((listen_device = pcap_lookupdev(errbuf)) == NULL) {
+        // no device, find the default
+        listen_device = pcap_lookupdev(errbuf);
+        if (listen_device == NULL) {
+            // no default? error out
             printf("pcap_lookup: %s", errbuf);
-            return(-1);
+            return -1;
         }
     }
     printf("Capturing from %s\n", listen_device);
 
-    /* hardcode: promisc=1, to_ms=500 */
-    promisc = 1;
-    if ((pd = pcap_open_live(listen_device, snaplen, 
-                            promisc, 500, errbuf)) == NULL) {
+    // grab the pcap descriptor handle
+    pd = pcap_open_live(
+        listen_device, DEFAULT_SNAPLEN, PROMISC_MODE, 500, errbuf
+    );
+    if (pd == NULL) {
         printf("pcap_open_live: %s\n", errbuf);
-        return(-1);
+        return -1;
     }
 
-    //pcap_set_application_name(pd, "pna");
-
+    // handle Ctrl-C kindly
     signal(SIGINT, sigproc);
 
+    // if wanted, periodically print stat reports
     if (verbose) {
-        signal(SIGALRM, my_sigalarm);
+        signal(SIGALRM, stats_report);
         alarm(ALARM_SLEEP);
     }
 
+    // ...and go!
     pcap_loop(pd, -1, pkt_hook, NULL);
-    pcap_close(pd);
 
-    return(0);
+    pcap_close(pd);
+    return 0;
 }
