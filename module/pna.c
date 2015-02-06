@@ -41,8 +41,8 @@ unsigned long long numPkts = 0, numBytes = 0;
 #define ENV_PNA_LOGDIR "PNA_LOGDIR"
 #define DEFAULT_LOG_DIR  "./logs"
 char *log_dir;
+char *pcap_source_name = NULL;
 
-char *listen_device = NULL;
 
 /* PNA configuration parameters */
 unsigned int pna_flow_entries = (1 << 23);
@@ -125,6 +125,7 @@ void printHelp(void) {
     printf("uPNA\n");
     printf("-h             Print help\n");
     printf("-i <device>    Device name\n");
+    printf("-r <filename>  Read from file\n");
     printf("-n <net_file>  File of networks to process\n");
     printf("-f <entries>   Number of flow table entries (default %u)\n",
            pna_flow_entries);
@@ -147,6 +148,8 @@ int main(int argc, char **argv) {
     char errbuf[PCAP_ERRBUF_SIZE];
     int promisc;
     int ret;
+	char *listen_device = NULL;
+	char *input_file = NULL;
 
     startTime.tv_sec = 0;
 
@@ -160,7 +163,7 @@ int main(int argc, char **argv) {
     pna_init();
     pna_dtrie_init();
 
-    while ((c = getopt(argc, argv, "o:hi:n:vf:")) != '?') {
+    while ((c = getopt(argc, argv, "o:hi:r:n:vf:")) != '?') {
         if (c == -1) {
             break;
         }
@@ -175,6 +178,9 @@ int main(int argc, char **argv) {
             break;
         case 'i':
             listen_device = strdup(optarg);
+            break;
+        case 'r':
+            input_file = strdup(optarg);
             break;
         case 'n':
             ret = pna_dtrie_build(optarg);
@@ -193,23 +199,28 @@ int main(int argc, char **argv) {
         }
     }
 
-    if (listen_device == NULL) {
-        // no device, find the default
-        listen_device = pcap_lookupdev(errbuf);
-        if (listen_device == NULL) {
-            // no default? error out
-            printf("pcap_lookup: %s", errbuf);
-            return -1;
-        }
-    }
-    printf("Capturing from %s\n", listen_device);
-
-    // grab the pcap descriptor handle
-    pd = pcap_open_live(
-        listen_device, DEFAULT_SNAPLEN, PROMISC_MODE, 500, errbuf
-    );
+	if (listen_device != NULL && input_file != NULL) {
+		printf("cannot specify both device and file\n");
+		return -1;
+	}
+	else if (listen_device) {
+		printf("Live capture from %s\n", listen_device);
+		pd = pcap_open_live(
+			listen_device, DEFAULT_SNAPLEN, PROMISC_MODE, 500, errbuf
+		);
+		pcap_source_name = listen_device;
+	}
+	else if (input_file) {
+		printf("Reading file from %s\n", input_file);
+		pd = pcap_open_offline(input_file, errbuf);
+		pcap_source_name = basename(input_file);
+	}
+	else {
+		printf("must specify device or file\n");
+		return -1;
+	}
     if (pd == NULL) {
-        printf("pcap_open_live: %s\n", errbuf);
+        printf("pcap_open: %s\n", errbuf);
         return -1;
     }
 

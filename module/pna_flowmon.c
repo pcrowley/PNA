@@ -44,7 +44,7 @@ unsigned int hash_32(unsigned int, unsigned int);
 /* pointer to information about the flow tables */
 static struct flowtab_info *flowtab_info;
 extern char *log_dir;
-extern char *listen_device;
+extern char *pcap_source_name;
 
 /* simple null key */
 static struct pna_flowkey null_key = {
@@ -70,7 +70,7 @@ static void flowtab_dump(struct flowtab_info *info)
 	gettimeofday(&start, NULL);
     start_tm = localtime((time_t*)&start);
 	snprintf(out_base, MAX_STR, LOG_FILE_FORMAT, log_dir,
-             listen_device, info->table_id);
+             pcap_source_name, info->table_id);
     strftime(out_file, MAX_STR, out_base, start_tm);
 
     printf("dumping to: '%s'\n", out_file);
