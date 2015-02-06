@@ -39,6 +39,15 @@ void pna_cleanup(void);
 
 typedef unsigned long pna_stat_uword;
 
+// not all systems define all IP protocols
+#ifndef IPPROTO_OSPFIGP
+# define IPPROTO_OSPFIGP 89
+#endif
+
+#ifndef IPPROTO_IGRP
+# define IPPROTO_IGRP 88
+#endif
+
 // not all hosts have sctp structs, make a simple one for our needs
 struct pna_sctpcommonhdr {
 	unsigned short src_port;
