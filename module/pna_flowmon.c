@@ -268,6 +268,9 @@ void flowmon_cleanup(void)
 
 	/* destroy each table file we created */
 	for (i = pna_tables - 1; i >= 0; i--) {
+		if (flowtab_info[i].table_dirty != 0) {
+			flowtab_dump(&flowtab_info[i]);
+		}
         pthread_mutex_destroy(&flowtab_info[i].read_mutex);
 		if (flowtab_info[i].table_base != NULL)
 			free(flowtab_info[i].table_base);

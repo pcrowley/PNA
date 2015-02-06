@@ -8,6 +8,7 @@
 #include <signal.h>
 #include <sched.h>
 #include <stdlib.h>
+#include <libgen.h>
 
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -58,9 +59,10 @@ int pna_dtrie_deinit(void);
 int pna_dtrie_build(char *networks_file);
 
 /**
- * signal handler to terminate app
+ * handler to cleanup app
  */
-void sigproc(int sig) {
+void cleanup(void)
+{
     static int called = 0;
 
     if (called) {
@@ -74,6 +76,10 @@ void sigproc(int sig) {
     pna_dtrie_deinit();
     pna_cleanup();
     exit(0);
+}
+
+void sigproc(int sig) {
+	cleanup();
 }
 
 /**
@@ -209,6 +215,7 @@ int main(int argc, char **argv) {
 
     // handle Ctrl-C kindly
     signal(SIGINT, sigproc);
+	atexit(cleanup);
 
     // if wanted, periodically print stat reports
     if (verbose) {
@@ -219,6 +226,5 @@ int main(int argc, char **argv) {
     // ...and go!
     pcap_loop(pd, -1, pkt_hook, NULL);
 
-    pcap_close(pd);
     return 0;
 }
