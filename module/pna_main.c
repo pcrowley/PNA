@@ -276,6 +276,7 @@ int ip_hook(
 		sctphdr = sctp_hdr(pkt);
 		src_port = ntohs(sctphdr->src_port);
 		dst_port = ntohs(sctphdr->dst_port);
+		break;
 	case IPPROTO_ICMP:
 		/* this is designed to mimic the NetFlow encoding for ICMP */
 		// - src port is 0
@@ -283,9 +284,12 @@ int ip_hook(
 		icmphdr = icmp_hdr(pkt);
 		src_port = 0;
 		dst_port = (icmphdr->icmp_type << 8) + icmphdr->icmp_code;
+		break;
 	default:
 		printf("unknown ipproto: %d\n", key->l4_protocol);
 	case IPPROTO_OSPFIGP:  // don't care about OSPF
+	case IPPROTO_IGRP:  // no routing protocols
+	case IPPROTO_PIM:  // no PIM
 	case 253: case 254:  // IANA reserved for experimentation and testing
 		return pna_done(pkt);
 	}
@@ -311,6 +315,7 @@ int ether_hook(
 	case ETHERTYPE_IP:
 		// not enough to process
 		if (pkt_remains < sizeof(struct ip)) {
+			printf("insufficient data remains\n");
 			return pna_done(pkt);
 		}
 		// this is a supported type, continue
@@ -332,7 +337,7 @@ int ether_hook(
 				// cannot handle routing information in packet
 				return pna_done(pkt);
 			}
-			pad = 4;  // base header
+			pad = 0;  // base header
 			// we bailed on routing_present, but checksum is okay and
 			// implies the offset field exists, account for it
 			pad += (grehdr->checksum_present ? 4 : 0);
@@ -396,7 +401,7 @@ int pna_hook(
 	// bump the pkt pointer for ethernet
 	pkt = sizeof(struct ether_header) + pkt;
 	pkt_remains -= sizeof(struct ether_header);
-	ret = ether_hook(&key, pkt_len, pkt, &flags);
+	ret = ether_hook(&key, pkt_remains, pkt, &flags);
 	if (ret != 0) {
 		return pna_done(pkt);
 	}
