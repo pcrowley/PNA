@@ -68,7 +68,7 @@ static void flowtab_dump(struct flowtab_info *info)
      * - for backward compat we use current time to decide filename
      */
 	gettimeofday(&start, NULL);
-    start_tm = localtime((time_t*)&start);
+    start_tm = gmtime((time_t*)&start);
 	snprintf(out_base, MAX_STR, LOG_FILE_FORMAT, log_dir,
              pcap_source_name, info->table_id);
     strftime(out_file, MAX_STR, out_base, start_tm);
