@@ -15,8 +15,6 @@ void print_stats(int type, void *pd, struct timeval *start, unsigned long long p
 char *etheraddr_string(const u_char *ep, char *buf);
 char *_intoa(unsigned int addr, char* buf, u_short bufLen);
 char *intoa(unsigned int addr);
-char *proto2str(u_short proto);
-int32_t gmt2local(time_t t);
 int bind2core(u_int core_id);
 
 #endif /* _UTIL_H_ */
