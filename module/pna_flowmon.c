@@ -99,14 +99,19 @@ static struct flowtab_info *flowtab_get(struct timeval tv)
 {
     static unsigned int lock_misses = 0;
 	int i;
+	char ten_bound, too_old;
 	struct flowtab_info *info;
 
 	/* figure out which flow table to use */
     /* assume we're pointing to the right one for now */
 	info = &flowtab_info[flowtab_idx];
 
-    /* dump the table if 10 seconds has passed to keep memory in check */
-    if (info->table_dirty != 0 && tv.tv_sec - info->first_sec >= 10) {
+	/* if the table is dirty and has some data, try to dump it on 10
+	 * seconds boundaries. If we somehow missed a 10 seconds boundary, dump
+	 * it if it's too old. */
+	ten_bound = (tv.tv_sec % 10 == 0 && tv.tv_sec != info->first_sec);
+	too_old = (tv.tv_sec - info->first_sec >= 10);
+    if (info->table_dirty != 0 && (ten_bound || too_old)) {
         /* spin off thread to handle this */
         flowtab_dump(info);
         /* move to next table */
