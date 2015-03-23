@@ -144,7 +144,7 @@ void printHelp(void) {
  * Main driver
  */
 int main(int argc, char **argv) {
-	char c;
+	int c;
 	char errbuf[PCAP_ERRBUF_SIZE];
 	int promisc;
 	int ret;
