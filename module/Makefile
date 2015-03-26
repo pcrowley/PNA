@@ -20,6 +20,14 @@ COMMON_OBJS += pna_rtmon.o util.o dump_table.o
 
 LDFLAGS := -lpcap -lpthread
 
+PROC_ARCH ?= amd64
+
+ifeq (${PROC_ARCH},amd64)
+	CFLAGS := $(CFLAGS) -m64
+else ifeq (${PROC_ARCH},i386)
+	CFLAGS := $(CFLAGS) -m32
+endif
+
 all: ${MAIN_PROG}
 
 ${MAIN_PROG}: ${MAIN_PROG}.o ${COMMON_OBJS}
