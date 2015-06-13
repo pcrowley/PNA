@@ -68,6 +68,7 @@ static void flowtab_dump(struct flowtab_info *info)
      * - for backward compat we use current time to decide filename
      */
 	gettimeofday(&start, NULL);
+	start.tv_sec -= 1;  // drop 1 second since we stop at the rollover
     start_tm = gmtime((time_t*)&start);
 	snprintf(out_base, MAX_STR, LOG_FILE_FORMAT, log_dir,
              pcap_source_name, info->table_id);
