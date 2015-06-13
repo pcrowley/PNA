@@ -19,6 +19,7 @@
 #include <errno.h>
 #include <sys/poll.h>
 #include <time.h>
+#include <pwd.h>
 #include <netinet/in_systm.h>
 #include <netinet/in.h>
 #include <netinet/ip.h>
@@ -116,6 +117,39 @@ void pkt_hook(u_char *device, const struct pcap_pkthdr *h, const u_char *p)
 }
 
 /**
+ * change the uid fomr current user to id for `username`
+ */
+void uid_to(const char *username) {
+	struct passwd *pw = NULL;
+
+	pw = getpwnam(username);
+	if (!pw) {
+		fprintf(stderr, "could not find username: '%s'\n", username);
+		exit(1);
+	}
+
+	// initialize the target user's group memberships for this process
+	if (initgroups(pw->pw_name, pw->pw_gid) != 0) {
+		fprintf(stderr, "could not init group list for '%s'\n", username);
+		exit(1);
+	}
+
+	// set the group id of this process
+	if (setgid(pw->pw_gid) != 0) {
+		fprintf(stderr, "could not set group id for '%s' (gid: %u)\n",
+				username, pw->pw_gid);
+		exit(1);
+	}
+
+	// set the user id of this process
+	if (setuid(pw->pw_uid) != 0) {
+		fprintf(stderr, "could not set user id for '%s' (uid: %u)\n",
+				username, pw->pw_uid);
+		exit(1);
+	}
+}
+
+/**
  * command line help
  */
 void printHelp(void) {
@@ -126,6 +160,8 @@ void printHelp(void) {
 	printf("-h             Print help\n");
 	printf("-i <device>    Device name\n");
 	printf("-r <filename>  Read from file\n");
+	printf("-o <output>    Write data to <output> directory\n");
+	printf("-Z <username>  Change user ID to <username> as soon as possible\n");
 	printf("-n <net_file>  File of networks to process\n");
 	printf("-f <entries>   Number of flow table entries (default %u)\n",
 	       pna_flow_entries);
@@ -149,6 +185,7 @@ int main(int argc, char **argv) {
 	int promisc;
 	int ret;
 	char *listen_device = NULL;
+	char *username = NULL;
 	char *input_file = NULL;
 
 	startTime.tv_sec = 0;
@@ -163,7 +200,7 @@ int main(int argc, char **argv) {
 	pna_init();
 	pna_dtrie_init();
 
-	while ((c = getopt(argc, argv, "o:hi:r:n:vf:")) != '?') {
+	while ((c = getopt(argc, argv, "o:hi:r:n:vf:Z:")) != '?') {
 		if (c == -1) {
 			break;
 		}
@@ -181,6 +218,9 @@ int main(int argc, char **argv) {
 			break;
 		case 'r':
 			input_file = strdup(optarg);
+			break;
+		case 'Z':
+			username = strdup(optarg);
 			break;
 		case 'n':
 			ret = pna_dtrie_build(optarg);
@@ -232,6 +272,14 @@ int main(int argc, char **argv) {
 	if (verbose) {
 		signal(SIGALRM, stats_report);
 		alarm(ALARM_SLEEP);
+	}
+
+	// if requested (and possible) drop privileges to specified user
+	if (username != NULL && (getuid() == 0 || geteuid() == 0)) {
+		if (verbose) {
+			printf("dropping to user: %s\n", username);
+		}
+		uid_to(username);
 	}
 
 	// ...and go!

@@ -93,7 +93,7 @@ void dump_table(void *table_base, char *out_file, unsigned int file_size)
 		perror("open out_file");
 		return;
 	}
-	fchmod(fd, S_IRUSR | S_IRGRP | S_IROTH);
+	fchmod(fd, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH);
 	lseek(fd, sizeof(struct pna_log_hdr), SEEK_SET);
 
 	buf_idx = 0;
