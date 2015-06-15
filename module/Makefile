@@ -18,15 +18,8 @@ MAIN_PROG := pna
 COMMON_OBJS := pna_main.o pna_flowmon.o pna_domain_trie.o
 COMMON_OBJS += pna_rtmon.o util.o dump_table.o
 
-LDFLAGS := -lpcap -lpthread
-
-PROC_ARCH ?= amd64
-
-ifeq (${PROC_ARCH},amd64)
-	CFLAGS := $(CFLAGS) -m64
-else ifeq (${PROC_ARCH},i386)
-	CFLAGS := $(CFLAGS) -m32
-endif
+LDFLAGS := $(LDFLAGS) -lpcap -lpthread
+CC := $(CROSS_COMPILE)gcc
 
 all: ${MAIN_PROG}
 
