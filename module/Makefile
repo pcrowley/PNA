@@ -18,8 +18,15 @@ MAIN_PROG := pna
 COMMON_OBJS := pna_main.o pna_flowmon.o pna_domain_trie.o
 COMMON_OBJS += pna_rtmon.o util.o dump_table.o
 
-LDFLAGS := $(LDFLAGS) -lpcap -lpthread
+LDFLAGS := $(LDFLAGS) -lpthread
 CC := $(CROSS_COMPILE)gcc
+
+# we want to build libpcap into the image
+ifneq ($(CROSS_LIBS),)
+	COMMON_OBJS += $(CROSS_LIBS)/libpcap.a
+else
+	LDFLAGS += -lpcap
+endif
 
 all: ${MAIN_PROG}
 
