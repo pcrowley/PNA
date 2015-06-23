@@ -207,7 +207,7 @@ int flowmon_hook(struct pna_flowkey *key, int direction, unsigned short flags,
 		/* check for free spot -- insert flow entry */
 		if (flowkey_match(&flow->key, &null_key)) {
 			/* copy over the flow key for this entry */
-			memcpy(&flow->key, key, sizeof(*key));
+			memmove(&flow->key, key, sizeof(*key));
 
 			/* port specific information */
 			flow->data.bytes[direction] += pkt_len + ETH_OVERHEAD;
