@@ -25,6 +25,7 @@ int pna_dtrie_add(unsigned int prefix, unsigned int max_bit_pos,
 
 int pna_dtrie_parse(char *line, int netid)
 {
+	int ret;
     char *ipstring;
     char *prefix_string;
     char *domain_string;
@@ -56,7 +57,10 @@ int pna_dtrie_parse(char *line, int netid)
 	}
 
 	prefix = htonl(inet_addr(ipstring));
-	pna_dtrie_add(prefix, mask, netid);
+	ret = pna_dtrie_add(prefix, mask, netid);
+	if (ret != 0) {
+		return ret;
+	}
 	return 0;
 }
 
@@ -126,12 +130,25 @@ unsigned int pna_dtrie_lookup(unsigned int ip)
 int pna_dtrie_add(unsigned int prefix, unsigned int max_bit_pos,
 		  unsigned int domain_id)
 {
+	unsigned int mask;
 	unsigned int cur_bit_pos;
 	unsigned int cur_bit;
 	struct pna_dtrie_entry *next;
 	struct pna_dtrie_entry *cur = pna_dtrie_head;
 
-	printf("pna_dtrie_add %X %i %i\n", prefix, max_bit_pos, domain_id);
+	if ( !(0 < max_bit_pos && max_bit_pos <= 32) ) {
+		printf("invalid mask: %i\n", max_bit_pos);
+		return -1;
+	}
+
+	printf("pna_dtrie_add %X/%i (%i)\n", prefix, max_bit_pos, domain_id);
+
+	mask = 0xffffffff - ((1 << (32 - max_bit_pos)) - 1);
+	if ( (prefix & mask) != prefix ) {
+		prefix = prefix & mask;
+		printf("pna_dtrie_add: corrected prefix %X/%i (%i)\n",
+		       prefix, max_bit_pos, domain_id);
+	}
 
 	cur_bit_pos = 0;
 	while (cur_bit_pos < max_bit_pos) {
