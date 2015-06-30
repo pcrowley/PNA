@@ -33,11 +33,16 @@
 #define DEFAULT_SNAPLEN 256  // big enough for all the headers
 #define PROMISC_MODE    1    // give us everything
 
+#define MAX_BUF         1024
+
 pcap_t    *pd;
 int verbose = 0;
 
 static struct timeval startTime;
 unsigned long long numPkts = 0, numBytes = 0;
+
+#define ENV_PNA_NETWORKS "PNA_NETWORKS"
+#define DEFAULT_PNA_NETWORKS  "10.0.0.0/8 172.16.0.0/12 192.168.0.0/16"
 
 #define ENV_PNA_LOGDIR "PNA_LOGDIR"
 #define DEFAULT_LOG_DIR  "./logs"
@@ -58,6 +63,7 @@ char pna_rtmon = false;
 int pna_dtrie_init(void);
 int pna_dtrie_deinit(void);
 int pna_dtrie_build(char *networks_file);
+int pna_dtrie_parse(char *networks, int network_id);
 
 /**
  * handler to cleanup app
@@ -163,6 +169,7 @@ void printHelp(void) {
 	printf("-o <output>    Write data to <output> directory\n");
 	printf("-Z <username>  Change user ID to <username> as soon as possible\n");
 	printf("-n <net_file>  File of networks to process\n");
+	printf("-N <networks>  List of networks to process\n");
 	printf("-f <entries>   Number of flow table entries (default %u)\n",
 	       pna_flow_entries);
 	printf("-v             Verbose mode\n");
@@ -176,6 +183,32 @@ void printHelp(void) {
 	}
 }
 
+
+/**
+ * Add networks to monitor
+ */
+int add_networks(char *networks, int network_id)
+{
+	char buffer[MAX_BUF];
+	int ret;
+	char *network, *brkt;
+
+	strncpy(buffer, networks, MAX_BUF);
+
+	network = strtok_r(buffer, " ", &brkt);
+	while (network) {
+		network_id = network_id + 1;
+		ret = pna_dtrie_parse(network, network_id);
+		if (ret != 0) {
+			exit(1);
+		}
+		network = strtok_r(NULL, " ", &brkt);
+	}
+
+	return network_id;
+}
+
+
 /**
  * Main driver
  */
@@ -187,6 +220,8 @@ int main(int argc, char **argv) {
 	char *listen_device = NULL;
 	char *username = NULL;
 	char *input_file = NULL;
+	char *networks = NULL;
+	int network_id = 0;
 
 	startTime.tv_sec = 0;
 
@@ -200,7 +235,7 @@ int main(int argc, char **argv) {
 	pna_init();
 	pna_dtrie_init();
 
-	while ((c = getopt(argc, argv, "o:hi:r:n:vf:Z:")) != '?') {
+	while ((c = getopt(argc, argv, "o:hi:r:n:N:vf:Z:")) != '?') {
 		if (c == -1) {
 			break;
 		}
@@ -227,6 +262,13 @@ int main(int argc, char **argv) {
 			if (ret != 0) {
 				exit(1);
 			}
+			/* indicate that we loaded some networks */
+			network_id = 1;
+			break;
+		case 'N':
+			/* -N can be "10.0.0.0/8 172.16.0.0/12" or 
+			 * multiple -N 10.0.0.0/8 -N 172.16.0.0/12 */
+			network_id = add_networks(optarg, network_id);
 			break;
 		case 'v':
 			verbose = 1;
@@ -238,6 +280,16 @@ int main(int argc, char **argv) {
 			break;
 		}
 	}
+
+	/* load some default networks to listen on (if none supplied) */
+	if (network_id == 0) {
+		networks = getenv(ENV_PNA_NETWORKS);
+		if (!networks) {
+			networks = DEFAULT_PNA_NETWORKS;
+		}
+		add_networks(networks, network_id);
+	}
+
 
 	if (listen_device != NULL && input_file != NULL) {
 		printf("cannot specify both device and file\n");

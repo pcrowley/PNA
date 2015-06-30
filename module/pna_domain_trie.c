@@ -23,14 +23,48 @@ struct pna_dtrie_entry *pna_dtrie_head;
 int pna_dtrie_add(unsigned int prefix, unsigned int max_bit_pos,
                   unsigned int domain_id);
 
-int pna_dtrie_build(char *networks_file)
+int pna_dtrie_parse(char *line, int netid)
 {
-	char buffer[100];
     char *ipstring;
     char *prefix_string;
     char *domain_string;
+    unsigned int prefix, mask;
+
+	/* get the IP and prefix */
+	ipstring = strtok(line, "/\n");
+	prefix_string = strtok(NULL, "/\n");
+	if (!ipstring || !prefix_string) {
+		printf("bad string: '%s'\n", line);
+		return -1;
+	}
+
+	/* get the netid, if needed */
+	if (netid == -1) {
+		domain_string = strtok(NULL, "/\n");
+		if (!domain_string) {
+			printf("missing netid: '%s'\n", line);
+			return -1;
+		}
+		netid = atoi(domain_string);
+	}
+
+	/* convert the mask */
+	mask = atoi(prefix_string);
+	if (!mask || !netid) {
+		printf("bad string %s or %d\n", prefix_string, netid);
+		return -1;
+	}
+
+	prefix = htonl(inet_addr(ipstring));
+	pna_dtrie_add(prefix, mask, netid);
+	return 0;
+}
+
+int pna_dtrie_build(char *networks_file)
+{
+	int ret;
+	char buffer[100];
 	FILE *infile;
-    unsigned int prefix, mask, netid;
 
     infile = fopen(networks_file, "r");
 	if (!infile) {
@@ -45,22 +79,10 @@ int pna_dtrie_build(char *networks_file)
 			continue;
 		if (buffer[0] == ' ')
 			continue;
-		ipstring = strtok(buffer, "/\n");
-		prefix_string = strtok(NULL, "/\n");
-		domain_string = strtok(NULL, "/\n");
-		if (!ipstring || !prefix_string || !domain_string) {
-			printf("bad string: '%s'\n", buffer);
-			return -1;
+		ret = pna_dtrie_parse(buffer, -1);
+		if (ret != 0) {
+			return ret;
 		}
-		mask = atoi(prefix_string);
-		netid = atoi(domain_string);
-		if (!mask || !netid) {
-			printf("bad string %s or %s\n", prefix_string, domain_string);
-			return -1;
-		}
-
-		prefix = htonl(inet_addr(ipstring));
-        pna_dtrie_add(prefix, mask, netid);
 	}
 
     return 0;
