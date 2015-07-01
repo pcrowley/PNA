@@ -316,6 +316,14 @@ int main(int argc, char **argv) {
 		return -1;
 	}
 
+	// if requested (and possible) drop privileges to specified user
+	if (username != NULL && (getuid() == 0 || geteuid() == 0)) {
+		if (verbose) {
+			printf("dropping to user: %s\n", username);
+		}
+		uid_to(username);
+	}
+
 	// handle Ctrl-C kindly
 	signal(SIGINT, sigproc);
 	atexit(cleanup);
@@ -324,14 +332,6 @@ int main(int argc, char **argv) {
 	if (verbose) {
 		signal(SIGALRM, stats_report);
 		alarm(ALARM_SLEEP);
-	}
-
-	// if requested (and possible) drop privileges to specified user
-	if (username != NULL && (getuid() == 0 || geteuid() == 0)) {
-		if (verbose) {
-			printf("dropping to user: %s\n", username);
-		}
-		uid_to(username);
 	}
 
 	// ...and go!
