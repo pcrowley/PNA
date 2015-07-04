@@ -67,17 +67,19 @@ int buf_flush(int out_fd, char *buffer, int buf_idx)
 }
 
 /* dumps the in-memory table to a file */
-void dump_table(void *table_base, char *out_file, unsigned int file_size)
+void dump_table(void *table_base, void *syntab, char *out_file,
+		        unsigned int file_size, unsigned int syn_size)
 {
 	int fd;
-	unsigned int nflows, f_max_entries;
+	unsigned int nflows, f_max_entries, nsyn, s_max_entries;
 	unsigned int start_time;
 	unsigned int offset;
-	unsigned int flow_idx;
+	unsigned int flow_idx, syn_idx;
 	struct flow_entry *flow;
 	struct flow_entry *flow_table;
 	struct pna_log_hdr *log_header;
 	struct pna_log_entry *log;
+	struct pna_syn_entry *syn_log, *syn, *syn_table;
 	char buf[BUF_SIZE];
 	int buf_idx;
 
@@ -86,6 +88,7 @@ void dump_table(void *table_base, char *out_file, unsigned int file_size)
 
 	/* convert into max number of entries */
 	f_max_entries = file_size / sizeof(*flow);
+	s_max_entries = syn_size / sizeof(*syn);
 
 	/* open up the output file */
 	fd = open(out_file, O_CREAT | O_RDWR);
@@ -98,8 +101,10 @@ void dump_table(void *table_base, char *out_file, unsigned int file_size)
 
 	buf_idx = 0;
 	nflows = 0;
+	nsyn = 0;
 
 	flow_table = (struct flow_entry*)table_base;
+	syn_table = (struct pna_syn_entry *)syntab;
 
 	/* now we loop through the tables ... */
 	for (flow_idx = 0; flow_idx < f_max_entries; flow_idx++) {
@@ -143,12 +148,35 @@ void dump_table(void *table_base, char *out_file, unsigned int file_size)
 			buf_idx = buf_flush(fd, buf, buf_idx);
 	}
 
+	/* now we loop through the syn table ... */
+	for (syn_idx = 0; syn_idx < s_max_entries; syn_idx++) {
+		/* get the first level entry */
+		syn = &syn_table[syn_idx];
+
+		/* first 0 IP indicates we're done */
+		if (syn->ip == 0)
+			break;
+
+		/* set up monitor buffer */
+		syn_log = (struct pna_syn_entry *)&buf[buf_idx];
+		buf_idx += sizeof(struct pna_syn_entry);
+
+		/* copy the flow entry */
+		memmove(syn_log, syn, sizeof(struct pna_syn_entry));
+		nsyn++;
+
+		/* check if we can fit another entry */
+		if (buf_idx + sizeof(struct pna_syn_entry) >= BUF_SIZE)
+			/* flush the buffer */
+			buf_idx = buf_flush(fd, buf, buf_idx);
+	}
+
 	/* make sure we're flushed */
 	buf_idx = buf_flush(fd, buf, buf_idx);
 
 	/* display the number of entries we got */
 	if (verbose)
-		printf("%d flows to '%s'\n", nflows, out_file);
+		printf("%d flows + %d syn to '%s'\n", nflows, nsyn, out_file);
 
 	/* write out header data */
 	lseek(fd, 0, SEEK_SET);
@@ -159,7 +187,8 @@ void dump_table(void *table_base, char *out_file, unsigned int file_size)
 	log_header->version = PNA_LOG_VERSION;
 	log_header->start_time = start_time;
 	log_header->end_time = time(NULL);
-	log_header->size = nflows * sizeof(struct pna_log_entry);
+	log_header->pna_size = nflows * sizeof(struct pna_log_entry);
+	log_header->syn_size = nsyn * sizeof(struct pna_syn_entry);
 	write(fd, log_header, sizeof(*log_header));
 
 	close(fd);

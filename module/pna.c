@@ -56,10 +56,12 @@ char *pcap_source_name = NULL;
 /* PNA configuration parameters */
 unsigned int pna_tables = 2;
 unsigned int pna_bits = 20;
+unsigned int syn_bits = 17;
 
 char pna_debug = false;
 char pna_perfmon = 0;
 char pna_flowmon = 1;
+char pna_synmon = 1;
 char pna_rtmon = false;
 
 int pna_dtrie_init(void);
@@ -174,6 +176,8 @@ void printHelp(void) {
 	printf("-N <networks>  List of networks to process\n");
 	printf("-f <bits>      Number of bits for flow table (default %u)\n",
 	       pna_bits);
+	printf("-s <bits>      Number of bits for syn table (default %u)\n",
+	       syn_bits);
 	printf("-v             Verbose mode\n");
 
 	if (pcap_findalldevs(&devpointer, errbuf) == 0) {
@@ -278,6 +282,11 @@ int main(int argc, char **argv) {
 			pna_flowmon = 1;
 			if (atoi(optarg) != 0)
 				pna_bits = atoi(optarg);
+			break;
+		case 's':
+			pna_synmon = 1;
+			if (atoi(optarg) != 0)
+				syn_bits = atoi(optarg);
 			break;
 		}
 	}

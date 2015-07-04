@@ -228,13 +228,14 @@ static int pna_done(const unsigned char *pkt)
 /* handle the understanding of IP protocols */
 int ip_hook(
 	struct pna_flowkey *key, unsigned int pkt_len, const unsigned char *pkt,
-	struct ip *iphdr, unsigned short *flags)
+	struct ip *iphdr, unsigned short *flags, struct pna_syn_entry *syntry)
 {
 	struct tcphdr *tcphdr;
 	struct udphdr *udphdr;
 	struct pna_sctpcommonhdr *sctphdr;
 	struct icmp *icmphdr;
 	struct pna_frag *entry;
+	unsigned int options_len;
 
 	unsigned short src_port, dst_port, frag_off, offset;
 
@@ -252,6 +253,23 @@ int ip_hook(
 		src_port = ntohs(tcphdr->th_sport);
 		dst_port = ntohs(tcphdr->th_dport);
 		*flags = tcphdr->th_flags;
+
+		// some (anticipated) IP SYN packet flags
+		syntry->ip_ttl = iphdr->ip_ttl;
+		syntry->ip_df = (frag_off & IP_DF) ? 1 : 0;
+		syntry->tcp_window_size = ntohs(tcphdr->th_win);
+		syntry->tcp_hdr_size = tcphdr->th_off;
+		// only set the ip if its just a syn packet
+		if (tcphdr->th_flags == TH_SYN) {
+			syntry->ip = ntohl(iphdr->ip_src.s_addr);
+			options_len = (tcphdr->th_off - 5) * 4;
+			if (options_len > 40) {
+				// cannot copy more than 40 bytes
+				options_len = 40;
+			}
+			memmove(syntry->tcp_options, (pkt + 20), options_len);
+		}
+
 		break;
 	case IPPROTO_UDP:
 		/* this is an IP fragmented UDP packet */
@@ -313,7 +331,8 @@ int ip_hook(
 /* handle the understanding of ethernet */
 int ether_hook(
 	struct pna_flowkey *key, unsigned int pkt_remains,
-	const unsigned char *pkt, unsigned short *flags)
+	const unsigned char *pkt, unsigned short *flags,
+	struct pna_syn_entry *syntry)
 {
 	int ret;
 	unsigned int pad;
@@ -356,11 +375,11 @@ int ether_hook(
 			key->l3_protocol = ntohs(grehdr->protocol);
 			pkt = pkt + sizeof(struct pna_grehdr) + pad;
 			pkt_remains -= (sizeof(struct pna_grehdr) + pad);
-			return ether_hook(key, pkt_remains, pkt, flags);
+			return ether_hook(key, pkt_remains, pkt, flags, syntry);
 		}
 
 		// otherwise we hook onto IP layer
-		ret = ip_hook(key, pkt_remains, pkt, iphdr, flags);
+		ret = ip_hook(key, pkt_remains, pkt, iphdr, flags, syntry);
 		if (ret != 0) {
 			return pna_done(pkt);
 		}
@@ -377,6 +396,7 @@ int pna_hook(
 	unsigned int pkt_len, const struct timeval tv, const unsigned char *pkt)
 {
 	struct pna_flowkey key;
+	struct pna_syn_entry syntry;
 	struct ether_header *ethhdr;
 	int ret, direction;
 	int check_depth;
@@ -385,6 +405,7 @@ int pna_hook(
 
 	/* make sure the key is all zeros before we start */
 	memset(&key, 0, sizeof(key));
+	memset(&syntry, 0, sizeof(syntry));
 
 	/* let's decode the pkt (assume it's ethernet!) */
 	ethhdr = eth_hdr(pkt);
@@ -410,7 +431,7 @@ int pna_hook(
 	// bump the pkt pointer for ethernet
 	pkt = sizeof(struct ether_header) + pkt;
 	pkt_remains -= sizeof(struct ether_header);
-	ret = ether_hook(&key, pkt_remains, pkt, &flags);
+	ret = ether_hook(&key, pkt_remains, pkt, &flags, &syntry);
 	if (ret != 0) {
 		return pna_done(pkt);
 	}
@@ -424,7 +445,7 @@ int pna_hook(
 
 	/* insert into flow table */
 	if (pna_flowmon == true) {
-		ret = flowmon_hook(&key, direction, flags, pkt, pkt_len, tv);
+		ret = flowmon_hook(&key, direction, flags, pkt, pkt_len, tv, &syntry);
 		if (ret < 0)
 			/* failed to insert -- cleanup */
 			return pna_done(pkt);

@@ -56,13 +56,14 @@
 #define PNA_LOG_MAGIC0   'P'
 #define PNA_LOG_MAGIC1   'N'
 #define PNA_LOG_MAGIC2   'A'
-#define PNA_LOG_VERSION  2
+#define PNA_LOG_VERSION  3
 struct pna_log_hdr {
 	unsigned char magic[3];
 	unsigned char version;
 	unsigned int start_time;
 	unsigned int end_time;
-	unsigned int size;
+	unsigned int pna_size;
+	unsigned int syn_size;
 };
 
 struct pna_log_entry {
@@ -81,6 +82,15 @@ struct pna_log_entry {
 	unsigned char first_dir;                /* 1 */
 	char pad[2];                            /* 2 */
 };                                              /* = 48 */
+
+struct pna_syn_entry {
+	unsigned int ip;                                /*  4 */
+	unsigned short ip_ttl;                          /*  2 */
+	unsigned short ip_df : 1, ip_pad : 15;          /*  2 */
+	unsigned short tcp_window_size;                 /*  2 */
+	unsigned short tcp_hdr_size : 4, tcp_pad : 12;  /*  2 */
+	char tcp_options[40];                           /* 40 */
+};                                                /* = 52 */
 
 /* definition of a flow for PNA */
 struct pna_flowkey {
@@ -114,6 +124,9 @@ struct flow_entry {
 #define PNA_FLOW_ENTRIES(bits) (1 << (bits))
 #define PNA_SZ_FLOW_ENTRIES(bits) (PNA_FLOW_ENTRIES((bits)) * sizeof(struct flow_entry))
 
+#define PNA_SYN_ENTRIES(bits) (1 << (bits))
+#define PNA_SZ_SYN_ENTRIES(bits) (PNA_SYN_ENTRIES((bits)) * sizeof(struct pna_syn_entry))
+
 /* Account for Ethernet overheads (stripped by sk_buff) */
 #define ETH_INTERFRAME_GAP 12   /* 9.6ms @ 1Gbps */
 #define ETH_PREAMBLE       8    /* preamble + start-of-frame delimiter */
@@ -124,6 +137,7 @@ struct flow_entry {
 /* configuration settings */
 extern unsigned int pna_tables;
 extern unsigned int pna_bits;
+extern unsigned int syn_bits;
 extern char pna_debug;
 extern char pna_perfmon;
 extern char pna_flowmon;
@@ -147,6 +161,10 @@ struct flowtab_info {
 	unsigned int nflows;
 	unsigned int nflows_missed;
 	unsigned int probes[PNA_TABLE_TRIES];
+
+	struct pna_syn_entry *syntab;
+	unsigned int syn_idx;
+	unsigned int nsyn_missed;
 };
 
 /* some prototypes */
@@ -159,7 +177,7 @@ int pna_hook(unsigned int pkt_len, const struct timeval tv,
 
 int flowmon_hook(struct pna_flowkey *key, int direction, unsigned short flags,
                  const unsigned char *pkt, unsigned int pkt_len,
-                 const struct timeval tv);
+                 const struct timeval tv, struct pna_syn_entry *syntry);
 int flowmon_init(void);
 void flowmon_cleanup(void);
 

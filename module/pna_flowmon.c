@@ -36,7 +36,8 @@ static int flowkey_match(struct pna_flowkey *key_a,
 int flowmon_init(void);
 void flowmon_cleanup(void);
 static void flowtab_clean(struct flowtab_info *info);
-void dump_table(void *table_base, char *out_file, unsigned int size);
+void dump_table(void *table_base, void *syntab, char *out_file,
+		        unsigned int flow_size, unsigned int syn_size);
 
 
 unsigned int hash_32(unsigned int, unsigned int);
@@ -77,7 +78,8 @@ static void flowtab_dump(struct flowtab_info *info)
     printf("dumping to: '%s'\n", out_file);
 
     /* actually dump the table */
-    dump_table(info->table_base, out_file, PNA_SZ_FLOW_ENTRIES(pna_bits));
+	dump_table(info->table_base, info->syntab, out_file,
+			   PNA_SZ_FLOW_ENTRIES(pna_bits), PNA_SZ_SYN_ENTRIES(syn_bits));
 
     /* dump a table to the file system and unlock it once complete */
     flowtab_clean(info);
@@ -88,11 +90,14 @@ static void flowtab_dump(struct flowtab_info *info)
 static void flowtab_clean(struct flowtab_info *info)
 {
     memset(info->table_base, 0, PNA_SZ_FLOW_ENTRIES(pna_bits));
+    memset(info->syntab, 0, PNA_SZ_SYN_ENTRIES(syn_bits));
     info->table_dirty = 0;
     info->first_sec = 0;
     info->smp_id = 0;
     info->nflows = 0;
     info->nflows_missed = 0;
+    info->syn_idx = 0;
+    info->nsyn_missed = 0;
 }
 
 /* determine which flow table to use */
@@ -170,14 +175,27 @@ static inline int flowkey_match(struct pna_flowkey *key_a,
 /* Insert/Update this flow */
 int flowmon_hook(struct pna_flowkey *key, int direction, unsigned short flags,
                  const unsigned char *pkt, unsigned int pkt_len,
-                 struct timeval tv)
+                 struct timeval tv, struct pna_syn_entry *syntry)
 {
 	struct flow_entry *flow;
+	struct pna_syn_entry *syn;
 	struct flowtab_info *info;
 	unsigned int i, hash_0, hash;
 
 	if (NULL == (info = flowtab_get(tv)))
 		return -1;
+
+	/* first record this in the syn table */
+	if (syntry->ip) {
+		if (info->syn_idx > PNA_SYN_ENTRIES(syn_bits)) {
+			info->nsyn_missed += 1;
+		}
+		else {
+			syn = &(info->syntab[info->syn_idx]);
+			info->syn_idx += 1;
+			memmove(syn, syntry, sizeof(*syn));
+		}
+	}
 
 	/* hash */
 	hash = key->local_ip ^ key->remote_ip;
@@ -232,6 +250,7 @@ int flowmon_init(void)
 	int i;
 	long unsigned int pna_table_size;
 	long unsigned int total_mem;
+	long unsigned int syn_table_size;
 	struct flowtab_info *info;
 	char table_str[PNA_MAX_STR];
 
@@ -250,6 +269,7 @@ int flowmon_init(void)
 
 	/* configure each table for use */
 	pna_table_size = PNA_SZ_FLOW_ENTRIES(pna_bits);
+	syn_table_size = PNA_SZ_SYN_ENTRIES(syn_bits);
 	for (i = 0; i < pna_tables; i++) {
 		info = &flowtab_info[i];
 		info->table_base = malloc(pna_table_size);
@@ -260,6 +280,15 @@ int flowmon_init(void)
 			flowmon_cleanup();
 			return -ENOMEM;
 		}
+		info->syntab = malloc(syn_table_size);
+		total_mem += syn_table_size;
+		if (!info->syntab) {
+			pna_err("insufficient memory for %d/%d tables (%lu bytes)\n",
+				i, pna_tables, (pna_tables * syn_table_size));
+			flowmon_cleanup();
+			return -ENOMEM;
+		}
+
 		/* set up table pointers */
 		info->flowtab = info->table_base;
         info->table_id = i;
@@ -290,6 +319,8 @@ void flowmon_cleanup(void)
         pthread_mutex_destroy(&flowtab_info[i].read_mutex);
 		if (flowtab_info[i].table_base != NULL)
 			free(flowtab_info[i].table_base);
+		if (flowtab_info[i].syntab != NULL)
+			free(flowtab_info[i].syntab);
 	}
 
 	/* free up table meta-information struct */
