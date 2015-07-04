@@ -50,6 +50,9 @@
 #define PNA_PROTO_TCP 0
 #define PNA_PROTO_UDP 1
 
+#define PNA_HOSTNAMSZ 255
+#define PNA_IFNAMSZ 16
+
 #define MAX_DOMAIN 0xFFFF
 
 /* log file format structures */
@@ -60,6 +63,8 @@
 struct pna_log_hdr {
 	unsigned char magic[3];
 	unsigned char version;
+	char hostname[PNA_HOSTNAMSZ];
+	char ifname[PNA_IFNAMSZ];
 	unsigned int start_time;
 	unsigned int end_time;
 	unsigned int pna_size;

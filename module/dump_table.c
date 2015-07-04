@@ -42,6 +42,7 @@ static struct pna_flowkey null_key = {
 	.remote_port	= 0,
 };
 
+extern char *pcap_source_name;
 
 /* global variables */
 char *prog_name;
@@ -181,10 +182,13 @@ void dump_table(void *table_base, void *syntab, char *out_file,
 	/* write out header data */
 	lseek(fd, 0, SEEK_SET);
 	log_header = (struct pna_log_hdr*)&buf[buf_idx];
+	memset(log_header, 0, sizeof(*log_header));
 	log_header->magic[0] = PNA_LOG_MAGIC0;
 	log_header->magic[1] = PNA_LOG_MAGIC1;
 	log_header->magic[2] = PNA_LOG_MAGIC2;
 	log_header->version = PNA_LOG_VERSION;
+	gethostname(log_header->hostname, PNA_HOSTNAMSZ - 1);
+	strncpy(log_header->ifname, pcap_source_name, PNA_IFNAMSZ - 1);
 	log_header->start_time = start_time;
 	log_header->end_time = time(NULL);
 	log_header->pna_size = nflows * sizeof(struct pna_log_entry);
