@@ -84,31 +84,31 @@ struct pna_log_entry {
 
 /* definition of a flow for PNA */
 struct pna_flowkey {
-	unsigned short l3_protocol;
-	unsigned char l4_protocol;
-	unsigned int local_ip;
-	unsigned int remote_ip;
-	unsigned short local_port;
-	unsigned short remote_port;
-	unsigned short local_domain;
-	unsigned short remote_domain;
-};
+	unsigned short l3_protocol;    /* 2 */
+	unsigned char l4_protocol;     /* 1 (+1) */
+	unsigned int local_ip;         /* 4 */
+	unsigned int remote_ip;        /* 4 */
+	unsigned short local_port;     /* 2 */
+	unsigned short remote_port;    /* 2 */
+	unsigned short local_domain;   /* 2 */
+	unsigned short remote_domain;  /* 2 */
+};                                 /* = 20 */
 
 /* flow data we're interested in off-line */
 struct pna_flow_data {
-	unsigned int bytes[PNA_DIRECTIONS];
-	unsigned int packets[PNA_DIRECTIONS];
-	unsigned short flags[PNA_DIRECTIONS];
-	unsigned int timestamp;
-	unsigned int first_tstamp;
-	unsigned int last_tstamp;
-	unsigned int first_dir;
-};
+	unsigned int bytes[PNA_DIRECTIONS];    /* 8 */
+	unsigned int packets[PNA_DIRECTIONS];  /* 8 */
+	unsigned short flags[PNA_DIRECTIONS];  /* 4 */
+	unsigned int timestamp;                /* 4 */
+	unsigned int first_tstamp;             /* 4 */
+	unsigned int last_tstamp;              /* 4 */
+	unsigned int first_dir;                /* 4 */
+};                                         /* = 36 */
 
 struct flow_entry {
-	struct pna_flowkey key;
-	struct pna_flow_data data;
-};
+	struct pna_flowkey key;     /* 20 */
+	struct pna_flow_data data;  /* 36 */
+};                              /* = 56 */
 
 /* settings/structures for storing <src,dst,port> entries */
 #define PNA_FLOW_ENTRIES(bits) (1 << (bits))
