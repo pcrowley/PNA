@@ -220,7 +220,11 @@ int main(int argc, char **argv) {
 	char *listen_device = NULL;
 	char *username = NULL;
 	char *input_file = NULL;
+	char *net_file = NULL;
 	char *networks = NULL;
+	char *cmd_nets[64];
+	int i = 0;
+	int cmd_net_i = 0;
 	int network_id = 0;
 
 	startTime.tv_sec = 0;
@@ -230,10 +234,6 @@ int main(int argc, char **argv) {
 	if (!log_dir) {
 		log_dir = DEFAULT_LOG_DIR;
 	}
-
-	/* initialize needed pna components */
-	pna_init();
-	pna_dtrie_init();
 
 	while ((c = getopt(argc, argv, "o:hi:r:n:N:vf:Z:")) != '?') {
 		if (c == -1) {
@@ -258,17 +258,12 @@ int main(int argc, char **argv) {
 			username = strdup(optarg);
 			break;
 		case 'n':
-			ret = pna_dtrie_build(optarg);
-			if (ret != 0) {
-				exit(1);
-			}
-			/* indicate that we loaded some networks */
-			network_id = 1;
+			net_file = strdup(optarg);
 			break;
 		case 'N':
 			/* -N can be "10.0.0.0/8 172.16.0.0/12" or 
 			 * multiple -N 10.0.0.0/8 -N 172.16.0.0/12 */
-			network_id = add_networks(optarg, network_id);
+			cmd_nets[cmd_net_i++] = strdup(optarg);
 			break;
 		case 'v':
 			verbose = 1;
@@ -276,9 +271,28 @@ int main(int argc, char **argv) {
 		case 'f':
 			pna_flowmon = 1;
 			if (atoi(optarg) != 0)
-				pna_flow_entries = atoi(optarg);
+				pna_bits = atoi(optarg);
 			break;
 		}
+	}
+
+	/* initialize needed pna components */
+	pna_init();
+	pna_dtrie_init();
+
+	/* load networks from a file first */
+	if (net_file) {
+		ret = pna_dtrie_build(optarg);
+		if (ret != 0) {
+			exit(1);
+		}
+		/* indicate that we loaded some networks */
+		network_id = 1;
+	}
+
+	/* now load from the command line */
+	for (i = 0; i < cmd_net_i; i++) {
+		network_id = add_networks(cmd_nets[i], network_id);
 	}
 
 	/* load some default networks to listen on (if none supplied) */
