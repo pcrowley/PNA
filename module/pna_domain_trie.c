@@ -141,7 +141,9 @@ int pna_dtrie_add(unsigned int prefix, unsigned int max_bit_pos,
 		return -1;
 	}
 
-	printf("pna_dtrie_add %X/%i (%i)\n", prefix, max_bit_pos, domain_id);
+	if (verbose) {
+		printf("pna_dtrie_add %X/%i (%i)\n", prefix, max_bit_pos, domain_id);
+	}
 
 	mask = 0xffffffff - ((1 << (32 - max_bit_pos)) - 1);
 	if ( (prefix & mask) != prefix ) {
