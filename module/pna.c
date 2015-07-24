@@ -9,7 +9,9 @@
 #include <sched.h>
 #include <stdlib.h>
 #include <libgen.h>
-#include <limits.h>
+
+#include <stdio.h>
+#include <unistd.h>
 
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -226,6 +228,7 @@ int main(int argc, char **argv) {
 	int i = 0;
 	int cmd_net_i = 0;
 	int network_id = 0;
+	unsigned long arg_max = sysconf(_SC_ARG_MAX);
 
 	char *filter_exp = NULL;
 	struct bpf_program bpf;
@@ -309,9 +312,9 @@ int main(int argc, char **argv) {
 
 	/* determine if there is a filter at the end */
 	if (argc > optind) {
-		filter_exp = malloc(ARG_MAX);
+		filter_exp = malloc(arg_max);
 		for (; optind < argc; optind++) {
-			strncat(filter_exp, argv[optind], ARG_MAX-1);
+			strncat(filter_exp, argv[optind], arg_max-1);
 			if (optind + 1 < argc) {
 				strncat(filter_exp, " ", 1);
 			}
