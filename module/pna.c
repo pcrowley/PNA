@@ -9,6 +9,7 @@
 #include <sched.h>
 #include <stdlib.h>
 #include <libgen.h>
+#include <limits.h>
 
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -226,6 +227,9 @@ int main(int argc, char **argv) {
 	int cmd_net_i = 0;
 	int network_id = 0;
 
+	char *filter_exp = NULL;
+	struct bpf_program bpf;
+
 	startTime.tv_sec = 0;
 
 	/* load some environment variables */
@@ -303,6 +307,17 @@ int main(int argc, char **argv) {
 		add_networks(networks, network_id);
 	}
 
+	/* determine if there is a filter at the end */
+	if (argc > optind) {
+		filter_exp = malloc(ARG_MAX);
+		for (; optind < argc; optind++) {
+			strncat(filter_exp, argv[optind], ARG_MAX-1);
+			if (optind + 1 < argc) {
+				strncat(filter_exp, " ", 1);
+			}
+		}
+		printf("using bpfilter: '%s'\n", filter_exp);
+	}
 
 	if (listen_device != NULL && input_file != NULL) {
 		printf("cannot specify both device and file\n");
@@ -345,6 +360,21 @@ int main(int argc, char **argv) {
 	if (verbose) {
 		signal(SIGALRM, stats_report);
 		alarm(ALARM_SLEEP);
+	}
+
+	// install the filter if we have it
+	if (filter_exp) {
+		// compile the filter expression
+		if (-1 == pcap_compile(pd, &bpf, filter_exp, 1, PCAP_NETMASK_UNKNOWN)) {
+			printf("Failed to parse filter '%s': %s\n", filter_exp, pcap_geterr(pd));
+			return -1;
+		}
+
+		// set the filter on the pcap descriptor
+		if (-1 == pcap_setfilter(pd, &bpf)) {
+			printf("Failed to install filter '%s': %s\n", filter_exp, pcap_geterr(pd));
+			return -1;
+		}
 	}
 
 	// ...and go!
