@@ -231,12 +231,16 @@ int flowmon_init(void)
 {
 	int i;
 	long unsigned int pna_table_size;
+	long unsigned int total_mem;
 	struct flowtab_info *info;
 	char table_str[PNA_MAX_STR];
+
+	total_mem = 0;
 
 	/* make memory for table meta-information */
 	flowtab_info = (struct flowtab_info*)
 		       malloc(pna_tables * sizeof(struct flowtab_info));
+	total_mem += pna_tables * sizeof(struct flowtab_info);
 	if (!flowtab_info) {
 		pna_err("insufficient memory for flowtab_info\n");
 		flowmon_cleanup();
@@ -249,6 +253,7 @@ int flowmon_init(void)
 	for (i = 0; i < pna_tables; i++) {
 		info = &flowtab_info[i];
 		info->table_base = malloc(pna_table_size);
+		total_mem += pna_table_size;
 		if (!info->table_base) {
 			pna_err("insufficient memory for %d/%d tables (%lu bytes)\n",
 				i, pna_tables, (pna_tables * pna_table_size));
@@ -262,6 +267,11 @@ int flowmon_init(void)
 
 		/* initialize the read_mutex */
 		pthread_mutex_init(&info->read_mutex, NULL);
+	}
+
+	if (verbose) {
+		printf("flowmon memory: %lu kibibytes (%d bits)\n",
+		       total_mem / 1024, pna_bits);
 	}
 
 	return 0;

@@ -51,9 +51,8 @@ char *pcap_source_name = NULL;
 
 
 /* PNA configuration parameters */
-unsigned int pna_flow_entries = (1 << 23);
 unsigned int pna_tables = 2;
-unsigned int pna_bits = 16;
+unsigned int pna_bits = 20;
 
 char pna_debug = false;
 char pna_perfmon = 0;
@@ -170,8 +169,8 @@ void printHelp(void) {
 	printf("-Z <username>  Change user ID to <username> as soon as possible\n");
 	printf("-n <net_file>  File of networks to process\n");
 	printf("-N <networks>  List of networks to process\n");
-	printf("-f <entries>   Number of flow table entries (default %u)\n",
-	       pna_flow_entries);
+	printf("-f <bits>      Number of bits for flow table (default %u)\n",
+	       pna_bits);
 	printf("-v             Verbose mode\n");
 
 	if (pcap_findalldevs(&devpointer, errbuf) == 0) {
