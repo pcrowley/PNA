@@ -56,13 +56,14 @@ int rtmon_hook(struct pna_flowkey *key, int direction, const unsigned char *pkt,
                unsigned int pkt_len, const struct timeval tv,
                unsigned long data)
 {
-	int ret;
+	int ret = 0;
 
 	struct pna_rtmon *monitor;
 
 	for (monitor = &monitors[0]; monitor->hook != NULL; monitor++)
 		ret = monitor->hook(key, direction, pkt, pkt_len, tv, &data);
-	return 0;
+
+	return ret;
 }
 
 /* initialize all the resources needed for each rtmon */
