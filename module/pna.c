@@ -312,7 +312,7 @@ int main(int argc, char **argv) {
 
 	/* determine if there is a filter at the end */
 	if (argc > optind) {
-		filter_exp = calloc(arg_max, sizeof(char *));
+		filter_exp = calloc(arg_max, sizeof(char));
 		for (; optind < argc; optind++) {
 			strncat(filter_exp, argv[optind], arg_max-1);
 			if (optind + 1 < argc) {
