@@ -17,47 +17,69 @@
 /* main PNA initialization (where the kernel module starts) */
 /* functions: pna_init, pna_cleanup, pna_hook */
 
-#include <linux/init.h>
-#include <linux/kernel.h>
-#include <linux/version.h>
-#include <linux/module.h>
-#include <linux/hash.h>
-#include <linux/mm.h>
-#include <linux/vmalloc.h>
-#include <linux/slab.h>
-#include <linux/fs.h>
-#include <linux/mutex.h>
-#include <linux/proc_fs.h>
-#include <linux/netdevice.h>
-#include <linux/if.h>
+#include <stdio.h>
+#include <string.h>
+#include <sys/socket.h>
+#include <sys/time.h>
 
-#include <linux/jiffies.h>
-
-#include <net/ip.h>
-#include <net/tcp.h>
-#include <linux/sctp.h>
+#define __FAVOR_BSD
+#include <netinet/in.h>
+#include <netinet/if_ether.h>
+#include <netinet/ip.h>
+#include <netinet/tcp.h>
+#include <netinet/udp.h>
+#include <netinet/ip_icmp.h>
 
 #include "pna.h"
 
-static void pna_perflog(struct sk_buff *skb, int dir);
+static void pna_perflog(char *pkt, int dir);
 static int pna_localize(struct pna_flowkey *key, int *direction);
-static int pna_done(struct sk_buff *skb);
-int pna_hook(struct sk_buff *skb, struct net_device *dev,
-	     struct packet_type *pt, struct net_device *orig_dev);
-static int __init pna_init(void);
-static void pna_cleanup(void);
+static int pna_done(const unsigned char *pkt);
+int pna_init(void);
+void pna_cleanup(void);
 
-#if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 34)
-typedef const struct net_device_stats *pna_link_stats;
 typedef unsigned long pna_stat_uword;
-#else
-typedef struct rtnl_link_stats64 pna_link_stats;
-typedef unsigned long long pna_stat_uword;
-#endif                          /* LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,37) */
 
-/* define a new packet type to hook on */
-#define PNA_MAXIF 16
-static struct packet_type *pna_packet_type;
+// not all systems define all IP protocols
+#ifndef IPPROTO_OSPFIGP
+# define IPPROTO_OSPFIGP 89
+#endif
+
+#ifndef IPPROTO_IGRP
+# define IPPROTO_IGRP 88
+#endif
+
+// not all hosts have sctp structs, make a simple one for our needs
+struct pna_sctpcommonhdr {
+	unsigned short src_port;
+	unsigned short dst_port;
+	unsigned long verification_tag;
+	unsigned long checksum;
+};
+
+// pna wants a basic understanding of GRE tunnels to decapsulate them
+struct pna_grehdr {
+	unsigned char checksum_present : 1;
+	unsigned char routing_present : 1;
+	unsigned char key_present : 1;
+	unsigned char sequence_present : 1;
+	unsigned char strict_route : 1;
+	unsigned char recur : 3;
+	unsigned char flags : 5;
+	unsigned char version : 3;
+	unsigned short protocol;
+};
+
+#define eth_hdr(pkt) (struct ether_header *)(pkt)
+#define ip_hdr(pkt) (struct ip *)(pkt)
+#define gre_hdr(pkt) (struct pna_grehdr *)(pkt)
+#define tcp_hdr(pkt) (struct tcphdr *)(pkt)
+#define udp_hdr(pkt) (struct udphdr *)(pkt)
+#define sctp_hdr(pkt) (struct pna_sctpcommonhdr *)(pkt)
+#define icmp_hdr(pkt) (struct icmp *)(pkt)
+
+// maximum number of protocol encapsulations (e.g., VLAN, GRE)
+#define PNA_MAX_CHECKS 8
 
 /* define a fragment table for reconstruction */
 #define PNA_MAXFRAGS 512
@@ -71,40 +93,28 @@ static int pna_frag_next_idx = 0;
 static int pna_frag_packets_missed = 0;
 static int pna_frag_bytes_missed = 0;
 
-/* for performance measurement */
-struct pna_perf {
-	__u64 t_jiffies;                        /* 8 */
-	struct timeval currtime;                /* 8 */
-	struct timeval prevtime;                /* 8 */
-	__u32 p_interval[PNA_DIRECTIONS];       /* 8 */
-	__u32 B_interval[PNA_DIRECTIONS];       /* 8 */
-	pna_stat_uword dev_last_rx[PNA_MAXIF];
-	pna_stat_uword dev_last_fifo[PNA_MAXIF];
-};
+#define GOLDEN_RATIO_PRIME_32  0x9e370001UL
 
-DEFINE_PER_CPU(struct pna_perf, perf_data);
-
-/* taken from linux/jiffies.h in kernel v2.6.21 */
-#ifndef time_after_eq64
-#define time_after_eq64(a, b) \
-	(typecheck(__u64, a) && typecheck(__u64, b) && ((__s64)(a) - (__s64)(b) >= 0))
-#endif
-#define PERF_INTERVAL      10
+unsigned int hash_32(unsigned int val, unsigned int bits)
+{
+	unsigned int hash = val * GOLDEN_RATIO_PRIME_32;
+	return hash >> (32 - bits);
+}
 
 /* handle IP fragmented packets */
-unsigned long pna_frag_hash(struct iphdr *iphdr)
+unsigned long pna_frag_hash(struct ip *iphdr)
 {
 	unsigned long hash = 0;
 
 	/* note: don't care about byte ordering here since we're hashing */
-	hash ^= hash_32(iphdr->saddr, 32);
-	hash ^= hash_32(iphdr->daddr, 32);
-	hash ^= (hash_32(iphdr->protocol, 16) << 16);
-	hash ^= hash_32(iphdr->id, 16);
+	hash ^= hash_32(iphdr->ip_src.s_addr, 32);
+	hash ^= hash_32(iphdr->ip_dst.s_addr, 32);
+	hash ^= (hash_32(iphdr->ip_p, 16) << 16);
+	hash ^= hash_32(iphdr->ip_id, 16);
 	return hash;
 }
 
-struct pna_frag *pna_get_frag(struct iphdr *iphdr)
+struct pna_frag *pna_get_frag(struct ip *iphdr)
 {
 	int i;
 	struct pna_frag *entry;
@@ -119,7 +129,7 @@ struct pna_frag *pna_get_frag(struct iphdr *iphdr)
 	return NULL;
 }
 
-void pna_set_frag(struct iphdr *iphdr,
+void pna_set_frag(struct ip *iphdr,
 		  unsigned short src_port, unsigned short dst_port)
 {
 	/* this is in the handler, so it is serial (for now) */
@@ -211,245 +221,231 @@ static int pna_localize(struct pna_flowkey *key, int *direction)
 }
 
 /* free all te resources we've used */
-static int pna_done(struct sk_buff *skb)
+static int pna_done(const unsigned char *pkt)
 {
-	kfree_skb(skb);
 	return NET_RX_DROP;
 }
 
-/* per-packet hook that begins pna processing */
-int pna_hook(struct sk_buff *skb, struct net_device *dev,
-	     struct packet_type *pt, struct net_device *orig_dev)
+/* handle the understanding of IP protocols */
+int ip_hook(
+	struct pna_flowkey *key, unsigned int pkt_len, const unsigned char *pkt,
+	struct ip *iphdr, unsigned short *flags)
 {
-	struct pna_flowkey key;
-	struct pna_frag *entry;
-	struct ethhdr *ethhdr;
-	struct iphdr *iphdr;
 	struct tcphdr *tcphdr;
 	struct udphdr *udphdr;
-	struct sctphdr *sctphdr;
-	unsigned short src_port, dst_port, frag_off, flags;
-	int ret, direction, offset;
+	struct pna_sctpcommonhdr *sctphdr;
+	struct icmp *icmphdr;
+	struct pna_frag *entry;
 
-	/* we don't care about outgoing packets */
-	if (skb->pkt_type == PACKET_OUTGOING)
-		return pna_done(skb);
+	unsigned short src_port, dst_port, frag_off, offset;
 
-	/* only our software deals with *dev, no one else should care about skb */
-	/* (also greatly imrpoves performance since ip_input doesn't do much) */
-	skb->pkt_type = PACKET_OTHERHOST;
+	// check if there are fragments
+	frag_off = ntohs(iphdr->ip_off);
+	offset = frag_off & IP_OFFMASK;
 
-	/* make sure we have the skb exclusively */
-	if ((skb = skb_share_check(skb, GFP_ATOMIC)) == NULL)
-		/* non-exclusive and couldn't clone, must drop */
-		return NET_RX_DROP;
+	switch (key->l4_protocol) {
+	case IPPROTO_TCP:
+		if (offset != 0) {
+			printf("ipproto_tcp, offset: %d\n", offset);
+			return pna_done(pkt);
+		}
+		tcphdr = tcp_hdr(pkt);
+		src_port = ntohs(tcphdr->th_sport);
+		dst_port = ntohs(tcphdr->th_dport);
+		*flags = tcphdr->th_flags;
+		break;
+	case IPPROTO_UDP:
+		/* this is an IP fragmented UDP packet */
+		if (offset != 0) {
+			/* offset is set, get the appropriate entry */
+			entry = pna_get_frag(iphdr);
+			/* no entry means we can't record - arrived out of order */
+			if (!entry) {
+				pna_frag_packets_missed += 1;
+				pna_frag_bytes_missed += pkt_len + ETH_OVERHEAD;
+				return pna_done(pkt);
+			}
+			src_port = entry->src_port;
+			dst_port = entry->dst_port;
+		} else {
+			/* no offset */
+			udphdr = udp_hdr(pkt);
+			src_port = ntohs(udphdr->uh_sport);
+			dst_port = ntohs(udphdr->uh_dport);
+			/* there will be fragments, add to table */
+			if (frag_off & IP_MF)
+				pna_set_frag(iphdr, src_port, dst_port);
+		}
+		break;
+	case IPPROTO_SCTP:
+		/* this is an SCTP packet, extract ports */
+		if (offset != 0) {
+			printf("ipproto_sctp, offset: %d\n", offset);
+			return pna_done(pkt);
+		}
+		sctphdr = sctp_hdr(pkt);
+		src_port = ntohs(sctphdr->src_port);
+		dst_port = ntohs(sctphdr->dst_port);
+		break;
+	case IPPROTO_ICMP:
+		/* this is designed to mimic the NetFlow encoding for ICMP */
+		// - src port is 0
+		// - dst port is type and code (icmp_type*256 + icmp_code)
+		icmphdr = icmp_hdr(pkt);
+		src_port = 0;
+		dst_port = (icmphdr->icmp_type << 8) + icmphdr->icmp_code;
+		break;
+	default:
+		printf("unknown ipproto: %d\n", key->l4_protocol);
+	case IPPROTO_OSPFIGP:  // don't care about OSPF
+	case IPPROTO_IGRP:  // no routing protocols
+	case IPPROTO_PIM:  // no PIM
+	case 253: case 254:  // IANA reserved for experimentation and testing
+		return pna_done(pkt);
+	}
+
+	// now put the ports in the key
+	key->local_port = src_port;
+	key->remote_port = dst_port;
+
+	return 0;
+}
+
+/* handle the understanding of ethernet */
+int ether_hook(
+	struct pna_flowkey *key, unsigned int pkt_remains,
+	const unsigned char *pkt, unsigned short *flags)
+{
+	int ret;
+	unsigned int pad;
+	struct ip *iphdr;
+	struct pna_grehdr *grehdr;
+
+	switch (key->l3_protocol) {
+	case ETHERTYPE_IP:
+		// not enough to process
+		if (pkt_remains < sizeof(struct ip)) {
+			printf("insufficient data remains\n");
+			return pna_done(pkt);
+		}
+		// this is a supported type, continue
+		iphdr = ip_hdr(pkt);
+		// assume for now that src is local
+		key->l4_protocol = iphdr->ip_p;
+		key->local_ip = ntohl(iphdr->ip_src.s_addr);
+		key->remote_ip = ntohl(iphdr->ip_dst.s_addr);
+
+		// bump the pkt pointer for ip
+		pkt = pkt + sizeof(struct ip);
+		pkt_remains -= sizeof(struct ip);
+
+		// GRE: It's not who you are but what you do that defines you.
+		// dis-encapsulate GRE
+		if (key->l4_protocol == IPPROTO_GRE) {
+			grehdr = gre_hdr(pkt);
+			if (grehdr->routing_present) {
+				// cannot handle routing information in packet
+				return pna_done(pkt);
+			}
+			pad = 0;  // base header
+			// we bailed on routing_present, but checksum is okay and
+			// implies the offset field exists, account for it
+			pad += (grehdr->checksum_present ? 4 : 0);
+			pad += (grehdr->key_present ? 4 : 0);
+			pad += (grehdr->sequence_present ? 4 : 0);
+			// update to the encapsulated protocol
+			key->l3_protocol = ntohs(grehdr->protocol);
+			pkt = pkt + sizeof(struct pna_grehdr) + pad;
+			pkt_remains -= (sizeof(struct pna_grehdr) + pad);
+			return ether_hook(key, pkt_remains, pkt, flags);
+		}
+
+		// otherwise we hook onto IP layer
+		ret = ip_hook(key, pkt_remains, pkt, iphdr, flags);
+		if (ret != 0) {
+			return pna_done(pkt);
+		}
+		break;
+	default:
+		return pna_done(pkt);
+	}
+
+	return 0;
+}
+
+/* per-packet hook that begins pna processing */
+int pna_hook(
+	unsigned int pkt_len, const struct timeval tv, const unsigned char *pkt)
+{
+	struct pna_flowkey key;
+	struct ether_header *ethhdr;
+	int ret, direction;
+	int check_depth;
+	unsigned short flags = 0;
+	unsigned int pkt_remains = pkt_len;
 
 	/* make sure the key is all zeros before we start */
 	memset(&key, 0, sizeof(key));
 
-	/* by default assume no flags */
-	flags = 0;
+	/* let's decode the pkt (assume it's ethernet!) */
+	ethhdr = eth_hdr(pkt);
+	key.l3_protocol = ntohs(ethhdr->ether_type);
 
-	/* we now have exclusive access, so let's decode the skb */
-	ethhdr = eth_hdr(skb);
-	key.l3_protocol = ntohs(ethhdr->h_proto);
+	/* we don't care about VLAN tag(s)s - there may be multiple level */
+	check_depth = 0;  // limit the number of VLAN encapsulations
+	while (key.l3_protocol == ETHERTYPE_VLAN && check_depth < PNA_MAX_CHECKS) {
+		check_depth += 1;
+		// bump packet forward 4 bytes for 1 VLAN header
+		pkt += 4;
+		pkt_remains -= 4;
+		// recast the ethhdr and extract the l3_protocol
+		// XXX: this breaks the mac addresses, but we don't use them
+		ethhdr = eth_hdr(pkt);
+		key.l3_protocol = ntohs(ethhdr->ether_type);
+	}
+	if (check_depth == PNA_MAX_CHECKS) {
+		// we never got to the actual packet data
+		return pna_done(pkt);
+	}
 
-	switch (key.l3_protocol) {
-	case ETH_P_IP:
-		/* this is a supported type, continue */
-		iphdr = ip_hdr(skb);
-		/* assume for now that src is local */
-		key.local_ip = ntohl(iphdr->saddr);
-		key.remote_ip = ntohl(iphdr->daddr);
-		key.l4_protocol = iphdr->protocol;
-
-		/* check if there are fragments */
-		frag_off = ntohs(iphdr->frag_off);
-		offset = frag_off & IP_OFFSET;
-
-		skb_set_transport_header(skb, ip_hdrlen(skb));
-		switch (key.l4_protocol) {
-		case IPPROTO_TCP:
-			if (offset != 0)
-				return pna_done(skb);
-			tcphdr = tcp_hdr(skb);
-			key.local_port = ntohs(tcphdr->source);
-			key.remote_port = ntohs(tcphdr->dest);
-			flags = ntohs(tcp_flag_word(tcphdr) & ~TCP_DATA_OFFSET);
-			break;
-		case IPPROTO_UDP:
-			/* this is an IP fragmented UDP packet */
-			if (offset != 0) {
-				/* offset is set, get the appropriate entry */
-				entry = pna_get_frag(iphdr);
-				/* no entry means we can't record - UDP can arrive out of order */
-				if (!entry) {
-					pna_frag_packets_missed += 1;
-					pna_frag_bytes_missed += skb->len + ETH_OVERHEAD;
-					return pna_done(skb);
-				}
-				src_port = entry->src_port;
-				dst_port = entry->dst_port;
-			} else {
-				/* no offset */
-				udphdr = udp_hdr(skb);
-				src_port = ntohs(udphdr->source);
-				dst_port = ntohs(udphdr->dest);
-				/* there will be fragments, add to table */
-				if (frag_off & IP_MF)
-					pna_set_frag(iphdr, src_port, dst_port);
-			}
-			key.local_port = src_port;
-			key.remote_port = dst_port;
-			break;
-		case IPPROTO_SCTP:
-			if (offset != 0)
-				return pna_done(skb);
-			sctphdr = sctp_hdr(skb);
-			key.local_port = ntohs(sctphdr->source);
-			key.remote_port = ntohs(sctphdr->dest);
-			break;
-			break;
-		default:
-			return pna_done(skb);
-		}
-		break;
-	default:
-		return pna_done(skb);
+	// bump the pkt pointer for ethernet
+	pkt = sizeof(struct ether_header) + pkt;
+	pkt_remains -= sizeof(struct ether_header);
+	ret = ether_hook(&key, pkt_remains, pkt, &flags);
+	if (ret != 0) {
+		return pna_done(pkt);
 	}
 
 	/* entire key should now be filled in and we have a flow, localize it */
 	if (!pna_localize(&key, &direction))
 		/* couldn't localize the IP (neither source nor dest in prefix) */
-		return pna_done(skb);
-
-	/* log performance data */
-	if (pna_perfmon)
-		pna_perflog(skb, direction);
+		return pna_done(pkt);
 
 	/* hook actions here */
 
 	/* insert into flow table */
 	if (pna_flowmon == true) {
-		ret = flowmon_hook(&key, direction, flags, skb);
+		ret = flowmon_hook(&key, direction, flags, pkt, pkt_len, tv);
 		if (ret < 0)
 			/* failed to insert -- cleanup */
-			return pna_done(skb);
+			return pna_done(pkt);
 
 		/* run real-time hooks */
 		if (pna_rtmon == true)
-			rtmon_hook(&key, direction, skb, (unsigned long)ret);
+			rtmon_hook(&key, direction, pkt, pkt_len, tv, ret);
 	}
 
-	/* free our skb */
-	return pna_done(skb);
+	/* free our pkt */
+	return pna_done(pkt);
 }
 
-/**
- * Performance Monitoring
- */
-static void pna_perflog(struct sk_buff *skb, int dir)
-{
-	__u32 t_interval;
-	__u32 fps_in, Mbps_in, avg_in;
-	__u32 fps_out, Mbps_out, avg_out;
-	pna_link_stats stats;
-	int i;
-	struct net_device *dev;
-	struct pna_perf *perf = &get_cpu_var(perf_data);
-
-
-	/* time_after_eq64(a,b) returns true if time a >= time b. */
-	if (time_after_eq64(get_jiffies_64(), perf->t_jiffies)) {
-
-		/* get sampling interval time */
-		do_gettimeofday(&perf->currtime);
-		t_interval = perf->currtime.tv_sec - perf->prevtime.tv_sec;
-		/* update for next round */
-		perf->prevtime = perf->currtime;
-
-		/* calculate the numbers */
-		fps_in = perf->p_interval[PNA_DIR_INBOUND] / t_interval;
-		/* 125000 Mb = (1000 MB/KB * 1000 KB/B) / 8 bits/B */
-		Mbps_in = perf->B_interval[PNA_DIR_INBOUND] / 125000 / t_interval;
-		avg_in = 0;
-		if (perf->p_interval[PNA_DIR_INBOUND] != 0) {
-			avg_in = perf->B_interval[PNA_DIR_INBOUND];
-			avg_in /= perf->p_interval[PNA_DIR_INBOUND];
-			/* take away non-Ethernet packet measured */
-			avg_in -= (ETH_INTERFRAME_GAP + ETH_PREAMBLE);
-		}
-
-		fps_out = perf->p_interval[PNA_DIR_OUTBOUND] / t_interval;
-		/* 125000 Mb = (1000 MB/KB * 1000 KB/B) / 8 bits/B */
-		Mbps_out =
-			perf->B_interval[PNA_DIR_OUTBOUND] / 125000 / t_interval;
-		avg_out = 0;
-		if (perf->p_interval[PNA_DIR_OUTBOUND] != 0) {
-			avg_out = perf->B_interval[PNA_DIR_OUTBOUND];
-			avg_out /= perf->p_interval[PNA_DIR_OUTBOUND];
-			/* take away non-Ethernet packet measured */
-			avg_out -= (ETH_INTERFRAME_GAP + ETH_PREAMBLE);
-		}
-
-		/* report the numbers */
-		if (fps_in + fps_out > 1000) {
-			pna_info("pna throughput smpid:%d, "
-				 "in:{fps:%u,Mbps:%u,avg:%u}, "
-				 "out:{fps:%u,Mbps:%u,avg:%u}\n", smp_processor_id(),
-				 fps_in, Mbps_in, avg_in, fps_out, Mbps_out, avg_out);
-			pna_info("pna missed frags: {packets:%d, bytes:%d}\n", pna_frag_packets_missed, pna_frag_bytes_missed);
-
-			for (i = 0; i < PNA_MAXIF; i++) {
-				dev = pna_packet_type[i].dev;
-				if (dev == NULL)
-					break;
-
-#if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 34)
-				/* numbers from the NIC */
-				stats = dev_get_stats(dev);
-				pna_info
-					("pna %s rx_stats: packets:%lu, fifo_overruns:%lu\n",
-					dev->name, stats->rx_packets - perf->dev_last_rx[i],
-					stats->rx_fifo_errors - perf->dev_last_fifo[i]);
-				perf->dev_last_rx[i] = stats->rx_packets;
-				perf->dev_last_fifo[i] = stats->rx_fifo_errors;
-#else
-				/* numbers from the NIC */
-				dev_get_stats(dev, &stats);
-				pna_info
-					("pna %s rx_stats: packets:%llu, fifo_overruns:%llu\n",
-					dev->name, stats.rx_packets - perf->dev_last_rx[i],
-					stats.rx_fifo_errors - perf->dev_last_fifo[i]);
-				perf->dev_last_rx[i] = stats.rx_packets;
-				perf->dev_last_fifo[i] = stats.rx_fifo_errors;
-#endif                          /* LINUX_VERSION_CODE */
-			}
-		}
-
-		/* reset updated counters */
-		pna_frag_packets_missed = 0;
-		pna_frag_bytes_missed = 0;
-		perf->p_interval[PNA_DIR_INBOUND] = 0;
-		perf->B_interval[PNA_DIR_INBOUND] = 0;
-		perf->p_interval[PNA_DIR_OUTBOUND] = 0;
-		perf->B_interval[PNA_DIR_OUTBOUND] = 0;
-		perf->t_jiffies = msecs_to_jiffies(PERF_INTERVAL * MSEC_PER_SEC);
-		perf->t_jiffies += get_jiffies_64();
-	}
-
-	/* increment packets seen in this interval */
-	perf->p_interval[dir]++;
-	perf->B_interval[dir] += skb->len + ETH_OVERHEAD;
-}
 
 /*
  * Module oriented code
  */
 /* Initialization hook */
-int __init pna_init(void)
+int pna_init(void)
 {
-	char *next = pna_iface;
 	int i;
 	int ret = 0;
 
@@ -459,51 +455,13 @@ int __init pna_init(void)
 	//init the domain mappings must be called after flowmon_init because of initialization of PNA proc entry
 	pna_dtrie_init();
 
-	/* set up the alert system */
-	if (pna_alert_init() < 0) {
-		pna_cleanup();
-		return -1;
-	}
-
 	if (rtmon_init() < 0) {
-		pna_alert_cleanup();
 		pna_cleanup();
 		return -1;
 	}
 
-	/* allocate memory for packet type processing */
-	pna_packet_type = (struct packet_type *)kzalloc(PNA_MAXIF * sizeof(struct packet_type), GFP_KERNEL);
-	if (!pna_packet_type) {
-		pna_err("failed to allocate memory for packet types\n");
-		pna_alert_cleanup();
-		pna_cleanup();
-		return -1;
-	}
 	/* everything is set up, register the packet hook */
-	for (i = 0; (i < PNA_MAXIF) && (next != NULL); i++) {
-		next = strnchr(pna_iface, IFNAMSIZ, ',');
-		if (NULL != next)
-			*next = '\0';
-		pna_packet_type[i].type = htons(ETH_P_ALL);
-		pna_packet_type[i].func = pna_hook;
-		pna_packet_type[i].dev = dev_get_by_name(&init_net, pna_iface);
-		if (pna_packet_type[i].dev) {
-			pna_info("pna: capturing on %s", pna_iface);
-			dev_add_pack(&pna_packet_type[i]);
-		}
-		else {
-			pna_err("pna: no interface %s", pna_iface);
-		}
-		pna_iface = next + 1;
-	}
-
-#ifdef PIPELINE_MODE
-	next = "(in pipeline mode)";
-#else
-	next = "";
-#endif                          /* PIPELINE_MODE */
-
-	pna_info("pna: module is initialized %s\n", next);
+	pna_info("pna: capturing is available\n");
 
 	return ret;
 }
@@ -511,24 +469,7 @@ int __init pna_init(void)
 /* Destruction hook */
 void pna_cleanup(void)
 {
-	int i;
-
-	for (i = 0; (i < PNA_MAXIF) && (pna_packet_type[i].dev != NULL); i++) {
-		dev_remove_pack(&pna_packet_type[i]);
-		pna_info("pna: released %s\n", pna_packet_type[i].dev->name);
-		pna_packet_type[i].type = 0;
-		pna_packet_type[i].func = NULL;
-		pna_packet_type[i].dev = NULL;
-	}
 	rtmon_release();
-	pna_alert_cleanup();
-	//dtrie deinit should be called before flowmon_cleanup for proc file reasons
-	pna_dtrie_deinit();
 	flowmon_cleanup();
 	pna_info("pna: module is inactive\n");
 }
-
-module_init(pna_init);
-module_exit(pna_cleanup);
-MODULE_LICENSE("Apache 2.0");
-MODULE_AUTHOR("Michael J. Schultz <mjschultz@gmail.com>");

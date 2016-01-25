@@ -1,26 +1,14 @@
-/*
-   Code to peform longest prefix match on an IP and return the domain to
-   which it belongs.  All inputs must be in network byte order
-
+/**
+ * pna_domain_trie.c
+ * Code to peform longest prefix match on an IP and return the domain to
+ * which it belongs.  All inputs must be in network byte order
  */
 
-#include <linux/kernel.h>
-#include <linux/module.h>
-#include <linux/mm.h>
-#include <linux/init.h>
-#include <linux/vmalloc.h>
-#include <linux/slab.h>
-#include <linux/proc_fs.h>
-#include <asm/uaccess.h>
+#include <string.h>
+#include <stdlib.h>
+#include <arpa/inet.h>
+
 #include "pna.h"
-
-#define DTRIE_PROC_STR "dtrie"
-
-/* prototypes */
-struct pna_dtrie_entry *pna_dtrie_entry_alloc(void);
-
-/* proc directory from pna_flowmon */
-extern struct proc_dir_entry *proc_parent;
 
 /* locally used structs */
 struct pna_dtrie_entry {
@@ -31,11 +19,83 @@ struct pna_dtrie_entry {
 
 struct pna_dtrie_entry *pna_dtrie_head;
 
-struct pna_dtrie_entry *pna_dtrie_entry_alloc()
+
+int pna_dtrie_add(unsigned int prefix, unsigned int max_bit_pos,
+                  unsigned int domain_id);
+
+int pna_dtrie_parse(char *line, int netid)
+{
+	int ret;
+    char *ipstring;
+    char *prefix_string;
+    char *domain_string;
+    unsigned int prefix, mask;
+
+	/* get the IP and prefix */
+	ipstring = strtok(line, "/\n");
+	prefix_string = strtok(NULL, "/\n");
+	if (!ipstring || !prefix_string) {
+		printf("bad string: '%s'\n", line);
+		return -1;
+	}
+
+	/* get the netid, if needed */
+	if (netid == -1) {
+		domain_string = strtok(NULL, "/\n");
+		if (!domain_string) {
+			printf("missing netid: '%s'\n", line);
+			return -1;
+		}
+		netid = atoi(domain_string);
+	}
+
+	/* convert the mask */
+	mask = atoi(prefix_string);
+	if (!mask || !netid) {
+		printf("bad string %s or %d\n", prefix_string, netid);
+		return -1;
+	}
+
+	prefix = htonl(inet_addr(ipstring));
+	ret = pna_dtrie_add(prefix, mask, netid);
+	if (ret != 0) {
+		return ret;
+	}
+	return 0;
+}
+
+int pna_dtrie_build(char *networks_file)
+{
+	int ret;
+	char buffer[100];
+	FILE *infile;
+
+    infile = fopen(networks_file, "r");
+	if (!infile) {
+		printf("failed to open %s\n", networks_file);
+		return -1;
+	}
+
+	while (fgets(buffer, 100, infile)) {
+		if (buffer[0] == '#')
+			continue;
+		if (buffer[0] == '\n')
+			continue;
+		if (buffer[0] == ' ')
+			continue;
+		ret = pna_dtrie_parse(buffer, -1);
+		if (ret != 0) {
+			return ret;
+		}
+	}
+
+    return 0;
+}
+
+struct pna_dtrie_entry *pna_dtrie_entry_alloc(void)
 {
 	struct pna_dtrie_entry *entry =
-		(struct pna_dtrie_entry*)kzalloc(sizeof(struct pna_dtrie_entry),
-						 GFP_KERNEL);
+		(struct pna_dtrie_entry*)malloc(sizeof(struct pna_dtrie_entry));
 
 	if (!entry)
 		return NULL;
@@ -44,8 +104,6 @@ struct pna_dtrie_entry *pna_dtrie_entry_alloc()
 	memset(entry->children, 0, 2 * sizeof(struct pna_domain_entry *));
 	return entry;
 }
-
-
 
 unsigned int pna_dtrie_lookup(unsigned int ip)
 {
@@ -72,12 +130,27 @@ unsigned int pna_dtrie_lookup(unsigned int ip)
 int pna_dtrie_add(unsigned int prefix, unsigned int max_bit_pos,
 		  unsigned int domain_id)
 {
+	unsigned int mask;
 	unsigned int cur_bit_pos;
 	unsigned int cur_bit;
 	struct pna_dtrie_entry *next;
 	struct pna_dtrie_entry *cur = pna_dtrie_head;
 
-	printk("pna_dtrie_add %X %i %i\n", prefix, max_bit_pos, domain_id);
+	if ( !(0 < max_bit_pos && max_bit_pos <= 32) ) {
+		printf("invalid mask: %i\n", max_bit_pos);
+		return -1;
+	}
+
+	if (verbose) {
+		printf("pna_dtrie_add %X/%i (%i)\n", prefix, max_bit_pos, domain_id);
+	}
+
+	mask = 0xffffffff - ((1 << (32 - max_bit_pos)) - 1);
+	if ( (prefix & mask) != prefix ) {
+		prefix = prefix & mask;
+		printf("pna_dtrie_add: corrected prefix %X/%i (%i)\n",
+		       prefix, max_bit_pos, domain_id);
+	}
 
 	cur_bit_pos = 0;
 	while (cur_bit_pos < max_bit_pos) {
@@ -86,7 +159,7 @@ int pna_dtrie_add(unsigned int prefix, unsigned int max_bit_pos,
 		if (!next) {
 			cur->children[cur_bit] = next = pna_dtrie_entry_alloc();
 			if (!next) {
-				printk("Failed to alloc dtrie entry\n");
+				printf("Failed to alloc dtrie entry\n");
 				return -1;
 			}
 		}
@@ -99,63 +172,30 @@ int pna_dtrie_add(unsigned int prefix, unsigned int max_bit_pos,
 }
 
 
-int dtrie_proc_write(struct file *file, const char *buffer,
-		     unsigned long count, void *data)
-{
-	//reads in 3 unsigned ints, in the order prefix, prefix len, domainid
-	unsigned int mybuf[3];
-
-	if (count < (sizeof(unsigned int) * 3)) {
-		printk("dtrie write too small\n");
-		return -EFAULT;
-	}
-	if (copy_from_user(mybuf, buffer, sizeof(unsigned int) * 3)) {
-		printk("dtrie write fail");
-		return -EFAULT;
-	}
-	pna_dtrie_add(mybuf[0], mybuf[1], mybuf[2]);
-	return count;
-}
-
 int pna_dtrie_rm_node(struct pna_dtrie_entry *entry)
 {
 	if (!entry)
 		return 0;
 	pna_dtrie_rm_node(entry->children[0]);
 	pna_dtrie_rm_node(entry->children[1]);
-	kfree(entry);
+	free(entry);
 	return 0;
 }
 
-int pna_dtrie_deinit()
+int pna_dtrie_deinit(void)
 {
-	remove_proc_entry(DTRIE_PROC_STR, proc_parent);
 	pna_dtrie_rm_node(pna_dtrie_head);
-	printk("pna dtrie freed\n");
+	printf("pna dtrie freed\n");
 	return 0;
 }
 
-int pna_dtrie_init()
+int pna_dtrie_init(void)
 {
-	struct proc_dir_entry *dtrie_proc_node;
-
 	pna_dtrie_head = pna_dtrie_entry_alloc();
 	if (!pna_dtrie_head) {
-		printk("failed to init dtrie head\n");
+		printf("failed to init dtrie head\n");
 		return -1;
 	}
-
-	dtrie_proc_node = create_proc_entry(DTRIE_PROC_STR, 0644, proc_parent);
-	if (!dtrie_proc_node) {
-		pna_err("failed to make proc entry for %s\n", DTRIE_PROC_STR);
-		return -ENOMEM;
-	}
-
-	dtrie_proc_node->write_proc = dtrie_proc_write;
-	dtrie_proc_node->mode = S_IFREG | S_IRUGO | S_IWUSR | S_IWGRP;
-	dtrie_proc_node->uid = 0;
-	dtrie_proc_node->gid = 0;
-	dtrie_proc_node->size = sizeof(unsigned int) * 3;
 
 	return 0;
 }

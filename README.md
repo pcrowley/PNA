@@ -1,88 +1,102 @@
-# Passive Network Appliance Node Software #
+# Passive Network Appliance (PNA)
 
-This software is designed to monitor all traffic arriving at a network
-card, extract summary statistics, insert that packet into a flow table, and
-periodically dump that flow table to a file on disk.  The Linux kernel
-module found in `module/` handles the packet reception and table insertion
-routines.  It also allows arbitrary real-time monitors to be executed for
-each packet received.  Every 10 seconds a user-space program (in `user/`)
-executes and extracts the previously logged summary statistics, creating a
-dump file with all the data in it.
+This software is designed to monitor all IP traffic arriving on a network interface.
+It works by extracting header information from each packet in order to summarize
+each flow. It periodially writes statistics out to disk so they can be analyzed.
 
-## Instructions ##
+## Building PNA
 
-The Passive Network Appliance (PNA) software has been built against Linux
-kernel 2.6.34, 2.6.37, and 3.2 without error, it should work against other kernel
-versions as well--assuming there have not been major changes.
+To build PNA you will need [libpcap](https://github.com/the-tcpdump-group/libpcap):
 
-Building can be done by typing `make` in the top level directory.  This
-will build the kernel module (found in `module/`) and the user-space programs
-(found in `user/`).
+* Ubuntu and other Debian-based systems: Install the the `libpcap-dev` package.
+* CentOS and other Red Hat-based systems: Install the `libpcap-devel` package.
 
-Loading the kernel module and user-space programs is done with a script
-(`pna-service`).  This script has a few configuration parameters that should
-be set (in `config/monitor`):
+Issue `make` in this top-level directory, and `module/pna` should be produced.
+Confirm that it works with `./module/pna -h` - it should list available capture devices.
 
- - `PNA_IFACE` sets the interface on which traffic will be monitored
- - `PNA_LOGDIR` sets the location to store the logged statistics
+## Using PNA
 
-Depending on your network, you can also set the `config/networks` file to
-include the networks to monitor. By default this is the three private
-networks (`10.0.0.0/8`, `172.16.0.0/12`, and `192.168.0.0/16`).
+PNA has several command line parameters:
 
-Nothing else should need modification.
+* `-i <device>` - Specify a particular network interface (e.g., `eth1`)
+* `-r <filename>` - Read from a stored .pcap file instead of a network interface
+* `-o <directory>` - Specify a directory for output to be stored (default: `./logs`)
+* `-Z <username>` - Drops privileges and switches to the given user after starting a capture
+* `-N` - Specify a space-separated list of CIDR blocks to montior (default: `10.0.0.0/8 172.16.0.0/12 192.168.0.0/16`)
+* `-v `- Verbose mode. Logs some statistics to stdout.
 
-The script can be run by typing `make start` from the top level directory.
-This will load the kernel module and start the user-space programs.  If
-there is traffic, log files should appear in `PNA_LOGDIR` after 10 seconds.
-You can stop all the software at any time by running `make stop` from the
-top level directory.  This will unload the kernel module and kill any
-user-space processes.
+You may optionally specify a final argument representing a BPF expression. This will be used to filter the network data that's analyzed (e.g., `(not tcp port 80) and (not udp port 161)`). See the [pcap-filter man page](http://www.tcpdump.org/manpages/pcap-filter.7.htm) for information on using BPF expressions.
 
-Optionally, there are scripts in `util/cron/` that can be used to move the
-log files elsewhere as needed.  There is also a command line interface
-`util/intop/cli.py` that can process log files and print out the summary
-statistics in a useful format.
+You should make sure the interface you want to monitor is up and in promiscuous mode. You can do this with `ifconfig`, for example:
 
-## File Manifest ##
+```
+ifconfig eth1 up promisc
+```
 
-Below is an approximate description of the various folders and files in
-this project.
+### Examples
 
- - `include/` contains the header file(s) for the PNA software
- - `module/` contains the kernel module source code
-   - `pna_main.c` is the entry point for the kernel module (initialization
-     and hooking
-   - `pna_flowmon.c` has routines to insert the packet into a flow entry
-     and deals with exporting the summary statistics to user-space
-   - `pna_rtmon.c` is the handler for real-time monitors
-   - `pna_rtmon-conlip.c` are two included real-time monitors (connections
-     and local IPs)
-   - `pna_alert.c` is code to send messages to a user-space process when a
-     real-time monitor detects anomalous behavior
-   - `pna_config.c` handles run-time configuration parameters
- - `pna-service` is the script to start and stop all the PNA software
- - `user/` has the user-space software
-   - `user_monitor.c` interacts with the flow tables to export them to a
-     log file
-   - `user_alerts.c` is the alert handler for real-time monitors
- - `util/cron/` contains scripts and crontabs that help move files off-site
- - `util/intop/` contains software to help read and process the log files
+Simple capture on the `eth0` interface (using the default log directory):
 
-## License ##
+```
+# mkdir -p ./logs
+# ./module/pna -i eth0
+pna: capturing is available
+Live capture from eth0
+dumping to: './logs/pna-20150922154543-eth0.t0.log'
+```
 
-Copyright 2011 Washington University in St Louis
+Verbose capturing to a specified log directory:
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
+```
+# mkdir -p ./wlan0_logs
+# ./module/pna -i wlan0 -o ./wlan0_logs -v
+flowmon memory: 114688 kibibytes (20 bits)
+pna: capturing is available
+pna_dtrie_add A000000/8 (1)
+pna_dtrie_add AC100000/12 (2)
+pna_dtrie_add C0A80000/16 (3)
+Live capture from wlan0
+=========================
+Absolute Stats: 235 pkts rcvd, 0 pkts dropped
+235 pkts [26.1 pkt/sec] - 64454 bytes [0.06 Mbit/sec]
+=========================
+dumping to: 'wlan0_logs/pna-20150922154920-wlan0.t1.log'
+44 flows to 'wlan0_logs/pna-20150922154920-wlan0.t1.log'
+```
 
-   http://www.apache.org/licenses/LICENSE-2.0
+Capturing from a network interface requires superuser privileges. You may invoke PNA with `sudo` and then use the `-Z` option to drop privileges and write files as a different user.
 
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
+```
+$ sudo ./module/pna -i wlan0 -Z some_user -v
+flowmon memory: 114688 kibibytes (20 bits)
+pna: capturing is available
+pna_dtrie_add A000000/8 (1)
+pna_dtrie_add AC100000/12 (2)
+pna_dtrie_add C0A80000/16 (3)
+Live capture from wlan0
+dropping to user: some_user
+```
 
-> Please see `LICENSE` for more details.
+Specifying networks to monitor and a packet filter:
+
+```
+$ mkdir ./eth1_logs
+$ sudo ./module/pna -i eth1 -o ./wlan0_logs -Z some_user -N "192.168.12.0/24" -v
+flowmon memory: 114688 kibibytes (20 bits)
+pna: capturing is available
+pna_dtrie_add C0A80C00/24 (1)
+Live capture from eth1
+dropping to user: some_user
+```
+
+## Analyzing the data
+
+PNA writes logs in a special format to the output directory. You may use the scripts in the `util/intop` directory to parse the logs:
+
+```
+$./util/intop/cli.py logs/pna-20150922161203-wlan0.t0.log
+```
+
+## License
+
+PNA is licensed under the terms of the Apache License, Version 2.0. Please see `LICENSE` for more details.

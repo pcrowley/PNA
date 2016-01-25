@@ -12,38 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-MODULE := module/pna.ko
-USER := user/user_monitor user/user_alerts
+MODULE := module/pna
 SERVICE := ./pna-service
 
-all: $(MODULE) $(USER)
+all: $(MODULE)
 
 $(MODULE):
 	$(MAKE) -C module/
 
-$(USER):
-	$(MAKE) -C user/
-
-start: $(MODULE) $(USER)
-	sudo $(SERVICE) start "$(PARMS)"
-
-stop:
-	sudo $(SERVICE) stop
-
-status:
-	sudo $(SERVICE) status
-
-indent:
-	find . -name '*.[ch]' | xargs uncrustify -c linux.cfg --no-backup --replace
-	find . -name '*~' -delete
-
 clean:
 	$(MAKE) -C module clean
-	$(MAKE) -C user clean
-
-tag:
-	git tag $(shell cat VERSION)
-
-realclean: clean
-	rm -f irq_count.start irq_count.stop
-	rm -f verbose-*.log
+	rm -f util/intop/*.pyc
